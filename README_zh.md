@@ -4,7 +4,7 @@
 
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue.svg)](https://github.com/PowerShell/PowerShell)
-[![Starship](https://img.shields.io/badge/Starship-Prompt-8356ff.svg)](https://starship.rs)
+[![Starship](https://img.shields.io/badge/Starkship-Prompt-8356ff.svg)](https://starship.rs)
 [![Tmux](https://img.shields.io/badge/Tmux-Sessions-1BB91F.svg)](https://github.com/tmux/tmux)
 
 [English Version](./README.md) · [报告问题](https://github.com/arbaleast/PowerShell/issues) · [功能建议](https://github.com/arbaleast/PowerShell/issues)
@@ -48,32 +48,64 @@ PowerShell/
 
 ## 🚀 快速开始
 
-### 1️⃣ 安装
+### 1️⃣ 安装依赖
 
-```powershell
-# 查看配置路径
-$PROFILE
+请确保系统已安装以下工具：
 
-# 复制文件（调整源路径）
-Copy-Item -Path "D:\path\to\PowerShell\*.ps1" -Destination (Split-Path $PROFILE -Parent)
-```
-
-### 2️⃣ 依赖工具
-
-| 工具 | 用途 | 一键安装 |
+| 工具 | 用途 | 安装指南 |
 |------|------|----------|
 | [Starship](https://starship.rs/) | 美观提示符，带 git 上下文 | [安装](https://starship.rs/guide/#🚀-installation) |
-| [Fnm](https://github.com/Schniz/fnm) | 快速切换 Node 版本 | [安装](https://github.com/Schniz/fnm#installation) |
+| [Fnm](https://github.com/Schniz/fnm) | 快速 Node 版本管理器 | [安装](https://github.com/Schniz/fnm#installation) |
 | [tmux](https://github.com/tmux/tmux) | 远程会话保持 | [安装](https://github.com/tmux/tmux/wiki) |
 
-### 3️⃣ 自定义配置
+### 2️⃣ 建立目录结构
 
-编辑 `Config.ps1`：
+按以下结构创建目录（路径可自行调整）：
+
+```
+D:\Env\                    # ← $UserScoop_ROOT（根目录）
+├── quotes.txt             # ← 启动语录（可选）
+└── UserScoop\
+    └── apps\              # ← $UserScoop_APPS（工具目录）
+        ├── starship\
+        │   └── current\
+        │       └── starship.exe
+        └── fnm\
+            └── current\
+                └── fnm.exe
+```
+
+也可以使用任意自定义根路径，之后在 `Config.ps1` 中修改即可。
+
+### 3️⃣ 安装配置文件
 
 ```powershell
-$global:HERMES_ROOT = "D:\Env"        # 你的根目录
-$global:HERMES_APPS = "$global:HERMES_ROOT\UserScoop\apps"
+# 步骤 A：查看 PowerShell 配置目录
+$PROFILE
+
+# 步骤 B：将所有 .ps1 文件复制到配置目录
+#         将 "D:\path\to\PowerShell" 替换为实际克隆路径
+Copy-Item -Path "D:\path\to\PowerShell\*.ps1" `
+           -Destination (Split-Path $PROFILE -Parent) `
+           -Force
+
+# 步骤 C：重启 PowerShell 或执行：
+reload
 ```
+
+### 4️⃣ 自定义配置（可选）
+
+编辑 `Config.ps1` 匹配你的目录结构：
+
+```powershell
+# 根目录 — quotes.txt 所在位置
+$global:UserScoop_ROOT = "D:\Env"
+
+# 工具目录 — Starship、Fnm 等所在位置
+$global:UserScoop_APPS = "$global:UserScoop_ROOT\UserScoop\apps"
+```
+
+颜色方案和键盘码配置见下方 [配置说明](#-配置说明)。
 
 ---
 
@@ -113,26 +145,33 @@ $global:HERMES_APPS = "$global:HERMES_ROOT\UserScoop\apps"
 
 ## 🎨 配置说明
 
+### 目录路径
+
+```powershell
+$global:UserScoop_ROOT                  # 根目录（quotes.txt 在此）
+$global:UserScoop_APPS                 # 工具目录（Starship、Fnm 等）
+```
+
 ### 颜色方案
 
 ```powershell
-$global:HERMES_CONF.Colors.Cyan  # 主色调
-$global:HERMES_CONF.Colors.Gray  # 次要文字
-$global:HERMES_CONF.Colors.Rst   # 重置格式
+$global:UserScoop_CONF.Colors.Cyan  # 主色调
+$global:UserScoop_CONF.Colors.Gray  # 次要文字
+$global:UserScoop_CONF.Colors.Rst   # 重置格式
 ```
 
 ### 键盘码
 
 ```powershell
-$global:HERMES_CONF.Keys.Up    # 38
-$global:HERMES_CONF.Keys.Down  # 40
-$global:HERMES_CONF.Keys.Enter # 13
-$global:HERMES_CONF.Keys.Esc   # 27
+$global:UserScoop_CONF.Keys.Up    # 38
+$global:UserScoop_CONF.Keys.Down  # 40
+$global:UserScoop_CONF.Keys.Enter # 13
+$global:UserScoop_CONF.Keys.Esc   # 27
 ```
 
 ### 随机语录
 
-在 `$HERMES_ROOT\quotes.txt` 放置语录文件：
+在 `$UserScoop_ROOT\quotes.txt` 放置语录文件，每条语录用 `%` 分隔：
 
 ```
 你喜欢的第一条语录
@@ -141,7 +180,7 @@ $global:HERMES_CONF.Keys.Esc   # 27
 %
 ```
 
-Shell 启动时会随机显示一条语录。✨
+每次启动 PowerShell 时会随机显示一条语录。✨
 
 ---
 

@@ -22,7 +22,7 @@ function Show-TmuxSelector {
 
     while ($true) {
         Clear-Host
-        Write-Host "$($global:HERMES_CONF.Colors.Cyan)TMUX MANAGER | $HostName $($global:HERMES_CONF.Colors.Rst)"
+        Write-Host "$($global:UserScoop_CONF.Colors.Cyan)TMUX MANAGER | $HostName $($global:UserScoop_CONF.Colors.Rst)"
 
         for ($i = 0; $i -lt $subOptions.Count; $i++) {
             $color = "White"; $marker = "    "
@@ -34,9 +34,9 @@ function Show-TmuxSelector {
 
         $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
         $vK = $key.VirtualKeyCode
-        if ($vK -eq $global:HERMES_CONF.Keys.Up) { $idx = ($idx - 1 + $subOptions.Count) % $subOptions.Count; continue }
-        if ($vK -eq $global:HERMES_CONF.Keys.Down) { $idx = ($idx + 1) % $subOptions.Count; continue }
-        if ($vK -eq $global:HERMES_CONF.Keys.Enter) {
+        if ($vK -eq $global:UserScoop_CONF.Keys.Up) { $idx = ($idx - 1 + $subOptions.Count) % $subOptions.Count; continue }
+        if ($vK -eq $global:UserScoop_CONF.Keys.Down) { $idx = ($idx + 1) % $subOptions.Count; continue }
+        if ($vK -eq $global:UserScoop_CONF.Keys.Enter) {
             if ($idx -eq 0) { return "MENU_BACK" }
             return "tmux attach -t '$($Sessions[$idx - 1].Name)'"
         }
@@ -95,9 +95,9 @@ function Start-TmuxSession {
 
     while ($true) {
         Clear-Host
-        if (Get-Command Show-HermesLogo -ErrorAction SilentlyContinue) { Show-HermesLogo }
-        Write-Host "$($global:HERMES_CONF.Colors.Cyan)REMOTE TMUX | $hostName $($global:HERMES_CONF.Colors.Rst)"
-        Write-Host "$($global:HERMES_CONF.Colors.Gray)$("-" * 50)$($global:HERMES_CONF.Colors.Rst)"
+        if (Get-Command Show-UserScoopLogo -ErrorAction SilentlyContinue) { Show-UserScoopLogo }
+        Write-Host "$($global:UserScoop_CONF.Colors.Cyan)REMOTE TMUX | $hostName $($global:UserScoop_CONF.Colors.Rst)"
+        Write-Host "$($global:UserScoop_CONF.Colors.Gray)$("-" * 50)$($global:UserScoop_CONF.Colors.Rst)"
 
         for ($i = 0; $i -lt $menu.Count; $i++) {
             $color = "White"; $marker = "    "
@@ -106,21 +106,21 @@ function Start-TmuxSession {
         }
 
         Write-Host ""
-        Write-Host "    $($global:HERMES_CONF.Colors.Gray)说明: $($menu[$idx].Desc)$($global:HERMES_CONF.Colors.Rst)"
-        Write-Host "$($global:HERMES_CONF.Colors.Gray)$("-" * 50)$($global:HERMES_CONF.Colors.Rst)"
+        Write-Host "    $($global:UserScoop_CONF.Colors.Gray)说明: $($menu[$idx].Desc)$($global:UserScoop_CONF.Colors.Rst)"
+        Write-Host "$($global:UserScoop_CONF.Colors.Gray)$("-" * 50)$($global:UserScoop_CONF.Colors.Rst)"
 
         if ($Host.UI.RawUI.KeyAvailable) { $Host.UI.RawUI.FlushInputBuffer() }
 
         $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
         $vK = $key.VirtualKeyCode; $char = $key.Character.ToString().ToLower()
 
-        if ($vK -eq $global:HERMES_CONF.Keys.Up) { $idx = ($idx - 1 + $menu.Count) % $menu.Count; continue }
-        if ($vK -eq $global:HERMES_CONF.Keys.Down) { $idx = ($idx + 1) % $menu.Count; continue }
+        if ($vK -eq $global:UserScoop_CONF.Keys.Up) { $idx = ($idx - 1 + $menu.Count) % $menu.Count; continue }
+        if ($vK -eq $global:UserScoop_CONF.Keys.Down) { $idx = ($idx + 1) % $menu.Count; continue }
 
         $finalKey = $null
-        if ($vK -eq $global:HERMES_CONF.Keys.Enter) { $finalKey = ($idx + 1).ToString() }
+        if ($vK -eq $global:UserScoop_CONF.Keys.Enter) { $finalKey = ($idx + 1).ToString() }
         elseif ($char -match "^[1-$($menu.Count)]$") { $finalKey = $char }
-        elseif ($char -eq 'q' -or $vK -eq $global:HERMES_CONF.Keys.Esc) { return }
+        elseif ($char -eq 'q' -or $vK -eq $global:UserScoop_CONF.Keys.Esc) { return }
 
         if ($finalKey -eq "$($menu.Count)") { return }
         if ($null -ne $finalKey) {
