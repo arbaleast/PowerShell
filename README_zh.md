@@ -1,166 +1,166 @@
-# ⚡ PowerShell 配置
+# 鈿?PowerShell 閰嶇疆
 
-### ⌨️ 模块化 PowerShell 配置，支持 tmux 会话管理、Starship 提示符和跨平台工具
+### 鈱笍 妯″潡鍖?PowerShell 閰嶇疆锛屾敮鎸?tmux 浼氳瘽绠＄悊銆丼tarship 鎻愮ず绗﹀拰璺ㄥ钩鍙板伐鍏?
 
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue.svg)](https://github.com/PowerShell/PowerShell)
 [![Starship](https://img.shields.io/badge/Starkship-Prompt-8356ff.svg)](https://starship.rs)
 [![Tmux](https://img.shields.io/badge/Tmux-Sessions-1BB91F.svg)](https://github.com/tmux/tmux)
 
-[English Version](./README.md) · [报告问题](https://github.com/arbaleast/PowerShell/issues) · [功能建议](https://github.com/arbaleast/PowerShell/issues)
+[English Version](./README.md) 路 [鎶ュ憡闂](https://github.com/arbaleast/PowerShell/issues) 路 [鍔熻兘寤鸿](https://github.com/arbaleast/PowerShell/issues)
 
 ---
 
-## ✨ 功能特点
+## 鉁?鍔熻兘鐗圭偣
 
-### 🚀 性能
-- **懒加载** — tmux 模块仅在你首次输入 `sss` 时才加载
-- **快速启动** — 最小化足迹，毫秒级加载
+### 馃殌 鎬ц兘
+- **鎳掑姞杞?* 鈥?tmux 妯″潡浠呭湪浣犻娆¤緭鍏?`sss` 鏃舵墠鍔犺浇
+- **蹇€熷惎鍔?* 鈥?鏈€灏忓寲瓒宠抗锛屾绉掔骇鍔犺浇
 
-### 🛠️ 开发者工具
-- **Starship 提示符** — 跨 Shell 提示符，显示 git 上下文、Node 版本
-- **Fnm 集成** — cd 切换项目时自动切换 Node 版本
-- **PSReadLine** — 基于历史的自动补全，更好的导航体验
+### 馃洜锔?寮€鍙戣€呭伐鍏?
+- **Starship 鎻愮ず绗?* 鈥?璺?Shell 鎻愮ず绗︼紝鏄剧ず git 涓婁笅鏂囥€丯ode 鐗堟湰
+- **Fnm 闆嗘垚** 鈥?cd 鍒囨崲椤圭洰鏃惰嚜鍔ㄥ垏鎹?Node 鐗堟湰
+- **PSReadLine** 鈥?鍩轰簬鍘嗗彶鐨勮嚜鍔ㄨˉ鍏紝鏇村ソ鐨勫鑸綋楠?
 
-### 🔧 远程会话
-- **Tmux 管理器** — 交互式菜单管理远程 tmux 会话
-- **快速连接** — `sss <host>` 立即附加/恢复/创建会话
+### 馃敡 杩滅▼浼氳瘽
+- **Tmux 绠＄悊鍣?* 鈥?浜や簰寮忚彍鍗曠鐞嗚繙绋?tmux 浼氳瘽
+- **蹇€熻繛鎺?* 鈥?`sss <host>` 绔嬪嵆闄勫姞/鎭㈠/鍒涘缓浼氳瘽
 
-### 📁 日常优化
-- **快捷别名** — `ll`、`..`、`~`、`which` 加速导航
-- **模块化结构** — 易于定制，易于维护
+### 馃搧 鏃ュ父浼樺寲
+- **蹇嵎鍒悕** 鈥?`ll`銆乣..`銆乣~`銆乣which` 鍔犻€熷鑸?
+- **妯″潡鍖栫粨鏋?* 鈥?鏄撲簬瀹氬埗锛屾槗浜庣淮鎶?
 
 ---
 
-## 📂 目录结构
+## 馃搨 鐩綍缁撴瀯
 
 ```
 PowerShell/
-│
-├── Microsoft.PowerShell_profile.ps1   # 🎯 主入口 — 加载所有模块
-├── Config.ps1                       # ⚙️  路径、颜色、键盘布局
-├── Alias.ps1                        # 🔗 别名：ll, .., ~, reload, which
-├── Utils.ps1                        # 🧰 辅助函数：logo, 缓存, 导入
-└── Remote.ps1                       # 🖥️  Tmux 会话管理器（懒加载）
+鈹?
+鈹溾攢鈹€ Microsoft.PowerShell_profile.ps1   # 馃幆 涓诲叆鍙?鈥?鍔犺浇鎵€鏈夋ā鍧?
+鈹溾攢鈹€ Config.ps1                       # 鈿欙笍  璺緞銆侀鑹层€侀敭鐩樺竷灞€
+鈹溾攢鈹€ Alias.ps1                        # 馃敆 鍒悕锛歭l, .., ~, reload, which
+鈹溾攢鈹€ Utils.ps1                        # 馃О 杈呭姪鍑芥暟锛歭ogo, 缂撳瓨, 瀵煎叆
+鈹斺攢鈹€ Remote.ps1                       # 馃枼锔? Tmux 浼氳瘽绠＄悊鍣紙鎳掑姞杞斤級
 ```
 
 ---
 
-## 🚀 快速开始
+## 馃殌 蹇€熷紑濮?
 
-### 1️⃣ 安装依赖
+### 1锔忊儯 瀹夎渚濊禆
 
-请确保系统已安装以下工具：
+璇风‘淇濈郴缁熷凡瀹夎浠ヤ笅宸ュ叿锛?
 
-| 工具 | 用途 | 安装指南 |
+| 宸ュ叿 | 鐢ㄩ€?| 瀹夎鎸囧崡 |
 |------|------|----------|
-| [Starship](https://starship.rs/) | 美观提示符，带 git 上下文 | [安装](https://starship.rs/guide/#🚀-installation) |
-| [Fnm](https://github.com/Schniz/fnm) | 快速 Node 版本管理器 | [安装](https://github.com/Schniz/fnm#installation) |
-| [tmux](https://github.com/tmux/tmux) | 远程会话保持 | [安装](https://github.com/tmux/tmux/wiki) |
+| [Starship](https://starship.rs/) | 缇庤鎻愮ず绗︼紝甯?git 涓婁笅鏂?| [瀹夎](https://starship.rs/guide/#馃殌-installation) |
+| [Fnm](https://github.com/Schniz/fnm) | 蹇€?Node 鐗堟湰绠＄悊鍣?| [瀹夎](https://github.com/Schniz/fnm#installation) |
+| [tmux](https://github.com/tmux/tmux) | 杩滅▼浼氳瘽淇濇寔 | [瀹夎](https://github.com/tmux/tmux/wiki) |
 
-### 2️⃣ 建立目录结构
+### 2锔忊儯 寤虹珛鐩綍缁撴瀯
 
-按以下结构创建目录（路径可自行调整）：
+鎸変互涓嬬粨鏋勫垱寤虹洰褰曪紙璺緞鍙嚜琛岃皟鏁达級锛?
 
 ```
-D:\Env\                    # ← $UserScoop_ROOT（根目录）
-├── quotes.txt             # ← 启动语录（可选）
-└── UserScoop\
-    └── apps\              # ← $UserScoop_APPS（工具目录）
-        ├── starship\
-        │   └── current\
-        │       └── starship.exe
-        └── fnm\
-            └── current\
-                └── fnm.exe
+D:\Env\                    # 鈫?$UserScoop_ROOT锛堟牴鐩綍锛?
+鈹溾攢鈹€ quotes.txt             # 鈫?鍚姩璇綍锛堝彲閫夛級
+鈹斺攢鈹€ UserScoop\
+    鈹斺攢鈹€ apps\              # 鈫?$UserScoop_APPS锛堝伐鍏风洰褰曪級
+        鈹溾攢鈹€ starship\
+        鈹?  鈹斺攢鈹€ current\
+        鈹?      鈹斺攢鈹€ starship.exe
+        鈹斺攢鈹€ fnm\
+            鈹斺攢鈹€ current\
+                鈹斺攢鈹€ fnm.exe
 ```
 
-也可以使用任意自定义根路径，之后在 `Config.ps1` 中修改即可。
+涔熷彲浠ヤ娇鐢ㄤ换鎰忚嚜瀹氫箟鏍硅矾寰勶紝涔嬪悗鍦?`Config.ps1` 涓慨鏀瑰嵆鍙€?
 
-### 3️⃣ 安装配置文件
+### 3锔忊儯 瀹夎閰嶇疆鏂囦欢
 
 ```powershell
-# 步骤 A：查看 PowerShell 配置目录
+# 姝ラ A锛氭煡鐪?PowerShell 閰嶇疆鐩綍
 $PROFILE
 
-# 步骤 B：将所有 .ps1 文件复制到配置目录
-#         将 "D:\path\to\PowerShell" 替换为实际克隆路径
+# 姝ラ B锛氬皢鎵€鏈?.ps1 鏂囦欢澶嶅埗鍒伴厤缃洰褰?
+#         灏?"D:\path\to\PowerShell" 鏇挎崲涓哄疄闄呭厠闅嗚矾寰?
 Copy-Item -Path "D:\path\to\PowerShell\*.ps1" `
            -Destination (Split-Path $PROFILE -Parent) `
            -Force
 
-# 步骤 C：重启 PowerShell 或执行：
+# 姝ラ C锛氶噸鍚?PowerShell 鎴栨墽琛岋細
 reload
 ```
 
-### 4️⃣ 自定义配置（可选）
+### 4锔忊儯 鑷畾涔夐厤缃紙鍙€夛級
 
-编辑 `Config.ps1` 匹配你的目录结构：
+缂栬緫 `Config.ps1` 鍖归厤浣犵殑鐩綍缁撴瀯锛?
 
 ```powershell
-# 根目录 — quotes.txt 所在位置
+# 鏍圭洰褰?鈥?quotes.txt 鎵€鍦ㄤ綅缃?
 $global:UserScoop_ROOT = "D:\Env"
 
-# 工具目录 — Starship、Fnm 等所在位置
+# 宸ュ叿鐩綍 鈥?Starship銆丗nm 绛夋墍鍦ㄤ綅缃?
 $global:UserScoop_APPS = "$global:UserScoop_ROOT\UserScoop\apps"
 ```
 
-颜色方案和键盘码配置见下方 [配置说明](#-配置说明)。
+棰滆壊鏂规鍜岄敭鐩樼爜閰嶇疆瑙佷笅鏂?[閰嶇疆璇存槑](#-閰嶇疆璇存槑)銆?
 
 ---
 
-## ⚡ 命令一览
+## 鈿?鍛戒护涓€瑙?
 
-| 命令 | 说明 |
+| 鍛戒护 | 璇存槑 |
 |------|------|
-| `sss <host>` | 🖥️ 打开 tmux 管理器 → 连接远程主机 |
-| `reload` | 🔄 重载 PowerShell 配置 |
-| `ll` | 📋 详细列出文件 |
-| `..` | ⬆️ 跳转到父目录 |
-| `~` | 🏠 跳转到主目录 |
-| `which <cmd>` | 🔍 查找命令所在位置 |
+| `sss <host>` | 馃枼锔?鎵撳紑 tmux 绠＄悊鍣?鈫?杩炴帴杩滅▼涓绘満 |
+| `reload` | 馃攧 閲嶈浇 PowerShell 閰嶇疆 |
+| `ll` | 馃搵 璇︾粏鍒楀嚭鏂囦欢 |
+| `..` | 猬嗭笍 璺宠浆鍒扮埗鐩綍 |
+| `~` | 馃彔 璺宠浆鍒颁富鐩綍 |
+| `which <cmd>` | 馃攳 鏌ユ壘鍛戒护鎵€鍦ㄤ綅缃?|
 
 ---
 
-## 🖥️ Tmux 管理器
+## 馃枼锔?Tmux 绠＄悊鍣?
 
-`sss <host>` 打开交互式菜单：
+`sss <host>` 鎵撳紑浜や簰寮忚彍鍗曪細
 
 ```
-┌─────────────────────────────────────────┐
-│         REMOTE TMUX SESSION             │
-├─────────────────────────────────────────┤
-│  ▶  RESUME  — 附加到 'main'            │
-│     ATTACH  — 仅附加到现有会话         │
-│     NEW     — 创建新会话               │
-│     LIST    — 查看所有会话              │
-│     KILL    — 终止所有 tmux            │
-│     EXIT    — 返回本地终端             │
-└─────────────────────────────────────────┘
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹?        REMOTE TMUX SESSION             鈹?
+鈹溾攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
+鈹? 鈻? RESUME  鈥?闄勫姞鍒?'main'            鈹?
+鈹?    ATTACH  鈥?浠呴檮鍔犲埌鐜版湁浼氳瘽         鈹?
+鈹?    NEW     鈥?鍒涘缓鏂颁細璇?              鈹?
+鈹?    LIST    鈥?鏌ョ湅鎵€鏈変細璇?             鈹?
+鈹?    KILL    鈥?缁堟鎵€鏈?tmux            鈹?
+鈹?    EXIT    鈥?杩斿洖鏈湴缁堢             鈹?
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
 ```
 
-**操作：** `↑↓` 移动 · `Enter` 确认 · `q` 退出
+**鎿嶄綔锛?* `鈫戔啌` 绉诲姩 路 `Enter` 纭 路 `q` 閫€鍑?
 
 ---
 
-## 🎨 配置说明
+## 馃帹 閰嶇疆璇存槑
 
-### 目录路径
-
-```powershell
-$global:UserScoop_ROOT                  # 根目录（quotes.txt 在此）
-$global:UserScoop_APPS                 # 工具目录（Starship、Fnm 等）
-```
-
-### 颜色方案
+### 鐩綍璺緞
 
 ```powershell
-$global:UserScoop_CONF.Colors.Cyan  # 主色调
-$global:UserScoop_CONF.Colors.Gray  # 次要文字
-$global:UserScoop_CONF.Colors.Rst   # 重置格式
+$global:UserScoop_ROOT                  # 鏍圭洰褰曪紙quotes.txt 鍦ㄦ锛?
+$global:UserScoop_APPS                 # 宸ュ叿鐩綍锛圫tarship銆丗nm 绛夛級
 ```
 
-### 键盘码
+### 棰滆壊鏂规
+
+```powershell
+$global:UserScoop_CONF.Colors.Cyan  # 涓昏壊璋?
+$global:UserScoop_CONF.Colors.Gray  # 娆¤鏂囧瓧
+$global:UserScoop_CONF.Colors.Rst   # 閲嶇疆鏍煎紡
+```
+
+### 閿洏鐮?
 
 ```powershell
 $global:UserScoop_CONF.Keys.Up    # 38
@@ -169,25 +169,25 @@ $global:UserScoop_CONF.Keys.Enter # 13
 $global:UserScoop_CONF.Keys.Esc   # 27
 ```
 
-### 随机语录
+### 闅忔満璇綍
 
-在 `$UserScoop_ROOT\quotes.txt` 放置语录文件，每条语录用 `%` 分隔：
+鍦?`$UserScoop_ROOT\quotes.txt` 鏀剧疆璇綍鏂囦欢锛屾瘡鏉¤褰曠敤 `%` 鍒嗛殧锛?
 
 ```
-你喜欢的第一条语录
+浣犲枩娆㈢殑绗竴鏉¤褰?
 %
-又一句激励的话
+鍙堜竴鍙ユ縺鍔辩殑璇?
 %
 ```
 
-每次启动 PowerShell 时会随机显示一条语录。✨
+姣忔鍚姩 PowerShell 鏃朵細闅忔満鏄剧ず涓€鏉¤褰曘€傗湪
 
 ---
 
-## 📜 开源协议
+## 馃摐 寮€婧愬崗璁?
 
-MIT © [Your Name](https://github.com/arbaleast)
+MIT 漏 [Your Name](https://github.com/arbaleast)
 
 ---
 
-> 💡 **提示：** 如果觉得有用，别忘了 star ⭐
+> 馃挕 **鎻愮ず锛?* 濡傛灉瑙夊緱鏈夌敤锛屽埆蹇樹簡 star 猸?
