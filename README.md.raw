@@ -48,64 +48,32 @@ PowerShell/
 
 ## 🚀 Quick Start
 
-### 1️⃣ Prerequisites
-
-Ensure the following tools are installed on your system:
-
-| Tool | Purpose | Install |
-|------|---------|---------|
-| [Starship](https://starship.rs/) | Pretty prompt with git context | [Guide](https://starship.rs/guide/#🚀-installation) |
-| [Fnm](https://github.com/Schniz/fnm) | Fast Node version manager | [Guide](https://github.com/Schniz/fnm#installation) |
-| [tmux](https://github.com/tmux/tmux) | Remote session persistence | [Wiki](https://github.com/tmux/tmux/wiki) |
-
-### 2️⃣ Set Up Directory Structure
-
-Create the following directory layout (adjust paths as needed):
-
-```
-D:\Env\                    # ← $UserScoop_ROOT (root directory)
-├── quotes.txt             # ← Startup quotes (optional)
-└── UserScoop\
-    └── apps\              # ← $UserScoop_APPS (tool directory)
-        ├── starship\
-        │   └── current\
-        │       └── starship.exe
-        └── fnm\
-            └── current\
-                └── fnm.exe
-```
-
-Or use any custom root path — just update `Config.ps1` later.
-
-### 3️⃣ Install Profile Files
+### 1️⃣ Install
 
 ```powershell
-# Step A: Find your PowerShell profile directory
+# Find your profile path
 $PROFILE
 
-# Step B: Copy all .ps1 files to your profile directory
-#         Replace "D:\path\to\PowerShell" with your actual clone path
-Copy-Item -Path "D:\path\to\PowerShell\*.ps1" `
-           -Destination (Split-Path $PROFILE -Parent) `
-           -Force
-
-# Step C: Restart PowerShell or run:
-reload
+# Copy files (adjust the source path)
+Copy-Item -Path "D:\path\to\PowerShell\*.ps1" -Destination (Split-Path $PROFILE -Parent)
 ```
 
-### 4️⃣ Configure (Optional)
+### 2️⃣ Dependencies
 
-Edit `Config.ps1` to match your setup:
+| Tool | Why you need it | One-liner |
+|------|----------------|-----------|
+| [Starship](https://starship.rs/) | Pretty prompt with git context | [Install](https://starship.rs/guide/#🚀-installation) |
+| [Fnm](https://github.com/Schniz/fnm) | Fast Node version switching | [Install](https://github.com/Schniz/fnm#installation) |
+| [tmux](https://github.com/tmux/tmux) | Remote session persistence | [Install](https://github.com/tmux/tmux/wiki) |
+
+### 3️⃣ Customize
+
+Edit `Config.ps1`:
 
 ```powershell
-# Root directory — where quotes.txt lives
-$global:UserScoop_ROOT = "D:\Env"
-
-# Tool directory — where Starship, Fnm, etc. are installed
-$global:UserScoop_APPS = "$global:UserScoop_ROOT\UserScoop\apps"
+$global:HERMES_ROOT = "D:\Env"        # Your root directory
+$global:HERMES_APPS = "$global:HERMES_ROOT\UserScoop\apps"
 ```
-
-For color schemes and keyboard codes, see the [Configuration](#-configuration) section below.
 
 ---
 
@@ -145,33 +113,26 @@ For color schemes and keyboard codes, see the [Configuration](#-configuration) s
 
 ## 🎨 Configuration
 
-### Directory Paths
-
-```powershell
-$global:UserScoop_ROOT                  # Root directory (quotes.txt lives here)
-$global:UserScoop_APPS                 # Tool directory (Starship, Fnm, etc.)
-```
-
 ### Colors
 
 ```powershell
-$global:UserScoop_CONF.Colors.Cyan  # Primary accent
-$global:UserScoop_CONF.Colors.Gray  # Secondary text
-$global:UserScoop_CONF.Colors.Rst   # Reset formatting
+$global:HERMES_CONF.Colors.Cyan  # Primary accent
+$global:HERMES_CONF.Colors.Gray  # Secondary text
+$global:HERMES_CONF.Colors.Rst   # Reset formatting
 ```
 
 ### Keyboard Codes
 
 ```powershell
-$global:UserScoop_CONF.Keys.Up    # 38
-$global:UserScoop_CONF.Keys.Down  # 40
-$global:UserScoop_CONF.Keys.Enter # 13
-$global:UserScoop_CONF.Keys.Esc   # 27
+$global:HERMES_CONF.Keys.Up    # 38
+$global:HERMES_CONF.Keys.Down  # 40
+$global:HERMES_CONF.Keys.Enter # 13
+$global:HERMES_CONF.Keys.Esc   # 27
 ```
 
 ### Random Quotes
 
-Place a `quotes.txt` file at `$UserScoop_ROOT\quotes.txt`. Separate each quote with `%`:
+Drop a `quotes.txt` at `$HERMES_ROOT\quotes.txt`:
 
 ```
 Your favorite quote here
@@ -180,13 +141,13 @@ Another inspiring line
 %
 ```
 
-A random quote displays every time you start a new PowerShell session. ✨
+A random quote shows on shell startup. ✨
 
 ---
 
 ## 📜 License
 
-MIT © arbaleast
+MIT © [Your Name](https://github.com/arbaleast)
 
 ---
 
