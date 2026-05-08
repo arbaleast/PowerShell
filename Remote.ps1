@@ -7,8 +7,8 @@ function Get-TmuxSessions {
     foreach ($line in ($output -split "`n")) {
         if ($line -match '^[^:]+:') {
             $name = ($line -split ':')[0].Trim()
-            $status = "鍚庡彴涓?
-            if ($line -match "attached") { $status = "宸叉寕杞? }
+            $status = "后台中"
+            if ($line -match "attached") { $status = "已挂载" }
             $sessionList += @{ Name = $name; Status = $status }
         }
     }
@@ -17,12 +17,12 @@ function Get-TmuxSessions {
 
 function Show-TmuxSelector {
     param([string]$HostName, [array]$Sessions)
-    $subOptions = @(@{ Name = "杩斿洖涓昏彍鍗? }) + $Sessions
+    $subOptions = @(@{ Name = "返回主菜单" }) + $Sessions
     $idx = 0
 
     while ($true) {
         Clear-Host
-        Write-Host "$($global:HERMES_CONF.Colors.Cyan)馃殌 TMUX MANAGER | $HostName $($global:HERMES_CONF.Colors.Rst)"
+        Write-Host "$($global:HERMES_CONF.Colors.Cyan)TMUX MANAGER | $HostName $($global:HERMES_CONF.Colors.Rst)"
 
         for ($i = 0; $i -lt $subOptions.Count; $i++) {
             $color = "White"; $marker = "    "
@@ -50,12 +50,12 @@ function Invoke-TmuxAction {
         '1' { return "tmux attach -t main || tmux new -s main" }
         '2' { return "tmux attach -t main" }
         '3' {
-            $n = Read-Host " > 鏂颁細璇濆悕绉?(鐣欑┖鍥炶溅闅忔満鐢熸垚)"
-            if ([string]::IsNullOrWhiteSpace($n)) { 
-                $n = "G7-$(Get-Random -Min 1000 -Max 9999)" 
+            $n = Read-Host " > 新会话名称(留空随机生成)"
+            if ([string]::IsNullOrWhiteSpace($n)) {
+                $n = "G7-$(Get-Random -Min 1000 -Max 9999)"
             } else {
                 if ($n -notmatch '^[a-zA-Z0-9_-]+$') {
-                    Write-Host " [鉁朷 鍚嶇О浠呮敮鎸佸瓧姣嶃€佹暟瀛椼€? 鍜?_" -ForegroundColor Red
+                    Write-Host " [错误] 名称仅支持字母、数字和_-" -ForegroundColor Red
                     Start-Sleep -s 1
                     return $null
                 }
@@ -65,7 +65,7 @@ function Invoke-TmuxAction {
         '4' {
             $data = Get-TmuxSessions -HostName $HostName
             if ($data.Sessions.Count -eq 0) {
-                Write-Host " [!] 鏃犳椿璺冧細璇? -ForegroundColor Yellow; Start-Sleep -s 1
+                Write-Host " [!] 无活跃会话" -ForegroundColor Yellow; Start-Sleep -s 1
                 return "MENU_BACK"
             }
             return Show-TmuxSelector -HostName $HostName -Sessions $data.Sessions
@@ -79,24 +79,24 @@ function Invoke-TmuxAction {
 function Start-TmuxSession {
     param([Parameter(Position=0)][string]$hostName)
     if (-not $hostName) { $hostName = $Global:LastSshHost }
-    if (-not $hostName) { Write-Host " [!] 缂哄皯涓绘満鍚? -ForegroundColor Red; return }
+    if (-not $hostName) { Write-Host " [!] 缺少主机名" -ForegroundColor Red; return }
 
     $Global:LastSshHost = $hostName
     $idx = 0
 
     $menu = @(
-        @{ Name = "RESUME"; Desc = "鎺ュ叆 main 浼氳瘽锛岃嫢涓嶅瓨鍦ㄥ垯鑷姩鏂板缓 (鎺ㄨ崘)" }
-        @{ Name = "ATTACH"; Desc = "浠呭皾璇曟帴鍏?main 浼氳瘽 (涓嶅垱寤烘柊浼氳瘽)" }
-        @{ Name = "NEW";    Desc = "鍒涘缓鏂颁細璇?(杈撳叆鍚嶇О锛屾垨鐩存帴鐣欑┖鍥炶溅鐢熸垚闅忔満鍚嶇О)" }
-        @{ Name = "LIST";   Desc = "鏌ヨ璇ヤ富鏈烘墍鏈夋椿璺冧細璇濓紝骞舵墦寮€閫夋嫨闈㈡澘" }
-        @{ Name = "KILL";   Desc = "鍗遍櫓锛氱粓姝㈠綋鍓嶄富鏈轰笂杩愯鐨勬墍鏈?tmux 杩涚▼" }
-        @{ Name = "EXIT";   Desc = "閫€鍑哄綋鍓嶉潰鏉匡紝杩斿洖鏈湴缁堢" }
+        @{ Name = "RESUME"; Desc = "接入 main 会话，若不存在则自动创建 (推荐)" }
+        @{ Name = "ATTACH"; Desc = "仅尝试接入 main 会话 (不创建新会话)" }
+        @{ Name = "NEW";    Desc = "创建新会话(输入名称，或直接回车生成随机名称)" }
+        @{ Name = "LIST";   Desc = "查询该主机所有活跃会话，并打开选择面板" }
+        @{ Name = "KILL";   Desc = "危险：终止该主机上运行的所有 tmux 进程" }
+        @{ Name = "EXIT";   Desc = "退出当前面板，返回本地终端" }
     )
 
     while ($true) {
         Clear-Host
         if (Get-Command Show-HermesLogo -ErrorAction SilentlyContinue) { Show-HermesLogo }
-        Write-Host "$($global:HERMES_CONF.Colors.Cyan)馃殌 REMOTE TMUX | $hostName $($global:HERMES_CONF.Colors.Rst)"
+        Write-Host "$($global:HERMES_CONF.Colors.Cyan)REMOTE TMUX | $hostName $($global:HERMES_CONF.Colors.Rst)"
         Write-Host "$($global:HERMES_CONF.Colors.Gray)$("-" * 50)$($global:HERMES_CONF.Colors.Rst)"
 
         for ($i = 0; $i -lt $menu.Count; $i++) {
@@ -106,7 +106,7 @@ function Start-TmuxSession {
         }
 
         Write-Host ""
-        Write-Host "    $($global:HERMES_CONF.Colors.Gray)鈩?璇存槑: $($menu[$idx].Desc)$($global:HERMES_CONF.Colors.Rst)"
+        Write-Host "    $($global:HERMES_CONF.Colors.Gray)说明: $($menu[$idx].Desc)$($global:HERMES_CONF.Colors.Rst)"
         Write-Host "$($global:HERMES_CONF.Colors.Gray)$("-" * 50)$($global:HERMES_CONF.Colors.Rst)"
 
         if ($Host.UI.RawUI.KeyAvailable) { $Host.UI.RawUI.FlushInputBuffer() }
@@ -128,7 +128,7 @@ function Start-TmuxSession {
             if ($cmd -eq "INTERNAL_QUIT") { return }
             if ($cmd -eq "MENU_BACK" -or $null -eq $cmd) { continue }
 
-            Write-Host "`n[SSH] 杩炴帴涓?.." -ForegroundColor DarkCyan
+            Write-Host "`n[SSH] 连接中..`n" -ForegroundColor DarkCyan
             & ssh.exe -tt -o "ConnectTimeout=5" $hostName "$cmd"
 
             Start-Sleep -Milliseconds 200
