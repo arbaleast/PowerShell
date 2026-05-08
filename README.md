@@ -1,4 +1,4 @@
-# ⚡ PowerShell Profile
+# �?PowerShell Profile
 
 ### ⌨️ A modular PowerShell profile with tmux, Starship & cross-platform tool support
 
@@ -11,24 +11,24 @@
 
 ---
 
-## ✨ Features
+## �?Features
 
 ### 🚀 Performance
-- **Lazy Loading** — tmux module loads only when you first type `sss`
-- **Fast Startup** — Minimal footprint, loads in milliseconds
+- **Lazy Loading** �?tmux module loads only when you first type `sss`
+- **Fast Startup** �?Minimal footprint, loads in milliseconds
 
-### 🛠️ Developer Tools
-- **Starship Prompt** — Cross-shell prompt with git awareness, Node version display
-- **Fnm Integration** — Auto-switch Node versions as you cd between projects
-- **PSReadLine** — History-based autocompletion, better navigation
+### 🛠�?Developer Tools
+- **Starship Prompt** �?Cross-shell prompt with git awareness, Node version display
+- **Fnm Integration** �?Auto-switch Node versions as you cd between projects
+- **PSReadLine** �?History-based autocompletion, better navigation
 
 ### 🔧 Remote Sessions
-- **Tmux Manager** — Interactive menu for managing remote tmux sessions
-- **Quick Connect** — `sss <host>` to attach/resume/create sessions instantly
+- **Tmux Manager** �?Interactive menu for managing remote tmux sessions
+- **Quick Connect** �?`sss <host>` to attach/resume/create sessions instantly
 
 ### 📁 Everyday QoL
-- **Quick Aliases** — `ll`, `..`, `~`, `which` for faster navigation
-- **Modular Structure** — Easy to customize, easy to maintain
+- **Quick Aliases** �?`ll`, `..`, `~`, `which` for faster navigation
+- **Modular Structure** �?Easy to customize, easy to maintain
 
 ---
 
@@ -36,12 +36,12 @@
 
 ```
 PowerShell/
-│
-├── Microsoft.PowerShell_profile.ps1   # 🎯 Main entry — loads everything
+�?
+├── Microsoft.PowerShell_profile.ps1   # 🎯 Main entry �?loads everything
 ├── Config.ps1                       # ⚙️  Paths, colors, keyboard layout
 ├── Alias.ps1                        # 🔗 Aliases: ll, .., ~, reload, which
 ├── Utils.ps1                        # 🧰 Helpers: logo, cache, imports
-└── Remote.ps1                       # 🖥️  Tmux session manager (lazy)
+└── Remote.ps1                       # 🖥�? Tmux session manager (lazy)
 ```
 
 ---
@@ -63,19 +63,19 @@ Ensure the following tools are installed on your system:
 Create the following directory layout (adjust paths as needed):
 
 ```
-D:\Env\                    # ← $UserScoop_ROOT (root directory)
-├── quotes.txt             # ← Startup quotes (optional)
+D:\Env\                    # �?$UserScoop_ROOT (root directory)
+├── quotes.txt             # �?Startup quotes (optional)
 └── UserScoop\
-    └── apps\              # ← $UserScoop_APPS (tool directory)
+    └── apps\              # �?$UserScoop_APPS (tool directory)
         ├── starship\
-        │   └── current\
-        │       └── starship.exe
+        �?  └── current\
+        �?      └── starship.exe
         └── fnm\
             └── current\
                 └── fnm.exe
 ```
 
-Or use any custom root path — just update `Config.ps1` later.
+Or use any custom root path �?just update `Config.ps1` later.
 
 ### 3️⃣ Install Profile Files
 
@@ -98,10 +98,10 @@ reload
 Edit `Config.ps1` to match your setup:
 
 ```powershell
-# Root directory — where quotes.txt lives
+# Root directory �?where quotes.txt lives
 $global:UserScoop_ROOT = "D:\Env"
 
-# Tool directory — where Starship, Fnm, etc. are installed
+# Tool directory �?where Starship, Fnm, etc. are installed
 $global:UserScoop_APPS = "$global:UserScoop_ROOT\UserScoop\apps"
 ```
 
@@ -109,11 +109,11 @@ For color schemes and keyboard codes, see the [Configuration](#-configuration) s
 
 ---
 
-## ⚡ Commands
+## �?Commands
 
 | Command | What it does |
 |---------|-------------|
-| `sss <host>` | 🖥️ Open tmux manager → connect to remote host |
+| `sss <host>` | 🖥�?Open tmux manager �?connect to remote host |
 | `reload` | 🔄 Reload your PowerShell profile |
 | `ll` | 📋 List files with details |
 | `..` | ⬆️ Jump to parent directory |
@@ -122,21 +122,21 @@ For color schemes and keyboard codes, see the [Configuration](#-configuration) s
 
 ---
 
-## 🖥️ Tmux Manager
+## 🖥�?Tmux Manager
 
 `sss <host>` opens an interactive menu:
 
 ```
-┌─────────────────────────────────────────┐
-│         REMOTE TMUX SESSION             │
-├─────────────────────────────────────────┤
-│  ▶  RESUME  — attach to 'main'          │
-│     ATTACH  — existing session only     │
-│     NEW     — create new session        │
-│     LIST    — view all sessions         │
-│     KILL    — terminate all tmux        │
-│     EXIT    — back to local             │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────�?
+�?        REMOTE TMUX SESSION             �?
+├─────────────────────────────────────────�?
+�? �? RESUME  �?attach to 'main'          �?
+�?    ATTACH  �?existing session only     �?
+�?    NEW     �?create new session        �?
+�?    LIST    �?view all sessions         �?
+�?    KILL    �?terminate all tmux        �?
+�?    EXIT    �?back to local             �?
+└─────────────────────────────────────────�?
 ```
 
 **Controls:** `↑↓` move · `Enter` select · `q` quit
@@ -180,7 +180,7 @@ Another inspiring line
 %
 ```
 
-A random quote displays every time you start a new PowerShell session. ✨
+A random quote displays every time you start a new PowerShell session. �?
 
 ---
 
@@ -190,4 +190,4 @@ MIT © arbaleast
 
 ---
 
-> 💡 **Tip:** Star this repo if you find it useful! ⭐
+> 💡 **Tip:** Star this repo if you find it useful! �?
