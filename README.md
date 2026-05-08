@@ -1,87 +1,127 @@
-# Hermes G7 PowerShell Profile
+# ⚡ PowerShell Profile
 
-A modular PowerShell profile with tmux session management, Starship prompt integration, and cross-platform tool support.
+### ⌨️ A modular PowerShell profile with tmux, Starship & cross-platform tool support
 
-## Features
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue.svg)](https://github.com/PowerShell/PowerShell)
+[![Starship](https://img.shields.io/badge/Starship-Prompt-8356ff.svg)](https://starship.rs)
+[![Tmux](https://img.shields.io/badge/Tmux-Sessions-1BB91F.svg)](https://github.com/tmux/tmux)
 
-- **Modular Design** — Core components separated into focused scripts for easy maintenance
-- **Lazy Loading** — Remote/tmux module loads only when `sss` command is first used
-- **Tmux Manager** — Interactive menu for creating, attaching, and managing remote tmux sessions
-- **Starship Prompt** — Cross-shell prompt customization with emoji-free output
-- **Fnm Integration** — Fast Node Manager with auto-version switching on directory change
-- **PSReadLine** — Enhanced shell experience with history-based autocompletion
-- **Quick Aliases** — Common navigation shortcuts (`..`, `~`, `ll`, `which`)
+[中文版](./README_zh.md) · [Report Bug](https://github.com/arbaleast/PowerShell/issues) · [Request Feature](https://github.com/arbaleast/PowerShell/issues)
 
-## Structure
+---
+
+## ✨ Features
+
+### 🚀 Performance
+- **Lazy Loading** — tmux module loads only when you first type `sss`
+- **Fast Startup** — Minimal footprint, loads in milliseconds
+
+### 🛠️ Developer Tools
+- **Starship Prompt** — Cross-shell prompt with git awareness, Node version display
+- **Fnm Integration** — Auto-switch Node versions as you cd between projects
+- **PSReadLine** — History-based autocompletion, better navigation
+
+### 🔧 Remote Sessions
+- **Tmux Manager** — Interactive menu for managing remote tmux sessions
+- **Quick Connect** — `sss <host>` to attach/resume/create sessions instantly
+
+### 📁 Everyday QoL
+- **Quick Aliases** — `ll`, `..`, `~`, `which` for faster navigation
+- **Modular Structure** — Easy to customize, easy to maintain
+
+---
+
+## 📂 Structure
 
 ```
 PowerShell/
-├── .gitignore
-├── Microsoft.PowerShell_profile.ps1 # Main entry point
-├── Config.ps1                       # Global paths and configuration
-├── Alias.ps1                        # Aliases and quick commands
-├── Utils.ps1                        # Utility functions
-└── Remote.ps1                       # Tmux session manager (lazy loaded)
+│
+├── Microsoft.PowerShell_profile.ps1   # 🎯 Main entry — loads everything
+├── Config.ps1                       # ⚙️  Paths, colors, keyboard layout
+├── Alias.ps1                        # 🔗 Aliases: ll, .., ~, reload, which
+├── Utils.ps1                        # 🧰 Helpers: logo, cache, imports
+└── Remote.ps1                       # 🖥️  Tmux session manager (lazy)
 ```
 
-## Setup
+---
 
-1. Copy all `.ps1` files to your PowerShell profile directory:
-   ```powershell
-   # Find your profile path
-   $PROFILE
+## 🚀 Quick Start
 
-   # Copy files (adjust source path accordingly)
-   Copy-Item -Path "D:\path\to\Hermes G7\*.ps1" -Destination (Split-Path $PROFILE -Parent)
-   ```
+### 1️⃣ Install
 
-2. Ensure dependencies are installed:
-   - [Starship](https://starship.rs/) — Prompt
-   - [Fnm](https://github.com/Schniz/fnm) — Node version manager
-   - [tmux](https://github.com/tmux/tmux) — Terminal multiplexer (for remote sessions)
+```powershell
+# Find your profile path
+$PROFILE
 
-3. Edit `Config.ps1` to customize paths if needed:
-   ```powershell
-   $global:HERMES_ROOT = "D:\Env"        # Root directory
-   $global:HERMES_APPS = "$global:HERES_ROOT\UserScoop\apps"  # Tools directory
-   ```
+# Copy files (adjust the source path)
+Copy-Item -Path "D:\path\to\PowerShell\*.ps1" -Destination (Split-Path $PROFILE -Parent)
+```
 
-## Usage
+### 2️⃣ Dependencies
 
-| Command | Description |
+| Tool | Why you need it | One-liner |
+|------|----------------|-----------|
+| [Starship](https://starship.rs/) | Pretty prompt with git context | [Install](https://starship.rs/guide/#🚀-installation) |
+| [Fnm](https://github.com/Schniz/fnm) | Fast Node version switching | [Install](https://github.com/Schniz/fnm#installation) |
+| [tmux](https://github.com/tmux/tmux) | Remote session persistence | [Install](https://github.com/tmux/tmux/wiki) |
+
+### 3️⃣ Customize
+
+Edit `Config.ps1`:
+
+```powershell
+$global:HERMES_ROOT = "D:\Env"        # Your root directory
+$global:HERMES_APPS = "$global:HERMES_ROOT\UserScoop\apps"
+```
+
+---
+
+## ⚡ Commands
+
+| Command | What it does |
 |---------|-------------|
-| `sss <host>` | Start tmux manager for remote host |
-| `reload` | Reload the profile |
-| `ll` | List files (alias for `Get-ChildItem`) |
-| `..` | Go to parent directory |
-| `~` | Go to home directory |
-| `which <cmd>` | Locate command (wraps `where.exe`) |
+| `sss <host>` | 🖥️ Open tmux manager → connect to remote host |
+| `reload` | 🔄 Reload your PowerShell profile |
+| `ll` | 📋 List files with details |
+| `..` | ⬆️ Jump to parent directory |
+| `~` | 🏠 Jump to home directory |
+| `which <cmd>` | 🔍 Find where a command lives |
 
-## Tmux Manager
+---
 
-The `sss` command provides an interactive menu for remote tmux sessions:
+## 🖥️ Tmux Manager
 
-1. **RESUME** — Attach to `main` session, create if missing
-2. **ATTACH** — Attach to existing `main` session only
-3. **NEW** — Create new session with custom or random name
-4. **LIST** — View all active sessions on remote host
-5. **KILL** — Terminate all tmux processes on remote host
-6. **EXIT** — Return to local terminal
+`sss <host>` opens an interactive menu:
 
-Navigation: Arrow keys to move, Enter to select, `q` to quit.
+```
+┌─────────────────────────────────────────┐
+│         REMOTE TMUX SESSION             │
+├─────────────────────────────────────────┤
+│  ▶  RESUME  — attach to 'main'          │
+│     ATTACH  — existing session only     │
+│     NEW     — create new session        │
+│     LIST    — view all sessions         │
+│     KILL    — terminate all tmux        │
+│     EXIT    — back to local             │
+└─────────────────────────────────────────┘
+```
 
-## Configuration
+**Controls:** `↑↓` move · `Enter` select · `q` quit
+
+---
+
+## 🎨 Configuration
 
 ### Colors
 
-Defined in `Config.ps1`:
 ```powershell
 $global:HERMES_CONF.Colors.Cyan  # Primary accent
-$global:HERMES_CONF.Colors.Gray  # Secondary/muted text
+$global:HERMES_CONF.Colors.Gray  # Secondary text
 $global:HERMES_CONF.Colors.Rst   # Reset formatting
 ```
 
-### Keyboard Layout
+### Keyboard Codes
 
 ```powershell
 $global:HERMES_CONF.Keys.Up    # 38
@@ -90,18 +130,25 @@ $global:HERMES_CONF.Keys.Enter # 13
 $global:HERMES_CONF.Keys.Esc   # 27
 ```
 
-### Quotes File
+### Random Quotes
 
-Place a `quotes.txt` file at `$HERMES_ROOT\quotes.txt` with entries separated by `%`:
+Drop a `quotes.txt` at `$HERMES_ROOT\quotes.txt`:
+
 ```
-First quote text here
+Your favorite quote here
 %
-Second quote text here
+Another inspiring line
 %
 ```
 
-The logo displays a random quote on each shell start.
+A random quote shows on shell startup. ✨
 
-## License
+---
 
-MIT
+## 📜 License
+
+MIT © [Your Name](https://github.com/arbaleast)
+
+---
+
+> 💡 **Tip:** Star this repo if you find it useful! ⭐

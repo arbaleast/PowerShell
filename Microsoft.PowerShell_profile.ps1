@@ -14,4 +14,4 @@ function sss {
 if (Get-Command Show-HermesLogo -ErrorAction SilentlyContinue) { Show-HermesLogo }
 
 $ProfileTimer.Stop()
-Write-Host "Hermes G7 Loaded: $($ProfileTimer.ElapsedMilliseconds)ms" -ForegroundColor DarkGray
+Write-Host "PowerShell Profile Loaded: $($ProfileTimer.ElapsedMilliseconds)ms" -ForegroundColor DarkGray
