@@ -1,0 +1,9 @@
+代码是写给人看的，顺便给机器运行。
+%
+Talk is cheap, show me the code.
+%
+Stay hungry, stay foolish.
+%
+简洁是智慧的灵魂。
+%
+Keep it simple, stupid.
