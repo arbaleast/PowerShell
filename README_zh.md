@@ -1,4 +1,14 @@
-# ⚡ PowerShell 配置
+```ascii
+╔═══════════════════════════════════════════════════════════════════╗
+║  ██████╗  ██████╗     ███████╗███████╗ ██████╗██╗   ██╗███████╗   ║
+║  ██╔══██╗██╔═══██╗    ██╔════╝██╔════╝██╔════╝██║   ██║██╔════╝   ║
+║  ██████╔╝██║   ██║    █████╗  ███████╗██║     ██║   ██║█████╗     ║
+║  ██╔══██╗██║   ██║    ██╔══╝  ╚════██║██║     ██║   ██║██╔══╝     ║
+║  ██████╔╝╚██████╔╝    ███████╗███████║╚██████╗╚██████╔╝███████╗   ║
+║  ╚═════╝  ╚═════╝     ╚══════╝╚══════╝ ╚═════╝ ╚═════╝ ╚══════╝   ║
+║                      P O W E R S H E L L   P R O F I L E          ║
+╚═══════════════════════════════════════════════════════════════════╝
+```
 
 ### ⌨️ 模块化 PowerShell 配置，支持 tmux 会话管理、Starship 提示符和跨平台工具
 
@@ -8,6 +18,37 @@
 [![Tmux](https://img.shields.io/badge/Tmux-Sessions-1BB91F.svg)](https://github.com/tmux/tmux)
 
 [English Version](./README.md) · [报告问题](https://github.com/arbaleast/PowerShell/issues) · [功能建议](https://github.com/arbaleast/PowerShell/issues)
+
+---
+
+## 📸 截图
+
+```
+  * ACTIVE -- 14:32
+
+    💬 代码是写给人看的，顺便给机器运行。
+
+  ----------------------------------------------
+  
+  ~/Projects/PowerShell on main偏
+  ❯ _
+```
+
+**Tmux 管理器 (`sss <host>`):**
+
+```
+┌─────────────────────────────────────────┐
+│         REMOTE TMUX SESSION             │
+├─────────────────────────────────────────┤
+│  ▶  RESUME  — 附加到 'main'             │
+│     ATTACH  — 仅附加到现有会话          │
+│     NEW     — 创建新会话                │
+│     LIST    — 查看所有会话              │
+│     KILL    — 终止所有 tmux            │
+│     EXIT    — 返回本地终端             │
+└─────────────────────────────────────────┘
+        ↑↓ 移动  ·  Enter 确认  ·  q 退出
+```
 
 ---
 
@@ -41,7 +82,8 @@ PowerShell/
 ├── Config.ps1                       # ⚙️  路径、颜色、键盘布局
 ├── Alias.ps1                        # 🔗 别名：ll, .., ~, reload, which
 ├── Utils.ps1                        # 🧰 辅助函数：logo, 缓存, 导入
-└── Remote.ps1                       # 🖥️  Tmux 会话管理器（懒加载）
+├── Remote.ps1                       # 🖥️  Tmux 会话管理器（懒加载）
+└── quotes.txt                       # 💬 随机启动语录
 ```
 
 ---
@@ -58,34 +100,15 @@ PowerShell/
 | [Fnm](https://github.com/Schniz/fnm) | 快速 Node 版本管理器 | [安装](https://github.com/Schniz/fnm#installation) |
 | [tmux](https://github.com/tmux/tmux) | 远程会话保持 | [安装](https://github.com/tmux/tmux/wiki) |
 
-### 2️⃣ 建立目录结构
-
-按以下结构创建目录（路径可自行调整）：
-
-```
-D:\Env\                    # ← $UserScoop_ROOT（根目录）
-├── quotes.txt             # ← 启动语录（可选）
-└── UserScoop\
-    └── apps\              # ← $UserScoop_APPS（工具目录）
-        ├── starship\
-        │   └── current\
-        │       └── starship.exe
-        └── fnm\
-            └── current\
-                └── fnm.exe
-```
-
-也可以使用任意自定义根路径，之后在 `Config.ps1` 中修改即可。
-
-### 3️⃣ 安装配置文件
+### 2️⃣ 安装配置文件
 
 ```powershell
 # 步骤 A：查看 PowerShell 配置目录
 $PROFILE
 
-# 步骤 B：将所有 .ps1 文件复制到配置目录
+# 步骤 B：将所有文件复制到配置目录
 #         将 "D:\path\to\PowerShell" 替换为实际克隆路径
-Copy-Item -Path "D:\path\to\PowerShell\*.ps1" `
+Copy-Item -Path "D:\path\to\PowerShell\*" `
            -Destination (Split-Path $PROFILE -Parent) `
            -Force
 
@@ -93,16 +116,16 @@ Copy-Item -Path "D:\path\to\PowerShell\*.ps1" `
 reload
 ```
 
-### 4️⃣ 自定义配置（可选）
+> 💡 **提示：** `quotes.txt` 会自动从脚本目录加载，无需额外配置。
 
-编辑 `Config.ps1` 匹配你的目录结构：
+### 3️⃣ 自定义配置（可选）
+
+编辑 `Config.ps1` 自定义设置：
 
 ```powershell
-# 根目录 — quotes.txt 所在位置
-$global:UserScoop_ROOT = "D:\Env"
-
-# 工具目录 — Starship、Fnm 等所在位置
-$global:UserScoop_APPS = "$global:UserScoop_ROOT\UserScoop\apps"
+# 默认路径（自动从脚本位置检测）
+$global:UserScoop_ROOT = $PSScriptRoot  # quotes.txt 所在目录
+$global:UserScoop_APPS = "...\apps"     # 工具安装目录
 ```
 
 颜色方案和键盘码配置见下方 [配置说明](#-配置说明)。
@@ -119,27 +142,6 @@ $global:UserScoop_APPS = "$global:UserScoop_ROOT\UserScoop\apps"
 | `..` | ⬆️ 跳转到父目录 |
 | `~` | 🏠 跳转到主目录 |
 | `which <cmd>` | 🔍 查找命令所在位置 |
-
----
-
-## 🖥️ Tmux 管理器
-
-`sss <host>` 打开交互式菜单：
-
-```
-┌─────────────────────────────────────────┐
-│         REMOTE TMUX SESSION             │
-├─────────────────────────────────────────┤
-│  ▶  RESUME  — 附加到 'main'            │
-│     ATTACH  — 仅附加到现有会话         │
-│     NEW     — 创建新会话               │
-│     LIST    — 查看所有会话              │
-│     KILL    — 终止所有 tmux            │
-│     EXIT    — 返回本地终端             │
-└─────────────────────────────────────────┘
-```
-
-**操作：** `↑↓` 移动 · `Enter` 确认 · `q` 退出
 
 ---
 
@@ -171,13 +173,16 @@ $global:UserScoop_CONF.Keys.Esc   # 27
 
 ### 随机语录
 
-在 `$UserScoop_ROOT\quotes.txt` 放置语录文件，每条语录用 `%` 分隔：
+语录从脚本目录的 `quotes.txt` 文件加载，每条语录用 `%` 分隔：
 
-```
-你喜欢的第一条语录
+```text
+💬 代码是写给人看的，顺便给机器运行。
 %
-又一句激励的话
+🔥 Talk is cheap, show me the code.
 %
+⚡ Stay hungry, stay foolish.
+%
+✨ 简洁是智慧的灵魂。
 ```
 
 每次启动 PowerShell 时会随机显示一条语录。✨

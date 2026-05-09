@@ -1,4 +1,14 @@
-# ⚡ PowerShell Profile
+```ascii
+╔═══════════════════════════════════════════════════════════════════╗
+║  ██████╗  ██████╗     ███████╗███████╗ ██████╗██╗   ██╗███████╗   ║
+║  ██╔══██╗██╔═══██╗    ██╔════╝██╔════╝██╔════╝██║   ██║██╔════╝   ║
+║  ██████╔╝██║   ██║    █████╗  ███████╗██║     ██║   ██║█████╗     ║
+║  ██╔══██╗██║   ██║    ██╔══╝  ╚════██║██║     ██║   ██║██╔══╝     ║
+║  ██████╔╝╚██████╔╝    ███████╗███████║╚██████╗╚██████╔╝███████╗   ║
+║  ╚═════╝  ╚═════╝     ╚══════╝╚══════╝ ╚═════╝ ╚═════╝ ╚══════╝   ║
+║                      P O W E R S H E L L   P R O F I L E          ║
+╚═══════════════════════════════════════════════════════════════════╝
+```
 
 ### ⌨️ A modular PowerShell profile with tmux, Starship & cross-platform tool support
 
@@ -8,6 +18,37 @@
 [![Tmux](https://img.shields.io/badge/Tmux-Sessions-1BB91F.svg)](https://github.com/tmux/tmux)
 
 [中文版](./README_zh.md) · [Report Bug](https://github.com/arbaleast/PowerShell/issues) · [Request Feature](https://github.com/arbaleast/PowerShell/issues)
+
+---
+
+## 📸 Screenshot
+
+```
+  * ACTIVE -- 14:32
+
+    💬 代码是写给人看的，顺便给机器运行。
+
+  ----------------------------------------------
+  
+  ~/Projects/PowerShell on main偏
+  ❯ _
+```
+
+**Tmux Manager (`sss <host>`):**
+
+```
+┌─────────────────────────────────────────┐
+│         REMOTE TMUX SESSION             │
+├─────────────────────────────────────────┤
+│  ▶  RESUME  — attach to 'main'          │
+│     ATTACH  — existing session only      │
+│     NEW     — create new session         │
+│     LIST    — view all sessions          │
+│     KILL    — terminate all tmux         │
+│     EXIT    — back to local              │
+└─────────────────────────────────────────┘
+        ↑↓ move  ·  Enter select  ·  q quit
+```
 
 ---
 
@@ -41,7 +82,8 @@ PowerShell/
 ├── Config.ps1                       # ⚙️  Paths, colors, keyboard layout
 ├── Alias.ps1                        # 🔗 Aliases: ll, .., ~, reload, which
 ├── Utils.ps1                        # 🧰 Helpers: logo, cache, imports
-└── Remote.ps1                       # 🖥️  Tmux session manager (lazy)
+├── Remote.ps1                       # 🖥️  Tmux session manager (lazy)
+└── quotes.txt                       # 💬 Random startup quotes
 ```
 
 ---
@@ -58,34 +100,15 @@ Ensure the following tools are installed on your system:
 | [Fnm](https://github.com/Schniz/fnm) | Fast Node version manager | [Guide](https://github.com/Schniz/fnm#installation) |
 | [tmux](https://github.com/tmux/tmux) | Remote session persistence | [Wiki](https://github.com/tmux/tmux/wiki) |
 
-### 2️⃣ Set Up Directory Structure
-
-Create the following directory layout (adjust paths as needed):
-
-```
-D:\Env\                    # ← $UserScoop_ROOT (root directory)
-├── quotes.txt             # ← Startup quotes (optional)
-└── UserScoop\
-    └── apps\              # ← $UserScoop_APPS (tool directory)
-        ├── starship\
-        │   └── current\
-        │       └── starship.exe
-        └── fnm\
-            └── current\
-                └── fnm.exe
-```
-
-Or use any custom root path — just update `Config.ps1` later.
-
-### 3️⃣ Install Profile Files
+### 2️⃣ Install Profile Files
 
 ```powershell
 # Step A: Find your PowerShell profile directory
 $PROFILE
 
-# Step B: Copy all .ps1 files to your profile directory
+# Step B: Copy all files to your profile directory
 #         Replace "D:\path\to\PowerShell" with your actual clone path
-Copy-Item -Path "D:\path\to\PowerShell\*.ps1" `
+Copy-Item -Path "D:\path\to\PowerShell\*" `
            -Destination (Split-Path $PROFILE -Parent) `
            -Force
 
@@ -93,16 +116,16 @@ Copy-Item -Path "D:\path\to\PowerShell\*.ps1" `
 reload
 ```
 
-### 4️⃣ Configure (Optional)
+> 💡 **Note:** `quotes.txt` will be loaded automatically from the script directory.
 
-Edit `Config.ps1` to match your setup:
+### 3️⃣ Configure (Optional)
+
+Edit `Config.ps1` to customize:
 
 ```powershell
-# Root directory — where quotes.txt lives
-$global:UserScoop_ROOT = "D:\Env"
-
-# Tool directory — where Starship, Fnm, etc. are installed
-$global:UserScoop_APPS = "$global:UserScoop_ROOT\UserScoop\apps"
+# Default paths (auto-detected from script location)
+$global:UserScoop_ROOT = $PSScriptRoot  # Where quotes.txt lives
+$global:UserScoop_APPS = "...\apps"     # Where tools are installed
 ```
 
 For color schemes and keyboard codes, see the [Configuration](#-configuration) section below.
@@ -119,27 +142,6 @@ For color schemes and keyboard codes, see the [Configuration](#-configuration) s
 | `..` | ⬆️ Jump to parent directory |
 | `~` | 🏠 Jump to home directory |
 | `which <cmd>` | 🔍 Find where a command lives |
-
----
-
-## 🖥️ Tmux Manager
-
-`sss <host>` opens an interactive menu:
-
-```
-┌─────────────────────────────────────────┐
-│         REMOTE TMUX SESSION             │
-├─────────────────────────────────────────┤
-│  ▶  RESUME  — attach to 'main'          │
-│     ATTACH  — existing session only     │
-│     NEW     — create new session        │
-│     LIST    — view all sessions         │
-│     KILL    — terminate all tmux        │
-│     EXIT    — back to local             │
-└─────────────────────────────────────────┘
-```
-
-**Controls:** `↑↓` move · `Enter` select · `q` quit
 
 ---
 
@@ -171,13 +173,16 @@ $global:UserScoop_CONF.Keys.Esc   # 27
 
 ### Random Quotes
 
-Place a `quotes.txt` file at `$UserScoop_ROOT\quotes.txt`. Separate each quote with `%`:
+Quotes are loaded from `quotes.txt` in the script directory. Separate each quote with `%`:
 
-```
-Your favorite quote here
+```text
+💬 代码是写给人看的，顺便给机器运行。
 %
-Another inspiring line
+🔥 Talk is cheap, show me the code.
 %
+⚡ Stay hungry, stay foolish.
+%
+✨ 简洁是智慧的灵魂。
 ```
 
 A random quote displays every time you start a new PowerShell session. ✨
