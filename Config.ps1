@@ -28,11 +28,12 @@
 
 # 根目录：UserScoop 配置的顶层目录
 #   - 环境变量：UserScoop_ROOT
-#   - 默认值  ：D:\Env（本地开发默认值）
+#   - 默认值  ：脚本所在目录（与 .ps1 文件同一位置）
 #   - 用途    ：存放 quotes.txt 语录文件
 $global:UserScoop_ROOT = $env:UserScoop_ROOT
 if (-not $global:UserScoop_ROOT)
-{ $global:UserScoop_ROOT = "D:\Env" 
+{
+    $global:UserScoop_ROOT = Split-Path -Parent $MyInvocation.MyCommand.Definition
 }
 
 # 应用目录：工具集根路径
@@ -41,13 +42,13 @@ if (-not $global:UserScoop_ROOT)
 #   - 用途    ：存放 Starship、Fnm 等工具的版本目录
 $global:UserScoop_APPS = $env:UserScoop_APPS
 if (-not $global:UserScoop_APPS)
-{ $global:UserScoop_APPS = "$global:UserScoop_ROOT\UserScoop\apps" 
+{ $global:UserScoop_APPS = "$global:UserScoop_ROOT\UserScoop\apps"
 }
 
 # ---------- 运行时配置 ----------
 
 $global:UserScoop_CONF = @{
-    # 语录文件路径：启动时随机显示一条语录
+    # 语录文件路径：启动时随机显示一条语录（放项目目录下）
     Quotes   = "$global:UserScoop_ROOT\quotes.txt"
 
     # Starship 提示符路径
