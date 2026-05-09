@@ -31,14 +31,18 @@
 #   - 默认值  ：D:\Env（本地开发默认值）
 #   - 用途    ：存放 quotes.txt 语录文件
 $global:UserScoop_ROOT = $env:UserScoop_ROOT
-if (-not $global:UserScoop_ROOT) { $global:UserScoop_ROOT = "D:\Env" }
+if (-not $global:UserScoop_ROOT)
+{ $global:UserScoop_ROOT = "D:\Env" 
+}
 
 # 应用目录：工具集根路径
 #   - 环境变量：UserScoop_APPS
 #   - 默认值  ：$UserScoop_ROOT\UserScoop\apps
 #   - 用途    ：存放 Starship、Fnm 等工具的版本目录
 $global:UserScoop_APPS = $env:UserScoop_APPS
-if (-not $global:UserScoop_APPS) { $global:UserScoop_APPS = "$global:UserScoop_ROOT\UserScoop\apps" }
+if (-not $global:UserScoop_APPS)
+{ $global:UserScoop_APPS = "$global:UserScoop_ROOT\UserScoop\apps" 
+}
 
 # ---------- 运行时配置 ----------
 
@@ -65,5 +69,16 @@ $global:UserScoop_CONF = @{
         Down  = 40   # ↓
         Enter = 13   # 回车
         Esc   = 27   # ESC
+    }
+
+    # SSH 配置
+    SSH      = @{
+        ConnectTimeout = 5      # SSH 连接超时（秒）
+        ForceTTy       = $true  # 强制分配伪终端（用于 tmux 交互）
+    }
+
+    # Tmux 配置
+    Tmux     = @{
+        DefaultSessionName = "main"  # 默认会话名称
     }
 }
