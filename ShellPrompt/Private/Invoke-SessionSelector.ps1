@@ -16,25 +16,23 @@ function Invoke-SessionSelector
         [int]$ConnectTimeout = $global:UserScoop_CONF.SSH.ConnectTimeout
     )
 
-    $subOptions = $Sessions | ForEach-Object { "$($_.Name) ($($_.Status))" }
+    $subOptions = $Sessions | ForEach-Object {
+        @{ Label = $_.Name; Desc = $_.Status }
+    }
 
     $choice = Invoke-ConsoleMenu `
         -Title "TMUX MANAGER | $HostName" `
         -Options $subOptions `
-        -ExitLabel "返回主菜单"
+        -ExitLabel "BACK"
 
     if ($null -eq $choice)
     {
         return $null
     }
 
-    $selectedSession = $Sessions | Where-Object {
-        "$($_.Name) ($($_.Status))" -eq $choice
-    } | Select-Object -First 1
-
     return @{
         Type    = "ssh"
-        Command = "tmux attach -t '$($selectedSession.Name)'"
+        Command = "tmux attach -t '$($choice.Label)'"
         Args    = @("-o", "ConnectTimeout=$ConnectTimeout", "-tt", $HostName)
     }
 }
