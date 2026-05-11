@@ -75,12 +75,24 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 PowerShell/
 │
 ├── Microsoft.PowerShell_profile.ps1   # 🎯 主入口 — 加载所有模块
-├── Config.ps1                       # ⚙️  路径、颜色、键盘布局
-├── Alias.ps1                        # 🔗 别名：ll, .., ~, reload, which
-├── Utils.ps1                        # 🧰 辅助函数：logo, 缓存, 导入
-├── Remote.ps1                       # 🖥️  Tmux 会话管理器（懒加载）
-└── quotes.txt                       # 💬 随机启动语录
+├── ShellPrompt.psd1                   # 📦 模块清单
+├── ShellPrompt.psm1                   # 📦 模块入口
+├── Config.ps1                         # ⚙️  路径、颜色、键盘布局
+├── Alias.ps1                          # 🔗 别名：ll, .., ~, reload, which
+├── Utils.ps1                          # 🧰 辅助函数：logo, 终端初始化
+├── Private/
+│   ├── Invoke-ConsoleMenu.ps1         # 🖼️  通用 UI 菜单组件
+│   ├── Get-TmuxSessions.ps1           # 🔌 SSH → tmux ls
+│   ├── Get-TmuxMenuItems.ps1           # 📋 菜单状态构建器
+│   └── Invoke-SessionSelector.ps1      # 🔀 会话选择子菜单
+├── Public/
+│   └── Start-TmuxSession.ps1           # 🚀 入口函数（导出）
+└── quotes.txt                         # 💬 随机启动语录
 ```
+
+### 模块架构
+
+`ShellPrompt.psm1` 先加载 Private 函数（内部使用），再加载 Public 函数。仅 `Start-TmuxSession` 通过 `Export-ModuleMember` 导出，其余函数均为私有实现细节。
 
 ---
 
@@ -102,13 +114,15 @@ PowerShell/
 # 步骤 A：查看 PowerShell 配置目录
 $PROFILE
 
-# 步骤 B：将所有文件复制到配置目录
-#         将 "D:\path\to\PowerShell" 替换为实际克隆路径
-Copy-Item -Path "D:\path\to\PowerShell\*" `
-           -Destination (Split-Path $PROFILE -Parent) `
-           -Force
+# 步骤 B：将仓库克隆到永久目录
+git clone https://github.com/arbaleast/PowerShell.git D:\path\to\PowerShell
 
-# 步骤 C：重启 PowerShell 或执行：
+# 步骤 C：在配置目录创建一个桩文件，加载真实配置
+# 将 "D:\path\to\PowerShell" 替换为实际克隆路径
+"`$PROFILE_DIR = 'D:\path\to\PowerShell'" | Out-File -Encoding UTF8 "`$PROFILE" -NoClobber
+"`. `$PROFILE_DIR\Microsoft.PowerShell_profile.ps1" | Add-Content "`$PROFILE"
+
+# 步骤 D：重启 PowerShell 或执行：
 reload
 ```
 
@@ -143,47 +157,7 @@ $global:UserScoop_APPS = "...\apps"     # 工具安装目录
 
 ## 🎨 配置说明
 
-### 目录路径
-
-```powershell
-$global:UserScoop_ROOT                  # 根目录（quotes.txt 在此）
-$global:UserScoop_APPS                 # 工具目录（Starship、Fnm 等）
-```
-
-### 颜色方案
-
-```powershell
-$global:UserScoop_CONF.Colors.Cyan  # 主色调
-$global:UserScoop_CONF.Colors.Gray  # 次要文字
-$global:UserScoop_CONF.Colors.Rst   # 重置格式
-```
-
-### 键盘码
-
-```powershell
-$global:UserScoop_CONF.Keys.Up    # 38
-$global:UserScoop_CONF.Keys.Down  # 40
-$global:UserScoop_CONF.Keys.Enter # 13
-$global:UserScoop_CONF.Keys.Esc   # 27
-```
-
-### 随机语录
-
-语录从脚本目录的 `quotes.txt` 文件加载，每条语录用 `%` 分隔：
-
-```text
-💬 代码是写给人看的，顺便给机器运行。
-%
-🔥 Talk is cheap, show me the code.
-%
-⚡ Stay hungry, stay foolish.
-%
-✨ 简洁是智慧的灵魂。
-```
-
-每次启动 PowerShell 时会随机显示一条语录。✨
-
----
+编辑 `Config.ps1` 自定义设置：
 
 ## 📜 开源协议
 

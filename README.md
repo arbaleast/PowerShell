@@ -75,12 +75,24 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 PowerShell/
 │
 ├── Microsoft.PowerShell_profile.ps1   # 🎯 Main entry — loads everything
-├── Config.ps1                       # ⚙️  Paths, colors, keyboard layout
-├── Alias.ps1                        # 🔗 Aliases: ll, .., ~, reload, which
-├── Utils.ps1                        # 🧰 Helpers: logo, cache, imports
-├── Remote.ps1                       # 🖥️  Tmux session manager (lazy)
-└── quotes.txt                       # 💬 Random startup quotes
+├── ShellPrompt.psd1                   # 📦 Module manifest
+├── ShellPrompt.psm1                   # 📦 Module entry point
+├── Config.ps1                         # ⚙️  Paths, colors, keyboard layout
+├── Alias.ps1                          # 🔗 Aliases: ll, .., ~, reload, which
+├── Utils.ps1                          # 🧰 Helpers: logo, terminal init
+├── Private/
+│   ├── Invoke-ConsoleMenu.ps1         # 🖼️  Generic UI menu component
+│   ├── Get-TmuxSessions.ps1           # 🔌 SSH → tmux ls
+│   ├── Get-TmuxMenuItems.ps1           # 📋 Menu state builder
+│   └── Invoke-SessionSelector.ps1      # 🔀 Session picker submenu
+├── Public/
+│   └── Start-TmuxSession.ps1           # 🚀 Entry point (exported)
+└── quotes.txt                         # 💬 Random startup quotes
 ```
+
+### Module Architecture
+
+`ShellPrompt.psm1` loads Private functions first (internal use), then Public functions. Only `Start-TmuxSession` is exported via `Export-ModuleMember`. All other functions are private implementation details.
 
 ---
 
@@ -102,13 +114,15 @@ Ensure the following tools are installed on your system:
 # Step A: Find your PowerShell profile directory
 $PROFILE
 
-# Step B: Copy all files to your profile directory
-#         Replace "D:\path\to\PowerShell" with your actual clone path
-Copy-Item -Path "D:\path\to\PowerShell\*" `
-           -Destination (Split-Path $PROFILE -Parent) `
-           -Force
+# Step B: Clone this repo to a permanent location
+git clone https://github.com/arbaleast/PowerShell.git D:\path\to\PowerShell
 
-# Step C: Restart PowerShell or run:
+# Step C: Create a stub in your profile directory that loads the real config
+# Replace "D:\path\to\PowerShell" with your actual clone path
+"`$PROFILE_DIR = 'D:\path\to\PowerShell'" | Out-File -Encoding UTF8 "`$PROFILE" -NoClobber
+"`. `$PROFILE_DIR\Microsoft.PowerShell_profile.ps1" | Add-Content "`$PROFILE"
+
+# Step D: Restart PowerShell or run:
 reload
 ```
 
@@ -143,47 +157,7 @@ For color schemes and keyboard codes, see the [Configuration](#-configuration) s
 
 ## 🎨 Configuration
 
-### Directory Paths
-
-```powershell
-$global:UserScoop_ROOT                  # Root directory (quotes.txt lives here)
-$global:UserScoop_APPS                 # Tool directory (Starship, Fnm, etc.)
-```
-
-### Colors
-
-```powershell
-$global:UserScoop_CONF.Colors.Cyan  # Primary accent
-$global:UserScoop_CONF.Colors.Gray  # Secondary text
-$global:UserScoop_CONF.Colors.Rst   # Reset formatting
-```
-
-### Keyboard Codes
-
-```powershell
-$global:UserScoop_CONF.Keys.Up    # 38
-$global:UserScoop_CONF.Keys.Down  # 40
-$global:UserScoop_CONF.Keys.Enter # 13
-$global:UserScoop_CONF.Keys.Esc   # 27
-```
-
-### Random Quotes
-
-Quotes are loaded from `quotes.txt` in the script directory. Separate each quote with `%`:
-
-```text
-💬 代码是写给人看的，顺便给机器运行。
-%
-🔥 Talk is cheap, show me the code.
-%
-⚡ Stay hungry, stay foolish.
-%
-✨ 简洁是智慧的灵魂。
-```
-
-A random quote displays every time you start a new PowerShell session. ✨
-
----
+Edit `Config.ps1` to customize:
 
 ## 📜 License
 
