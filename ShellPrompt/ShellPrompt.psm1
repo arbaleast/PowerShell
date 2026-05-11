@@ -1,24 +1,29 @@
 # ============================================================
-# ShellPrompt.psm1 — 模块入口
+# ShellPrompt.psm1 — 模块入口（修复版）
 # ============================================================
 
-# 1. 首先加载配置（其他所有文件依赖它）
-. "$PSScriptRoot\Private\Initialize-Config.ps1"
-
-# 2. 加载所有私有函数
-Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" | Where-Object { $_.Name -ne 'Initialize-Config.ps1' } | ForEach-Object {
-    . $_.FullName
+# 1. 加载配置
+$configPath = Join-Path $PSScriptRoot "Private\Initialize-Config.ps1"
+if (Test-Path $configPath)
+{ . $configPath 
 }
+
+# 2. 加载所有私有函数 (排除配置文件)
+Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" |
+    Where-Object { $_.Name -ne 'Initialize-Config.ps1' } |
+    ForEach-Object { . $_.FullName }
 
 # 3. 加载所有公有函数
-Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" | ForEach-Object {
-    . $_.FullName
-}
+Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" |
+    ForEach-Object { . $_.FullName }
 
-# 4. 加载别名（在函数加载完成后执行）
-Set-Alias ll Get-ChildItem -ErrorAction SilentlyContinue
-Set-Alias which where.exe -ErrorAction SilentlyContinue
+# 4. 定义别名 (确保在函数加载之后)
+# 注意：reload 必须指向 Public 目录下的函数名 Invoke-Reload
+Set-Alias ll Get-ChildItem -Description "Quick list"
+Set-Alias which where.exe -Description "Find command path"
+Set-Alias reload Invoke-Reload -Description "Reload profile"
 
-# 5. 仅导出 Public 目录中的函数
+# 5. 导出成员
 $publicFunctions = (Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1").BaseName
-Export-ModuleMember -Function $publicFunctions
+# 关键：必须同时指定 -Function 和 -Alias 才能全部导出
+Export-ModuleMember -Function $publicFunctions -Alias *

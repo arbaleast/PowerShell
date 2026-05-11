@@ -1,16 +1,23 @@
 $ProfileTimer = [System.Diagnostics.Stopwatch]::StartNew()
 
-Import-Module "$PSScriptRoot\ShellPrompt\ShellPrompt.psd1" -ErrorAction SilentlyContinue
+$ActualRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ModulePath = Join-Path $ActualRoot "ShellPrompt\ShellPrompt.psd1"
 
-if (Get-Command Show-UserScoopLogo -ErrorAction SilentlyContinue)
+if (Test-Path $ModulePath)
 {
-    try
-    { Show-UserScoopLogo 
-    } catch
-    { 
-    }
+    Import-Module $ModulePath -ErrorAction Stop
+} else
+{
+    Write-Warning "Module not found: $ModulePath"
 }
 
+# 初始化终端环境（Starship / Fnm / PSReadLine）
+Initialize-Environment
+
+# 显示欢迎语
+Show-UserScoopLogo
+
+# 快捷入口
 function sss
 { Start-TmuxSession @args 
 }
