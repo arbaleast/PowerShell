@@ -3,7 +3,7 @@
 # 定义全局配置（仅在此处修改默认值）
 # ============================================================
 
-$global:UserScoop_ROOT = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Definition)
+$global:UserScoop_ROOT = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 
 $global:UserScoop_CONF = @{
     Quotes   = "$global:UserScoop_ROOT\quotes.txt"
