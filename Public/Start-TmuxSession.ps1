@@ -30,9 +30,12 @@ function Start-TmuxSession
         $selection = Invoke-ConsoleMenu `
             -Title "REMOTE TMUX | $HostName" `
             -Options $ctx.Options `
+            -ColorCyan $global:UserScoop_CONF.Colors.Cyan `
+            -ColorGray $global:UserScoop_CONF.Colors.Gray `
+            -Keys $global:UserScoop_CONF.Keys `
             -ExitLabel "EXIT"
 
-        if ($null -eq $selection)
+        if ($selection -eq "MENU_BACK")
         {
             return
         }

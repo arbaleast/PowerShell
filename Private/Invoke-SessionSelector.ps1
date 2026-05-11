@@ -9,7 +9,7 @@ function Invoke-SessionSelector
         [string]$HostName,
 
         [Parameter(Mandatory = $false)]
-        [int]$ConnectTimeout = 5
+        [int]$ConnectTimeout = $global:UserScoop_CONF.SSH.ConnectTimeout
     )
 
     $subOptions = $Sessions | ForEach-Object { "$($_.Name) ($($_.Status))" }
@@ -19,7 +19,7 @@ function Invoke-SessionSelector
         -Options $subOptions `
         -ExitLabel "返回主菜单"
 
-    if ($null -eq $choice)
+    if ($choice -eq "MENU_BACK")
     {
         return $null
     }

@@ -12,8 +12,8 @@ function reload
 {
     if (Test-Path $PROFILE)
     {
-        # 移除已加载的函数，打破懒加载缓存
-        Remove-Item Function:\Start-TmuxSession -ErrorAction SilentlyContinue
+        # 卸载整个模块，打破模块缓存
+        Remove-Module ShellPrompt -Force -ErrorAction SilentlyContinue
 
         . $PROFILE
         Write-Host " [OK] PowerShell Profile Reloaded" -ForegroundColor Green

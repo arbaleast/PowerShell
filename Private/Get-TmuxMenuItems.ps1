@@ -6,13 +6,14 @@ function Get-TmuxMenuItems
         [string]$HostName,
 
         [Parameter(Mandatory = $false)]
-        [int]$ConnectTimeout = 5
+        [int]$ConnectTimeout = $global:UserScoop_CONF.SSH.ConnectTimeout,
+
+        [Parameter(Mandatory = $false)]
+        [string]$DefaultSessionName = $global:UserScoop_CONF.Tmux.DefaultSessionName
     )
 
-    $defaultSession = "main"
-
     $menuOptions = @(
-        "RESUME  — attach to '$defaultSession'",
+        "RESUME  — attach to '$DefaultSessionName'",
         "ATTACH  — existing session only",
         "NEW     — create new session",
         "LIST    — view all sessions",
@@ -20,13 +21,13 @@ function Get-TmuxMenuItems
     )
 
     $mapping = @{
-        "RESUME  — attach to '$defaultSession'" = @{
+        "RESUME  — attach to '$DefaultSessionName'" = @{
             Type    = "ssh"
-            Command = "tmux attach -t $defaultSession || tmux new -s $defaultSession"
+            Command = "tmux attach -t $DefaultSessionName || tmux new -s $DefaultSessionName"
         }
         "ATTACH  — existing session only" = @{
             Type    = "ssh"
-            Command = "tmux attach -t $defaultSession"
+            Command = "tmux attach -t $DefaultSessionName"
         }
         "NEW     — create new session" = @{
             Type    = "interactive"
@@ -45,7 +46,7 @@ function Get-TmuxMenuItems
     return @{
         Options        = $menuOptions
         Mapping        = $mapping
-        DefaultSession = $defaultSession
+        DefaultSession = $DefaultSessionName
         ConnectTimeout = $ConnectTimeout
         HostName       = $HostName
     }
@@ -59,12 +60,14 @@ function Invoke-TmuxAction
         [string]$Action,
 
         [Parameter(Mandatory = $true)]
-        [hashtable]$Context
+        [hashtable]$Context,
+
+        [Parameter(Mandatory = $false)]
+        [int]$ConnectTimeout = $global:UserScoop_CONF.SSH.ConnectTimeout
     )
 
     $mapping = $Context.Mapping
     $hostName = $Context.HostName
-    $timeout  = $Context.ConnectTimeout
 
     if (-not $mapping.ContainsKey($Action))
     {
@@ -80,7 +83,7 @@ function Invoke-TmuxAction
             return @{
                 Type    = "ssh"
                 Command = $entry.Command
-                Args    = @("-o", "ConnectTimeout=$timeout", "-tt", $hostName)
+                Args    = @("-o", "ConnectTimeout=$ConnectTimeout", "-tt", $hostName)
             }
         }
         "interactive"
@@ -102,12 +105,12 @@ function Invoke-TmuxAction
                     return @{
                         Type    = "ssh"
                         Command = "tmux new -d -s '$name' && tmux attach -t '$name'"
-                        Args    = @("-o", "ConnectTimeout=$timeout", "-tt", $hostName)
+                        Args    = @("-o", "ConnectTimeout=$ConnectTimeout", "-tt", $hostName)
                     }
                 }
                 "list"
                 {
-                    $data = Get-TmuxSessions -HostName $hostName -ConnectTimeout $timeout
+                    $data = Get-TmuxSessions -HostName $hostName -ConnectTimeout $ConnectTimeout
                     if ($data.Sessions.Count -eq 0)
                     {
                         Write-Host " [!] 无活跃会话" -ForegroundColor Yellow
@@ -118,7 +121,7 @@ function Invoke-TmuxAction
                         Type     = "submenu"
                         Sessions = $data.Sessions
                         HostName = $hostName
-                        Timeout  = $timeout
+                        Timeout  = $ConnectTimeout
                     }
                 }
             }
