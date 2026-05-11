@@ -64,11 +64,17 @@ function Invoke-ConsoleMenu
 
         # --- 退出项 ---
         $exitFg = if ($idx -eq $count)
-        { $ColorCyan
+        { $ColorCyan 
         } else
-        { "White"
+        { "" 
         }
-        Write-Host "  [q]  $ExitLabel" -ForegroundColor $exitFg
+        if ($exitFg)
+        {
+            Write-Host "  [q]  ${exitFg}$ExitLabel${ColorGray}"
+        } else
+        {
+            Write-Host "  [q]  $ExitLabel"
+        }
 
         # --- 动态描述区 ---
         Write-Host ""
