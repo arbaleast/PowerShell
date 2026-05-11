@@ -1,25 +1,21 @@
 $ProfileTimer = [System.Diagnostics.Stopwatch]::StartNew()
 
 $ActualRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ModulePath = Join-Path $ActualRoot "ShellPrompt\ShellPrompt.psd1"
 
-if (Test-Path $ModulePath)
-{
-    Import-Module $ModulePath -ErrorAction Stop
-} else
-{
-    Write-Warning "Module not found: $ModulePath"
-}
-
-# 初始化终端环境（Starship / Fnm / PSReadLine）
-Initialize-Environment
-
-# 显示欢迎语
+# 快速路径：仅加载配置和欢迎语（不导入完整模块）
+. "$ActualRoot\ShellPrompt\Private\Initialize-Config.ps1"
+. "$ActualRoot\ShellPrompt\Public\Initialize-Environment.ps1"
 Show-UserScoopLogo
 
-# 快捷入口
+# 懒加载：sss 首次调用时才导入完整模块
 function sss
-{ Start-TmuxSession @args 
+{
+    if (-not (Get-Module ShellPrompt))
+    {
+        $ModulePath = Join-Path $ActualRoot "ShellPrompt\ShellPrompt.psd1"
+        Import-Module $ModulePath -ErrorAction SilentlyContinue
+    }
+    Start-TmuxSession @args
 }
 
 $ProfileTimer.Stop()
