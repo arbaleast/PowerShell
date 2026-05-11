@@ -1,3 +1,7 @@
+# ============================================================
+# Get-TmuxSessions.ps1 — 通过 SSH 获取远程 tmux 会话列表
+# ============================================================
+
 $Global:LastSshHost = ""
 
 function Get-TmuxSessions
@@ -8,7 +12,7 @@ function Get-TmuxSessions
         [string]$HostName,
 
         [Parameter(Mandatory = $false)]
-        [int]$ConnectTimeout = 5
+        [int]$ConnectTimeout = $global:UserScoop_CONF.SSH.ConnectTimeout
     )
 
     $output = ssh -o "ConnectTimeout=$ConnectTimeout" $HostName "tmux ls" 2>$null | Out-String
@@ -39,7 +43,7 @@ function Test-TmuxAvailable
         [string]$HostName,
 
         [Parameter(Mandatory = $false)]
-        [int]$ConnectTimeout = 5
+        [int]$ConnectTimeout = $global:UserScoop_CONF.SSH.ConnectTimeout
     )
 
     $result = ssh -o "ConnectTimeout=$ConnectTimeout" $HostName "command -v tmux" 2>$null

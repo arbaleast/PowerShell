@@ -1,3 +1,7 @@
+# ============================================================
+# Invoke-SessionSelector.ps1 — 会话选择子菜单
+# ============================================================
+
 function Invoke-SessionSelector
 {
     [CmdletBinding()]
@@ -19,7 +23,7 @@ function Invoke-SessionSelector
         -Options $subOptions `
         -ExitLabel "返回主菜单"
 
-    if ($choice -eq "MENU_BACK")
+    if ($null -eq $choice)
     {
         return $null
     }

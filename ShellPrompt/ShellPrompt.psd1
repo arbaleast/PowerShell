@@ -6,7 +6,10 @@
     Description       = 'PowerShell prompt and remote session management module'
 
     FunctionsToExport = @(
-        'Start-TmuxSession'
+        'Initialize-Environment',
+        'Show-UserScoopLogo',
+        'Start-TmuxSession',
+        'reload'
     )
 
     CmdletsToExport   = @()
