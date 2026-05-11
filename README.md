@@ -24,26 +24,24 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 
     💬 代码是写给人看的，顺便给机器运行。
 
-  ----------------------------------------------
-  
-  ~/Projects/PowerShell on main偏
-  ❯ _
+  ──────────────────────────────────────────────
 ```
 
 **Tmux Manager (`sss <host>`):**
 
 ```
-┌─────────────────────────────────────────┐
-│         REMOTE TMUX SESSION             │
-├─────────────────────────────────────────┤
-│  ▶  RESUME  — attach to 'main'         │
-│     ATTACH  — existing session only     │
-│     NEW     — create new session        │
-│     LIST   — view all sessions          │
-│     KILL   — terminate all tmux         │
-│  ▶  [q] EXIT  — back to local              │
-└─────────────────────────────────────────┘
-        ↑↓ move  ·  Enter select  ·  q quit
+  REMOTE TMUX | myhost
+  ──────────────────────────────────────────────────
+     RESUME
+     ATTACH
+     NEW
+     LIST
+     KILL
+  [q]  EXIT
+  ──────────────────────────────────────────────────
+    attach to 'main', create if missing
+
+  ↑↓ navigate  ·  Enter confirm  ·  q quit
 ```
 
 ---
@@ -65,7 +63,7 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 
 ### 📁 Everyday QoL
 - **Quick Aliases** — `ll`, `..`, `~`, `which` for faster navigation
-- **Modular Structure** — Easy to customize, easy to maintain
+- **Modular Structure** — Self-contained `ShellPrompt/` module, single entry point
 
 ---
 
@@ -86,7 +84,7 @@ PowerShell/
     │   ├── Get-TmuxSessions.ps1         # 🔌 SSH → tmux ls parser
     │   └── Invoke-SessionSelector.ps1   # 🔀 Session picker submenu
     └── Public/
-        ├── Initialize-Environment.ps1  # 🛠️  Starship / Fnm / PSReadLine init
+        ├── Initialize-Environment.ps1  # 🛠️  Starship / Fnm / PSReadLine + logo
         ├── Show-UserScoopLogo.ps1       # 🎨 Startup logo and quotes
         ├── Invoke-Reload.ps1            # 🔄 reload command
         ├── Set-ProfileAliases.ps1        # 🔗 ll, .., ~, which
@@ -97,9 +95,9 @@ PowerShell/
 
 `ShellPrompt.psm1` loads files in strict order:
 
-1. **Private/Initialize-Config.ps1** — sets up `$global:UserScoop_CONF` (colors, keys, SSH/Tmux options)
-2. **Private/** — internal helpers (Invoke-ConsoleMenu, Get-TmuxSessions, etc.)
-3. **Public/** — user-facing commands (Initialize-Environment, Start-TmuxSession, reload, etc.)
+1. **Private/Initialize-Config.ps1** — sets up `$global:UserScoop_CONF` (colors, keys, SSH/Tmux options, quotes path)
+2. **Private/** — internal helpers (Invoke-ConsoleMenu, Get-TmuxSessions, Invoke-SessionSelector)
+3. **Public/** — user-facing commands (Initialize-Environment, Show-UserScoopLogo, Start-TmuxSession, reload)
 4. **Export-ModuleMember** — only Public/*.ps1 functions are exported; Private is invisible to consumers
 
 This enforces the MVC boundary: UI logic (`Invoke-ConsoleMenu`) knows nothing about tmux or SSH.

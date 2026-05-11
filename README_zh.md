@@ -24,26 +24,24 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 
     💬 代码是写给人看的，顺便给机器运行。
 
-  ----------------------------------------------
-  
-  ~/Projects/PowerShell on main偏
-  ❯ _
+  ──────────────────────────────────────────────
 ```
 
 **Tmux 管理器 (`sss <host>`):**
 
 ```
-┌─────────────────────────────────────────┐
-│         REMOTE TMUX SESSION             │
-├─────────────────────────────────────────┤
-│  ▶  RESUME  — 附加到 'main'             │
-│     ATTACH  — 仅附加到现有会话          │
-│     NEW     — 创建新会话                │
-│     LIST   — 查看所有会话              │
-│     KILL   — 终止所有 tmux            │
-│  ▶  [q] EXIT  — 返回本地终端             │
-└─────────────────────────────────────────┘
-        ↑↓ 移动  ·  Enter 确认  ·  q 退出
+  REMOTE TMUX | myhost
+  ──────────────────────────────────────────────────
+     RESUME
+     ATTACH
+     NEW
+     LIST
+     KILL
+  [q]  EXIT
+  ──────────────────────────────────────────────────
+    attach to 'main', create if missing
+
+  ↑↓ navigate  ·  Enter confirm  ·  q quit
 ```
 
 ---
@@ -65,7 +63,7 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 
 ### 📁 日常优化
 - **快捷别名** — `ll`、`..`、`~`、`which` 加速导航
-- **模块化结构** — 易于定制，易于维护
+- **模块化结构** — 自包含 `ShellPrompt/` 模块，单一入口，易于维护
 
 ---
 
@@ -86,7 +84,7 @@ PowerShell/
     │   ├── Get-TmuxSessions.ps1         # 🔌 SSH → tmux ls 解析器
     │   └── Invoke-SessionSelector.ps1   # 🔀 会话选择子菜单
     └── Public/
-        ├── Initialize-Environment.ps1  # 🛠️  Starship / Fnm / PSReadLine 初始化
+        ├── Initialize-Environment.ps1  # 🛠️  Starship / Fnm / PSReadLine + logo
         ├── Show-UserScoopLogo.ps1       # 🎨 启动语录渲染
         ├── Invoke-Reload.ps1            # 🔄 reload 命令
         ├── Set-ProfileAliases.ps1        # 🔗 ll, .., ~, which
@@ -97,9 +95,9 @@ PowerShell/
 
 `ShellPrompt.psm1` 按严格顺序加载：
 
-1. **Private/Initialize-Config.ps1** — 初始化 `$global:UserScoop_CONF`（颜色、按键、SSH/Tmux 配置）
-2. **Private/** — 内部辅助函数（Invoke-ConsoleMenu、Get-TmuxSessions 等）
-3. **Public/** — 用户可见命令（Initialize-Environment、Start-TmuxSession、reload 等）
+1. **Private/Initialize-Config.ps1** — 初始化 `$global:UserScoop_CONF`（颜色、按键、SSH/Tmux 配置、语录路径）
+2. **Private/** — 内部辅助函数（Invoke-ConsoleMenu、Get-TmuxSessions、Invoke-SessionSelector）
+3. **Public/** — 用户可见命令（Initialize-Environment、Show-UserScoopLogo、Start-TmuxSession、reload）
 4. **Export-ModuleMember** — 仅导出 Public/*.ps1 中的函数；Private 对外部不可见
 
 这确保了 MVC 边界：UI 逻辑（`Invoke-ConsoleMenu`）对 tmux 和 SSH 一无所知。
