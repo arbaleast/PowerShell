@@ -53,24 +53,20 @@ function Invoke-ConsoleMenu
         # --- 选项列表 ---
         for ($i = 0; $i -lt $count; $i++)
         {
-            $fg = if ($i -eq $idx)
-            { $ColorCyan 
+            if ($i -eq $idx)
+            {
+                Write-Host "  [>]  ${ColorCyan}$($items[$i].Label)${ColorGray}"
             } else
-            { "White" 
+            {
+                Write-Host ("   {0}" -f $items[$i].Label)
             }
-            $marker = if ($i -eq $idx)
-            { "[>]" 
-            } else
-            { "   " 
-            }
-            Write-Host "  $marker  $($items[$i].Label)" -ForegroundColor $fg
         }
 
         # --- 退出项 ---
         $exitFg = if ($idx -eq $count)
-        { $ColorCyan 
+        { $ColorCyan
         } else
-        { "White" 
+        { "White"
         }
         Write-Host "  [q]  $ExitLabel" -ForegroundColor $exitFg
 
@@ -111,7 +107,7 @@ function Invoke-ConsoleMenu
         if ($vK -eq $Keys.Enter)
         {
             if ($idx -eq $count)
-            { return $null 
+            { return $null
             }
             return $items[$idx]
         }
