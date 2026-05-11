@@ -6,7 +6,10 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 |_|   |____/|_|   |_| \_\\___/|_|   |___|_____|_____|
 ```
 
-### ⌨️ A modular PowerShell profile with tmux, Starship & cross-platform tool support
+### ⌨️ SSH + tmux Session Manager for PowerShell
+
+> An interactive menu to manage remote tmux sessions via SSH. `sss <host>` to attach, create, or switch sessions.
+> Powered by Starship prompt, Fnm node switching, and PSReadLine for a smoother terminal.
 
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue.svg)](https://github.com/PowerShell/PowerShell)

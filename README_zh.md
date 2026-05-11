@@ -6,7 +6,10 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 |_|   |____/|_|   |_| \_\\___/|_|   |___|_____|_____|
 ```
 
-### ⌨️ 模块化 PowerShell 配置，支持 tmux 会话管理、Starship 提示符和跨平台工具
+### ⌨️ SSH + tmux 会话管理器 (PowerShell)
+
+> 通过交互式菜单管理远程 tmux 会话。`sss <host>` 即可附加、创建或切换会话。
+> 配合 Starship 提示符、Fnm Node 版本切换、PSReadLine 让终端更好用。
 
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue.svg)](https://github.com/PowerShell/PowerShell)
