@@ -1,5 +1,3 @@
-[console]::InputEncoding = [console]::OutputEncoding = New-Object System.Text.UTF8Encoding
-$OutputEncoding = [console]::InputEncoding
 $ProfileTimer = [System.Diagnostics.Stopwatch]::StartNew()
 $UserScoop_ROOT = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
@@ -21,9 +19,9 @@ function sss
 if (Get-Command Show-UserScoopLogo -ErrorAction SilentlyContinue)
 {
     try
-    { Show-UserScoopLogo 
+    { Show-UserScoopLogo
     } catch
-    { 
+    {
     }
 }
 

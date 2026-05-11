@@ -36,12 +36,12 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 ┌─────────────────────────────────────────┐
 │         REMOTE TMUX SESSION             │
 ├─────────────────────────────────────────┤
-│  ▶  RESUME  — attach to 'main'          │
-│     ATTACH  — existing session only      │
-│     NEW     — create new session         │
-│     LIST    — view all sessions          │
-│     KILL    — terminate all tmux         │
-│     EXIT    — back to local              │
+│  ▶  RESUME  — attach to 'main'         │
+│     ATTACH  — existing session only     │
+│     NEW     — create new session        │
+│     LIST   — view all sessions          │
+│     KILL   — terminate all tmux         │
+│  ▶  [q] EXIT  — back to local              │
 └─────────────────────────────────────────┘
         ↑↓ move  ·  Enter select  ·  q quit
 ```

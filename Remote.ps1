@@ -12,7 +12,7 @@ function Get-TmuxSessions
             $name = ($line -split ':')[0].Trim()
             $status = "后台中"
             if ($line -match "attached")
-            { $status = "已挂载" 
+            { $status = "已挂载"
             }
             $sessionList += @{ Name = $name; Status = $status }
         }
@@ -42,11 +42,11 @@ function Show-TmuxSelector
         {
             $color = "White"; $marker = "    "
             if ($i -eq $idx)
-            { $color = "Cyan"; $marker = "[>] " 
+            { $color = "Cyan"; $marker = "[>] "
             }
             $prefix = "[$i]"
             if ($i -eq 0)
-            { $prefix = "[Q]" 
+            { $prefix = "[Q]"
             }
             Write-Host "$marker $prefix $($subOptions[$i].Name) $($subOptions[$i].Status)" -ForegroundColor $color
         }
@@ -54,20 +54,20 @@ function Show-TmuxSelector
         $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
         $vK = $key.VirtualKeyCode
         if ($vK -eq $global:UserScoop_CONF.Keys.Up)
-        { $idx = ($idx - 1 + $subOptions.Count) % $subOptions.Count; continue 
+        { $idx = ($idx - 1 + $subOptions.Count) % $subOptions.Count; continue
         }
         if ($vK -eq $global:UserScoop_CONF.Keys.Down)
-        { $idx = ($idx + 1) % $subOptions.Count; continue 
+        { $idx = ($idx + 1) % $subOptions.Count; continue
         }
         if ($vK -eq $global:UserScoop_CONF.Keys.Enter)
         {
             if ($idx -eq 0)
-            { return "MENU_BACK" 
+            { return "MENU_BACK"
             }
             return "tmux attach -t '$($Sessions[$idx - 1].Name)'"
         }
-        if ($key.Character -eq 'q')
-        { return "MENU_BACK" 
+        if ($key.Character -eq 'q' -or $key.Character -eq 'Q')
+        { return "MENU_BACK"
         }
     }
 }
@@ -79,10 +79,10 @@ function Invoke-TmuxAction
     switch ($Key)
     {
         '1'
-        { return "tmux attach -t $defaultSession || tmux new -s $defaultSession" 
+        { return "tmux attach -t $defaultSession || tmux new -s $defaultSession"
         }
         '2'
-        { return "tmux attach -t $defaultSession" 
+        { return "tmux attach -t $defaultSession"
         }
         '3'
         {
@@ -112,10 +112,10 @@ function Invoke-TmuxAction
             return Show-TmuxSelector -HostName $HostName -Sessions $data.Sessions
         }
         '5'
-        { return "tmux kill-server" 
+        { return "tmux kill-server"
         }
         'q'
-        { return "INTERNAL_QUIT" 
+        { return "INTERNAL_QUIT"
         }
     }
     return $null
@@ -125,10 +125,10 @@ function Start-TmuxSession
 {
     param([Parameter(Position=0)][string]$hostName)
     if (-not $hostName)
-    { $hostName = $Global:LastSshHost 
+    { $hostName = $Global:LastSshHost
     }
     if (-not $hostName)
-    { Write-Host " [!] 缺少主机名" -ForegroundColor Red; return 
+    { Write-Host " [!] 缺少主机名" -ForegroundColor Red; return
     }
 
     $Global:LastSshHost = $hostName
@@ -147,7 +147,7 @@ function Start-TmuxSession
     {
         Clear-Host
         if (Get-Command Show-UserScoopLogo -ErrorAction SilentlyContinue)
-        { Show-UserScoopLogo 
+        { Show-UserScoopLogo
         }
         Write-Host "$($global:UserScoop_CONF.Colors.Cyan)REMOTE TMUX | $hostName $($global:UserScoop_CONF.Colors.Rst)"
         Write-Host "$($global:UserScoop_CONF.Colors.Gray)$("-" * 50)$($global:UserScoop_CONF.Colors.Rst)"
@@ -156,9 +156,16 @@ function Start-TmuxSession
         {
             $color = "White"; $marker = "    "
             if ($i -eq $idx)
-            { $color = "Cyan"; $marker = "[>] " 
+            { $color = "Cyan"; $marker = "[>] "
             }
-            Write-Host "$marker[$($i+1)] $($menu[$i].Name)" -ForegroundColor $color
+
+            # 这里已经做好了 [q] 的替换逻辑
+            $prefix = if ($i -eq $menu.Count - 1)
+            { "[q]"
+            } else
+            { "[$($i+1)]"
+            }
+            Write-Host "$marker$prefix $($menu[$i].Name)" -ForegroundColor $color
         }
 
         Write-Host ""
@@ -166,44 +173,49 @@ function Start-TmuxSession
         Write-Host "$($global:UserScoop_CONF.Colors.Gray)$("-" * 50)$($global:UserScoop_CONF.Colors.Rst)"
 
         if ($Host.UI.RawUI.KeyAvailable)
-        { $Host.UI.RawUI.FlushInputBuffer() 
+        { $Host.UI.RawUI.FlushInputBuffer()
         }
 
         $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
         $vK = $key.VirtualKeyCode; $char = $key.Character.ToString().ToLower()
 
         if ($vK -eq $global:UserScoop_CONF.Keys.Up)
-        { $idx = ($idx - 1 + $menu.Count) % $menu.Count; continue 
+        { $idx = ($idx - 1 + $menu.Count) % $menu.Count; continue
         }
         if ($vK -eq $global:UserScoop_CONF.Keys.Down)
-        { $idx = ($idx + 1) % $menu.Count; continue 
+        { $idx = ($idx + 1) % $menu.Count; continue
         }
 
         $finalKey = $null
         if ($vK -eq $global:UserScoop_CONF.Keys.Enter)
-        { $finalKey = ($idx + 1).ToString() 
-        } elseif ($char -match "^[1-$($menu.Count)]$")
-        { $finalKey = $char 
+        {
+            $finalKey = ($idx + 1).ToString()
+        }
+        # 修正：把 $menu.Count 改为 $menu.Count - 1，不再允许按 6 来触发逻辑
+        elseif ($char -match "^[1-$($menu.Count - 1)]$")
+        {
+            $finalKey = $char
         } elseif ($char -eq 'q' -or $vK -eq $global:UserScoop_CONF.Keys.Esc)
-        { return 
+        {
+            return
         }
 
+        # 通过回车选中最后一项时，正常退出
         if ($finalKey -eq "$($menu.Count)")
-        { return 
+        { return
         }
         if ($null -ne $finalKey)
         {
             $cmd = Invoke-TmuxAction -Key $finalKey -HostName $hostName
             if ($cmd -eq "INTERNAL_QUIT")
-            { return 
+            { return
             }
             if ($cmd -eq "MENU_BACK" -or $null -eq $cmd)
-            { continue 
+            { continue
             }
 
             Write-Host "`n[SSH] 连接中..`n" -ForegroundColor DarkCyan
 
-            # 构建 SSH 参数
             $sshArgs = @(
                 "-o", "ConnectTimeout=$($global:UserScoop_CONF.SSH.ConnectTimeout)"
             )
@@ -217,7 +229,7 @@ function Start-TmuxSession
 
             Start-Sleep -Milliseconds 200
             if ($Host.UI.RawUI.KeyAvailable)
-            { $Host.UI.RawUI.FlushInputBuffer() 
+            { $Host.UI.RawUI.FlushInputBuffer()
             }
         }
     }
