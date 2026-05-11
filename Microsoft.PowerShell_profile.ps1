@@ -5,6 +5,8 @@ $UserScoop_ROOT = Split-Path -Parent $MyInvocation.MyCommand.Definition
 . (Join-Path $UserScoop_ROOT "Utils.ps1")
 . (Join-Path $UserScoop_ROOT "Alias.ps1")
 
+. (Join-Path $UserScoop_ROOT "ConsoleMenu.ps1")
+
 # 懒加载：仅在首次调用时加载 Remote.ps1
 if (-not (Get-Command Start-TmuxSession -ErrorAction SilentlyContinue))
 {

@@ -1,235 +1,316 @@
 ﻿$Global:LastSshHost = ""
 
+# ============================================================
+# Private: SSH 与 tmux 交互（纯业务逻辑，无 UI 依赖）
+# ============================================================
+
 function Get-TmuxSessions
 {
-    param([string]$HostName)
-    $output = ssh $HostName "tmux ls" 2>$null | Out-String
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$HostName,
+
+        [Parameter(Mandatory = $false)]
+        [int]$ConnectTimeout = 5
+    )
+
+    $output = ssh -o "ConnectTimeout=$ConnectTimeout" $HostName "tmux ls" 2>$null | Out-String
     $sessionList = @()
+
     foreach ($line in ($output -split "`n"))
     {
         if ($line -match '^[^:]+:')
         {
             $name = ($line -split ':')[0].Trim()
-            $status = "后台中"
-            if ($line -match "attached")
-            { $status = "已挂载"
+            $status = if ($line -match "attached")
+            { "已挂载" 
+            } else
+            { "后台中" 
             }
             $sessionList += @{ Name = $name; Status = $status }
         }
     }
+
     return @{ Sessions = $sessionList; RawOutput = $output }
 }
 
 function Test-TmuxAvailable
 {
-    param([string]$HostName)
-    $result = ssh -o "ConnectTimeout=$($global:UserScoop_CONF.SSH.ConnectTimeout)" $HostName "command -v tmux" 2>$null
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$HostName,
+
+        [Parameter(Mandatory = $false)]
+        [int]$ConnectTimeout = 5
+    )
+
+    $result = ssh -o "ConnectTimeout=$ConnectTimeout" $HostName "command -v tmux" 2>$null
     return $null -ne $result
 }
 
-function Show-TmuxSelector
+# ============================================================
+# Private: 业务逻辑选择器（解耦，不涉及 UI）
+# ============================================================
+
+function Get-TmuxMenuItems
 {
-    param([string]$HostName, [array]$Sessions)
-    $subOptions = @(@{ Name = "返回主菜单" }) + $Sessions
-    $idx = 0
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$HostName,
 
-    while ($true)
-    {
-        Clear-Host
-        Write-Host "$($global:UserScoop_CONF.Colors.Cyan)TMUX MANAGER | $HostName $($global:UserScoop_CONF.Colors.Rst)"
+        [Parameter(Mandatory = $false)]
+        [int]$ConnectTimeout = 5
+    )
 
-        for ($i = 0; $i -lt $subOptions.Count; $i++)
-        {
-            $color = "White"; $marker = "    "
-            if ($i -eq $idx)
-            { $color = "Cyan"; $marker = "[>] "
-            }
-            $prefix = "[$i]"
-            if ($i -eq 0)
-            { $prefix = "[Q]"
-            }
-            Write-Host "$marker $prefix $($subOptions[$i].Name) $($subOptions[$i].Status)" -ForegroundColor $color
-        }
+    $defaultSession = "main"
 
-        $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-        $vK = $key.VirtualKeyCode
-        if ($vK -eq $global:UserScoop_CONF.Keys.Up)
-        { $idx = ($idx - 1 + $subOptions.Count) % $subOptions.Count; continue
+    $menuOptions = @(
+        "RESUME  — attach to '$defaultSession'",
+        "ATTACH  — existing session only",
+        "NEW     — create new session",
+        "LIST    — view all sessions",
+        "KILL    — terminate all tmux"
+    )
+
+    $mapping = @{
+        "RESUME  — attach to '$defaultSession'" = @{
+            Type    = "ssh"
+            Command = "tmux attach -t $defaultSession || tmux new -s $defaultSession"
         }
-        if ($vK -eq $global:UserScoop_CONF.Keys.Down)
-        { $idx = ($idx + 1) % $subOptions.Count; continue
+        "ATTACH  — existing session only" = @{
+            Type    = "ssh"
+            Command = "tmux attach -t $defaultSession"
         }
-        if ($vK -eq $global:UserScoop_CONF.Keys.Enter)
-        {
-            if ($idx -eq 0)
-            { return "MENU_BACK"
-            }
-            return "tmux attach -t '$($Sessions[$idx - 1].Name)'"
+        "NEW     — create new session" = @{
+            Type    = "interactive"
+            Command = "new"
         }
-        if ($key.Character -eq 'q' -or $key.Character -eq 'Q')
-        { return "MENU_BACK"
+        "LIST    — view all sessions" = @{
+            Type    = "interactive"
+            Command = "list"
         }
+        "KILL    — terminate all tmux" = @{
+            Type    = "ssh"
+            Command = "tmux kill-server"
+        }
+    }
+
+    return @{
+        Options = $menuOptions
+        Mapping = $mapping
+        DefaultSession = $defaultSession
+        ConnectTimeout = $ConnectTimeout
+        HostName = $HostName
     }
 }
 
 function Invoke-TmuxAction
 {
-    param([string]$Key, [string]$HostName)
-    $defaultSession = $global:UserScoop_CONF.Tmux.DefaultSessionName
-    switch ($Key)
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Action,
+
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Context
+    )
+
+    $mapping = $Context.Mapping
+    $hostName = $Context.HostName
+    $timeout = $Context.ConnectTimeout
+    $defaultSession = $Context.DefaultSession
+
+    if (-not $mapping.ContainsKey($Action))
     {
-        '1'
-        { return "tmux attach -t $defaultSession || tmux new -s $defaultSession"
-        }
-        '2'
-        { return "tmux attach -t $defaultSession"
-        }
-        '3'
+        return $null
+    }
+
+    $entry = $mapping[$Action]
+
+    switch ($entry.Type)
+    {
+        "ssh"
         {
-            $n = Read-Host " > 新会话名称(留空随机生成)"
-            if ([string]::IsNullOrWhiteSpace($n))
+            return @{
+                Type    = "ssh"
+                Command = $entry.Command
+                Args    = @("-o", "ConnectTimeout=$timeout", "-tt", $hostName)
+            }
+        }
+        "interactive"
+        {
+            switch ($entry.Command)
             {
-                $n = "G7-$(Get-Random -Min 1000 -Max 9999)"
-            } else
-            {
-                if ($n -notmatch '^[a-zA-Z0-9_-]+$')
+                "new"
                 {
-                    Write-Host " [错误] 名称仅支持字母、数字和_- " -ForegroundColor Red
-                    Start-Sleep -s 1
-                    return $null
+                    $name = Read-Host " > 新会话名称（留空随机生成）"
+                    if ([string]::IsNullOrWhiteSpace($name))
+                    {
+                        $name = "G7-$(Get-Random -Min 1000 -Max 9999)"
+                    } elseif ($name -notmatch '^[a-zA-Z0-9_-]+$')
+                    {
+                        Write-Host " [错误] 名称仅支持字母、数字和 _-" -ForegroundColor Red
+                        Start-Sleep -Seconds 1
+                        return $null
+                    }
+                    return @{
+                        Type    = "ssh"
+                        Command = "tmux new -d -s '$name' && tmux attach -t '$name'"
+                        Args    = @("-o", "ConnectTimeout=$timeout", "-tt", $hostName)
+                    }
+                }
+                "list"
+                {
+                    $data = Get-TmuxSessions -HostName $hostName -ConnectTimeout $timeout
+                    if ($data.Sessions.Count -eq 0)
+                    {
+                        Write-Host " [!] 无活跃会话" -ForegroundColor Yellow
+                        Start-Sleep -Seconds 1
+                        return $null
+                    }
+                    # 进入子菜单（会话选择）
+                    return @{
+                        Type     = "submenu"
+                        Sessions = $data.Sessions
+                        HostName = $hostName
+                        Timeout  = $timeout
+                    }
                 }
             }
-            return "tmux new -d -s '$n' && tmux attach -t '$n'"
-        }
-        '4'
-        {
-            $data = Get-TmuxSessions -HostName $HostName
-            if ($data.Sessions.Count -eq 0)
-            {
-                Write-Host " [!] 无活跃会话" -ForegroundColor Yellow; Start-Sleep -s 1
-                return "MENU_BACK"
-            }
-            return Show-TmuxSelector -HostName $HostName -Sessions $data.Sessions
-        }
-        '5'
-        { return "tmux kill-server"
-        }
-        'q'
-        { return "INTERNAL_QUIT"
         }
     }
+
     return $null
 }
 
-function Start-TmuxSession
+function Invoke-SessionSelector
 {
-    param([Parameter(Position=0)][string]$hostName)
-    if (-not $hostName)
-    { $hostName = $Global:LastSshHost
-    }
-    if (-not $hostName)
-    { Write-Host " [!] 缺少主机名" -ForegroundColor Red; return
-    }
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [array]$Sessions,
 
-    $Global:LastSshHost = $hostName
-    $idx = 0
+        [Parameter(Mandatory = $true)]
+        [string]$HostName,
 
-    $menu = @(
-        @{ Name = "RESUME"; Desc = "接入 main 会话，若不存在则自动创建 (推荐)" }
-        @{ Name = "ATTACH"; Desc = "仅尝试接入 main 会话 (不创建新会话)" }
-        @{ Name = "NEW";    Desc = "创建新会话(输入名称，或直接回车生成随机名称)" }
-        @{ Name = "LIST";   Desc = "查询该主机所有活跃会话，并打开选择面板" }
-        @{ Name = "KILL";   Desc = "危险：终止该主机上运行的所有 tmux 进程" }
-        @{ Name = "EXIT";   Desc = "退出当前面板，返回本地终端" }
+        [Parameter(Mandatory = $false)]
+        [int]$ConnectTimeout = 5
     )
 
+    # 构建子菜单选项
+    $subOptions = $Sessions | ForEach-Object { "$($_.Name) ($($_.Status))" }
+
+    # 使用通用菜单组件
+    $choice = Invoke-ConsoleMenu `
+        -Title "TMUX MANAGER | $HostName" `
+        -Options $subOptions `
+        -ExitLabel "返回主菜单"
+
+    if ($null -eq $choice)
+    {
+        return $null  # 返回上一级
+    }
+
+    # 找到对应的会话名
+    $selectedSession = $Sessions | Where-Object { "$($_.Name) ($($_.Status))" -eq $choice } | Select-Object -First 1
+
+    return @{
+        Type    = "ssh"
+        Command = "tmux attach -t '$($selectedSession.Name)'"
+        Args    = @("-o", "ConnectTimeout=$ConnectTimeout", "-tt", $HostName)
+    }
+}
+
+# ============================================================
+# Public: 主入口
+# ============================================================
+
+function Start-TmuxSession
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Position = 0)]
+        [string]$HostName
+    )
+
+    # 参数补全
+    if (-not $HostName)
+    {
+        $HostName = $Global:LastSshHost
+    }
+    if (-not $HostName)
+    {
+        Write-Host " [!] 缺少主机名" -ForegroundColor Red
+        return
+    }
+
+    $Global:LastSshHost = $HostName
+
+    # 获取菜单数据（纯业务逻辑）
+    $ctx = Get-TmuxMenuItems -HostName $HostName
+
+    # 主循环
     while ($true)
     {
         Clear-Host
         if (Get-Command Show-UserScoopLogo -ErrorAction SilentlyContinue)
-        { Show-UserScoopLogo
-        }
-        Write-Host "$($global:UserScoop_CONF.Colors.Cyan)REMOTE TMUX | $hostName $($global:UserScoop_CONF.Colors.Rst)"
-        Write-Host "$($global:UserScoop_CONF.Colors.Gray)$("-" * 50)$($global:UserScoop_CONF.Colors.Rst)"
-
-        for ($i = 0; $i -lt $menu.Count; $i++)
         {
-            $color = "White"; $marker = "    "
-            if ($i -eq $idx)
-            { $color = "Cyan"; $marker = "[>] "
-            }
-
-            # 这里已经做好了 [q] 的替换逻辑
-            $prefix = if ($i -eq $menu.Count - 1)
-            { "[q]"
-            } else
-            { "[$($i+1)]"
-            }
-            Write-Host "$marker$prefix $($menu[$i].Name)" -ForegroundColor $color
+            Show-UserScoopLogo
         }
 
-        Write-Host ""
-        Write-Host "    $($global:UserScoop_CONF.Colors.Gray)说明: $($menu[$idx].Desc)$($global:UserScoop_CONF.Colors.Rst)"
-        Write-Host "$($global:UserScoop_CONF.Colors.Gray)$("-" * 50)$($global:UserScoop_CONF.Colors.Rst)"
+        # 渲染 UI，获取用户选择
+        $selection = Invoke-ConsoleMenu `
+            -Title "REMOTE TMUX | $HostName" `
+            -Options $ctx.Options `
+            -ExitLabel "EXIT"
 
-        if ($Host.UI.RawUI.KeyAvailable)
-        { $Host.UI.RawUI.FlushInputBuffer()
-        }
-
-        $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-        $vK = $key.VirtualKeyCode; $char = $key.Character.ToString().ToLower()
-
-        if ($vK -eq $global:UserScoop_CONF.Keys.Up)
-        { $idx = ($idx - 1 + $menu.Count) % $menu.Count; continue
-        }
-        if ($vK -eq $global:UserScoop_CONF.Keys.Down)
-        { $idx = ($idx + 1) % $menu.Count; continue
-        }
-
-        $finalKey = $null
-        if ($vK -eq $global:UserScoop_CONF.Keys.Enter)
-        {
-            $finalKey = ($idx + 1).ToString()
-        }
-        # 修正：把 $menu.Count 改为 $menu.Count - 1，不再允许按 6 来触发逻辑
-        elseif ($char -match "^[1-$($menu.Count - 1)]$")
-        {
-            $finalKey = $char
-        } elseif ($char -eq 'q' -or $vK -eq $global:UserScoop_CONF.Keys.Esc)
+        if ($null -eq $selection)
         {
             return
         }
 
-        # 通过回车选中最后一项时，正常退出
-        if ($finalKey -eq "$($menu.Count)")
-        { return
-        }
-        if ($null -ne $finalKey)
+        # 执行业务逻辑
+        $result = Invoke-TmuxAction -Action $selection -Context $ctx
+
+        if ($null -eq $result)
         {
-            $cmd = Invoke-TmuxAction -Key $finalKey -HostName $hostName
-            if ($cmd -eq "INTERNAL_QUIT")
-            { return
-            }
-            if ($cmd -eq "MENU_BACK" -or $null -eq $cmd)
-            { continue
-            }
+            continue
+        }
 
-            Write-Host "`n[SSH] 连接中..`n" -ForegroundColor DarkCyan
-
-            $sshArgs = @(
-                "-o", "ConnectTimeout=$($global:UserScoop_CONF.SSH.ConnectTimeout)"
-            )
-            if ($global:UserScoop_CONF.SSH.ForceTTy)
+        switch ($result.Type)
+        {
+            "ssh"
             {
-                $sshArgs += "-tt"
+                Write-Host "`n[SSH] 连接中..`n" -ForegroundColor DarkCyan
+                & ssh.exe $result.Args $result.Command
+
+                Start-Sleep -Milliseconds 200
+                if ($Host.UI.RawUI.KeyAvailable)
+                {
+                    $Host.UI.RawUI.FlushInputBuffer()
+                }
             }
-            $sshArgs += $hostName
+            "submenu"
+            {
+                $subResult = Invoke-SessionSelector `
+                    -Sessions $result.Sessions `
+                    -HostName $result.HostName `
+                    -ConnectTimeout $result.Timeout
 
-            & ssh.exe $sshArgs "$cmd"
+                if ($null -ne $subResult -and $subResult.Type -eq "ssh")
+                {
+                    Write-Host "`n[SSH] 连接中..`n" -ForegroundColor DarkCyan
+                    & ssh.exe $subResult.Args $subResult.Command
 
-            Start-Sleep -Milliseconds 200
-            if ($Host.UI.RawUI.KeyAvailable)
-            { $Host.UI.RawUI.FlushInputBuffer()
+                    Start-Sleep -Milliseconds 200
+                    if ($Host.UI.RawUI.KeyAvailable)
+                    {
+                        $Host.UI.RawUI.FlushInputBuffer()
+                    }
+                }
             }
         }
     }
