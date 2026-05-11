@@ -74,25 +74,35 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 ```
 PowerShell/
 │
-├── Microsoft.PowerShell_profile.ps1   # 🎯 Main entry — loads everything
-├── ShellPrompt.psd1                   # 📦 Module manifest
-├── ShellPrompt.psm1                   # 📦 Module entry point
-├── Config.ps1                         # ⚙️  Paths, colors, keyboard layout
-├── Alias.ps1                          # 🔗 Aliases: ll, .., ~, reload, which
-├── Utils.ps1                          # 🧰 Helpers: logo, terminal init
-├── Private/
-│   ├── Invoke-ConsoleMenu.ps1         # 🖼️  Generic UI menu component
-│   ├── Get-TmuxSessions.ps1           # 🔌 SSH → tmux ls
-│   ├── Get-TmuxMenuItems.ps1           # 📋 Menu state builder
-│   └── Invoke-SessionSelector.ps1      # 🔀 Session picker submenu
-├── Public/
-│   └── Start-TmuxSession.ps1           # 🚀 Entry point (exported)
-└── quotes.txt                         # 💬 Random startup quotes
+├── Microsoft.PowerShell_profile.ps1   # 🎯 Minimal entry — imports the module
+├── quotes.txt                         # 💬 Random startup quotes
+├── README.md / README_zh.md
+└── ShellPrompt/                      # 📦 Self-contained module
+    ├── ShellPrompt.psd1              # 📋 Module manifest
+    ├── ShellPrompt.psm1               # 🚪 Entry point (config → Private → Public → export)
+    ├── Private/
+    │   ├── Initialize-Config.ps1      # ⚙️  Global config ($UserScoop_CONF)
+    │   ├── Invoke-ConsoleMenu.ps1       # 🖼️  Generic UI menu (no tmux knowledge)
+    │   ├── Get-TmuxSessions.ps1         # 🔌 SSH → tmux ls parser
+    │   └── Invoke-SessionSelector.ps1   # 🔀 Session picker submenu
+    └── Public/
+        ├── Initialize-Environment.ps1  # 🛠️  Starship / Fnm / PSReadLine init
+        ├── Show-UserScoopLogo.ps1       # 🎨 Startup logo and quotes
+        ├── Invoke-Reload.ps1            # 🔄 reload command
+        ├── Set-ProfileAliases.ps1        # 🔗 ll, .., ~, which
+        └── Start-TmuxSession.ps1        # 🚀 Main entry (exported)
 ```
 
 ### Module Architecture
 
-`ShellPrompt.psm1` loads Private functions first (internal use), then Public functions. Only `Start-TmuxSession` is exported via `Export-ModuleMember`. All other functions are private implementation details.
+`ShellPrompt.psm1` loads files in strict order:
+
+1. **Private/Initialize-Config.ps1** — sets up `$global:UserScoop_CONF` (colors, keys, SSH/Tmux options)
+2. **Private/** — internal helpers (Invoke-ConsoleMenu, Get-TmuxSessions, etc.)
+3. **Public/** — user-facing commands (Initialize-Environment, Start-TmuxSession, reload, etc.)
+4. **Export-ModuleMember** — only Public/*.ps1 functions are exported; Private is invisible to consumers
+
+This enforces the MVC boundary: UI logic (`Invoke-ConsoleMenu`) knows nothing about tmux or SSH.
 
 ---
 
@@ -108,37 +118,28 @@ Ensure the following tools are installed on your system:
 | [Fnm](https://github.com/Schniz/fnm) | Fast Node version manager | [Guide](https://github.com/Schniz/fnm#installation) |
 | [tmux](https://github.com/tmux/tmux) | Remote session persistence | [Wiki](https://github.com/tmux/tmux/wiki) |
 
-### 2️⃣ Install Profile Files
+### 2️⃣ Install
 
 ```powershell
-# Step A: Find your PowerShell profile directory
+# Find your profile directory
 $PROFILE
 
-# Step B: Clone this repo to a permanent location
+# Clone to a permanent location
 git clone https://github.com/arbaleast/PowerShell.git D:\path\to\PowerShell
 
-# Step C: Create a stub in your profile directory that loads the real config
-# Replace "D:\path\to\PowerShell" with your actual clone path
+# Create a stub that loads the module
 "`$PROFILE_DIR = 'D:\path\to\PowerShell'" | Out-File -Encoding UTF8 "`$PROFILE" -NoClobber
 "`. `$PROFILE_DIR\Microsoft.PowerShell_profile.ps1" | Add-Content "`$PROFILE"
 
-# Step D: Restart PowerShell or run:
+# Restart PowerShell or run:
 reload
 ```
 
-> 💡 **Note:** `quotes.txt` will be loaded automatically from the script directory.
+> `quotes.txt` lives at the repo root and is found automatically at load time.
 
 ### 3️⃣ Configure (Optional)
 
-Edit `Config.ps1` to customize:
-
-```powershell
-# Default paths (auto-detected from script location)
-$global:UserScoop_ROOT = $PSScriptRoot  # Where quotes.txt lives
-$global:UserScoop_APPS = "...\apps"     # Where tools are installed
-```
-
-For color schemes and keyboard codes, see the [Configuration](#-configuration) section below.
+Edit `ShellPrompt/Private/Initialize-Config.ps1` to change colors, key codes, SSH timeout, or tmux session name.
 
 ---
 
@@ -157,7 +158,7 @@ For color schemes and keyboard codes, see the [Configuration](#-configuration) s
 
 ## 🎨 Configuration
 
-Edit `Config.ps1` to customize:
+Edit `ShellPrompt/Private/Initialize-Config.ps1` to customize:
 
 ## 📜 License
 

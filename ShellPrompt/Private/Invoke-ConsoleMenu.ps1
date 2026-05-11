@@ -37,27 +37,47 @@ function Invoke-ConsoleMenu
         Write-Host "  ${ColorCyan}${Title}${ColorGray}"
         Write-Host "  $($('─') * 50)"
 
-        for ($i = 0; $i -lt $count; $i++)
+        for ($i = 0; $i -lt $Options.Count; $i++)
         {
-            $fg = "White"
+            # 1. 初始化默认状态 (未选中)
+            $fgColor = [System.ConsoleColor]::White
             $marker = "    "
+
+            # 2. 判断是否选中
             if ($i -eq $idx)
             {
-                $fg = $ColorCyan
+                $fgColor = [System.ConsoleColor]::Cyan
                 $marker = "[>] "
             }
-            Write-Host "$marker $($Options[$i])" -ForegroundColor $fg
+
+            # 3. 智能解析选项名称 (兼容字符串数组和对象数组)
+            $displayText = ""
+            if ($Options[$i] -is [string])
+            {
+                $displayText = $Options[$i]
+            } elseif ($null -ne $Options[$i].Name)
+            {
+                # 处理对象数组 (比如 Get-TmuxSessions 返回的带有 Name 和 Status 的对象)
+                $displayText = "$($Options[$i].Name) $($Options[$i].Status)"
+            } else
+            {
+                # 最后的兜底
+                $displayText = $Options[$i].ToString()
+            }
+
+            # 4. 打印菜单项 (附加一点缩进让整体更好看)
+            Write-Host "  $marker $displayText" -ForegroundColor $fgColor
         }
 
         $exitFg = if ($idx -eq $count)
-        { $ColorCyan 
+        { $ColorCyan
         } else
-        { "White" 
+        { "White"
         }
         $exitMarker = if ($idx -eq $count)
-        { "[>] " 
+        { "[>] "
         } else
-        { "    " 
+        { "    "
         }
         Write-Host "$exitMarker[q] $ExitLabel" -ForegroundColor $exitFg
 

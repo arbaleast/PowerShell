@@ -74,25 +74,35 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 ```
 PowerShell/
 │
-├── Microsoft.PowerShell_profile.ps1   # 🎯 主入口 — 加载所有模块
-├── ShellPrompt.psd1                   # 📦 模块清单
-├── ShellPrompt.psm1                   # 📦 模块入口
-├── Config.ps1                         # ⚙️  路径、颜色、键盘布局
-├── Alias.ps1                          # 🔗 别名：ll, .., ~, reload, which
-├── Utils.ps1                          # 🧰 辅助函数：logo, 终端初始化
-├── Private/
-│   ├── Invoke-ConsoleMenu.ps1         # 🖼️  通用 UI 菜单组件
-│   ├── Get-TmuxSessions.ps1           # 🔌 SSH → tmux ls
-│   ├── Get-TmuxMenuItems.ps1           # 📋 菜单状态构建器
-│   └── Invoke-SessionSelector.ps1      # 🔀 会话选择子菜单
-├── Public/
-│   └── Start-TmuxSession.ps1           # 🚀 入口函数（导出）
-└── quotes.txt                         # 💬 随机启动语录
+├── Microsoft.PowerShell_profile.ps1   # 🎯 极简入口 — 导入模块
+├── quotes.txt                         # 💬 随机启动语录
+├── README.md / README_zh.md
+└── ShellPrompt/                      # 📦 自包含模块
+    ├── ShellPrompt.psd1              # 📋 模块清单
+    ├── ShellPrompt.psm1               # 🚪 入口（配置 → Private → Public → 导出）
+    ├── Private/
+    │   ├── Initialize-Config.ps1      # ⚙️  全局配置（$UserScoop_CONF）
+    │   ├── Invoke-ConsoleMenu.ps1       # 🖼️  通用 UI 菜单（无 tmux 知识）
+    │   ├── Get-TmuxSessions.ps1         # 🔌 SSH → tmux ls 解析器
+    │   └── Invoke-SessionSelector.ps1   # 🔀 会话选择子菜单
+    └── Public/
+        ├── Initialize-Environment.ps1  # 🛠️  Starship / Fnm / PSReadLine 初始化
+        ├── Show-UserScoopLogo.ps1       # 🎨 启动语录渲染
+        ├── Invoke-Reload.ps1            # 🔄 reload 命令
+        ├── Set-ProfileAliases.ps1        # 🔗 ll, .., ~, which
+        └── Start-TmuxSession.ps1        # 🚀 主入口（导出）
 ```
 
 ### 模块架构
 
-`ShellPrompt.psm1` 先加载 Private 函数（内部使用），再加载 Public 函数。仅 `Start-TmuxSession` 通过 `Export-ModuleMember` 导出，其余函数均为私有实现细节。
+`ShellPrompt.psm1` 按严格顺序加载：
+
+1. **Private/Initialize-Config.ps1** — 初始化 `$global:UserScoop_CONF`（颜色、按键、SSH/Tmux 配置）
+2. **Private/** — 内部辅助函数（Invoke-ConsoleMenu、Get-TmuxSessions 等）
+3. **Public/** — 用户可见命令（Initialize-Environment、Start-TmuxSession、reload 等）
+4. **Export-ModuleMember** — 仅导出 Public/*.ps1 中的函数；Private 对外部不可见
+
+这确保了 MVC 边界：UI 逻辑（`Invoke-ConsoleMenu`）对 tmux 和 SSH 一无所知。
 
 ---
 
@@ -108,37 +118,28 @@ PowerShell/
 | [Fnm](https://github.com/Schniz/fnm) | 快速 Node 版本管理器 | [安装](https://github.com/Schniz/fnm#installation) |
 | [tmux](https://github.com/tmux/tmux) | 远程会话保持 | [安装](https://github.com/tmux/tmux/wiki) |
 
-### 2️⃣ 安装配置文件
+### 2️⃣ 安装
 
 ```powershell
-# 步骤 A：查看 PowerShell 配置目录
+# 查看 PowerShell 配置目录
 $PROFILE
 
-# 步骤 B：将仓库克隆到永久目录
+# 将仓库克隆到永久目录
 git clone https://github.com/arbaleast/PowerShell.git D:\path\to\PowerShell
 
-# 步骤 C：在配置目录创建一个桩文件，加载真实配置
-# 将 "D:\path\to\PowerShell" 替换为实际克隆路径
+# 在配置目录创建一个桩文件，加载真实模块
 "`$PROFILE_DIR = 'D:\path\to\PowerShell'" | Out-File -Encoding UTF8 "`$PROFILE" -NoClobber
 "`. `$PROFILE_DIR\Microsoft.PowerShell_profile.ps1" | Add-Content "`$PROFILE"
 
-# 步骤 D：重启 PowerShell 或执行：
+# 重启 PowerShell 或执行：
 reload
 ```
 
-> 💡 **提示：** `quotes.txt` 会自动从脚本目录加载，无需额外配置。
+> `quotes.txt` 位于仓库根目录，模块加载时自动找到。
 
 ### 3️⃣ 自定义配置（可选）
 
-编辑 `Config.ps1` 自定义设置：
-
-```powershell
-# 默认路径（自动从脚本位置检测）
-$global:UserScoop_ROOT = $PSScriptRoot  # quotes.txt 所在目录
-$global:UserScoop_APPS = "...\apps"     # 工具安装目录
-```
-
-颜色方案和键盘码配置见下方 [配置说明](#-配置说明)。
+编辑 `ShellPrompt/Private/Initialize-Config.ps1` 自定义颜色、按键码、SSH 超时或默认会话名。
 
 ---
 
@@ -157,7 +158,7 @@ $global:UserScoop_APPS = "...\apps"     # 工具安装目录
 
 ## 🎨 配置说明
 
-编辑 `Config.ps1` 自定义设置：
+编辑 `ShellPrompt/Private/Initialize-Config.ps1` 自定义设置：
 
 ## 📜 开源协议
 
