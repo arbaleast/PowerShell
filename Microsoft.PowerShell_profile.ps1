@@ -5,13 +5,8 @@ $UserScoop_ROOT = Split-Path -Parent $MyInvocation.MyCommand.Definition
 . (Join-Path $UserScoop_ROOT "Utils.ps1")
 . (Join-Path $UserScoop_ROOT "Alias.ps1")
 
-. (Join-Path $UserScoop_ROOT "ConsoleMenu.ps1")
-
-# 懒加载：仅在首次调用时加载 Remote.ps1
-if (-not (Get-Command Start-TmuxSession -ErrorAction SilentlyContinue))
-{
-    . (Join-Path $UserScoop_ROOT "Remote.ps1")
-}
+# 导入 ShellPrompt 模块（包含所有 tmux/SSH 交互逻辑）
+Import-Module (Join-Path $UserScoop_ROOT "ShellPrompt.psd1") -ErrorAction SilentlyContinue
 
 function sss
 {
