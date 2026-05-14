@@ -65,9 +65,12 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 - **快速连接** — `sss <host>` 立即附加/恢复/创建会话
 
 ### 💧 喝水提醒
-- **智能提醒** — 基于时段和天气自动调整提醒间隔
-- **每日目标** — 2000ml 目标追踪，历史记录查看
-- **闭环反馈** — 用户确认后自动记录摄入量
+- **智能提醒** — Windows Toast 通知，每 ~60 分钟根据时段(早/午/晚)发送不同文案
+- **天气感知** — 通过 wttr.in 获取当前温度，自动缩短高温时段间隔、延长低温时段
+- **每日目标** — 2000ml 目标追踪，可视化历史记录查看
+- **夜间免打扰** — 22:00-07:00 自动进入休眠模式，不推送通知
+- **后台运行** — `water -Background` 在后台静默运行，不占用终端
+- **零依赖** — 使用内置 WinForms NotifyIcon BalloonTip，无需安装外部模块
 
 ### 📁 日常优化
 - **快捷别名** — `ll`、`..`、`~`、`which` 加速导航
@@ -82,6 +85,8 @@ PowerShell/
 │
 ├── Microsoft.PowerShell_profile.ps1   # 🎯 极简入口 — 导入模块
 ├── quotes.txt                         # 💬 随机启动语录
+├── data/
+│   └── water-history.json             # 💧 每日喝水记录
 ├── README.md / README_zh.md
 └── ShellPrompt/                      # 📦 自包含模块
     ├── ShellPrompt.psd1              # 📋 模块清单
@@ -90,25 +95,28 @@ PowerShell/
     │   ├── Initialize-Config.ps1      # ⚙️  全局配置（$UserScoop_CONF）
     │   ├── Invoke-ConsoleMenu.ps1       # 🖼️  通用 UI 菜单（无 tmux 知识）
     │   ├── Get-TmuxSessions.ps1         # 🔌 SSH → tmux ls 解析器
-    │   └── Invoke-SessionSelector.ps1   # 🔀 会话选择子菜单
+    │   ├── Invoke-SessionSelector.ps1   # 🔀 会话选择子菜单
+    │   ├── Invoke-WaterReminder.ps1     # 💧 核心提醒逻辑（天气、间隔、日志）
+    │   └── Send-WaterNotification.ps1   # 🔔 Windows Toast 通知发送
     └── Public/
         ├── Initialize-Environment.ps1  # 🛠️  Starship / Fnm / PSReadLine + logo
         ├── Show-UserScoopLogo.ps1       # 🎨 启动语录渲染
         ├── Invoke-Reload.ps1            # 🔄 reload 命令
         ├── Set-ProfileAliases.ps1        # 🔗 ll, .., ~, which
-        └── Start-TmuxSession.ps1        # 🚀 主入口（导出）
+        ├── Start-TmuxSession.ps1        # 🚀 Tmux 会话管理器（导出）
+        └── Start-WaterReminder.ps1      # 💧 喝水提醒入口（导出）
 ```
 
 ### 模块架构
 
 `ShellPrompt.psm1` 按严格顺序加载：
 
-1. **Private/Initialize-Config.ps1** — 初始化 `$global:UserScoop_CONF`（颜色、按键、SSH/Tmux 配置、语录路径）
-2. **Private/** — 内部辅助函数（Invoke-ConsoleMenu、Get-TmuxSessions、Invoke-SessionSelector）
-3. **Public/** — 用户可见命令（Initialize-Environment、Show-UserScoopLogo、Start-TmuxSession、reload）
+1. **Private/Initialize-Config.ps1** — 初始化 `$global:UserScoop_CONF`（颜色、按键、SSH/Tmux 配置、语录路径、喝水提醒配置）
+2. **Private/** — 内部辅助函数（Invoke-ConsoleMenu、Get-TmuxSessions、Invoke-SessionSelector、Invoke-WaterReminder、Send-WaterNotification）
+3. **Public/** — 用户可见命令（Initialize-Environment、Show-UserScoopLogo、Start-TmuxSession、Start-WaterReminder、Get-WaterReminderHistory、reload）
 4. **Export-ModuleMember** — 仅导出 Public/*.ps1 中的函数；Private 对外部不可见
 
-这确保了 MVC 边界：UI 逻辑（`Invoke-ConsoleMenu`）对 tmux 和 SSH 一无所知。
+这确保了 MVC 边界：UI 逻辑（`Invoke-ConsoleMenu`）对 tmux 和 SSH 一无所知，通知发送（`Send-WaterNotification`）与提醒调度逻辑解耦。
 
 ---
 
@@ -154,9 +162,10 @@ reload
 | 命令 | 说明 |
 |------|------|
 | `sss <host>` | 🖥️ 打开 tmux 管理器 → 连接远程主机 |
-| `water` | 💧 启动喝水提醒（后台运行） |
-| `water -Status` | 💧 查看今日喝水进度 |
-| `Get-WaterReminderHistory` | 💧 查看最近喝水历史 |
+| `water` | 💧 启动喝水提醒（前台交互模式，倒计时显示） |
+| `water -Background` | 💧 启动喝水提醒（后台静默运行） |
+| `water -Status` | 💧 查看今日饮水进度 |
+| `Get-WaterReminderHistory` | 💧 查看最近喝水历史（默认最近 7 天） |
 | `reload` | 🔄 重载 PowerShell 配置 |
 | `ll` | 📋 详细列出文件 |
 | `..` | ⬆️ 跳转到父目录 |

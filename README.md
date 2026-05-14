@@ -64,6 +64,14 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 - **Tmux Manager** — Interactive menu for managing remote tmux sessions
 - **Quick Connect** — `sss <host>` to attach/resume/create sessions instantly
 
+### 💧 Water Reminder
+- **Smart Reminders** — Windows toast notifications every ~60 minutes with time-aware messages (morning/afternoon/evening)
+- **Weather-Aware** — Automatically adjusts interval based on temperature via wttr.in
+- **Daily Goal** — 2000ml target tracking with history visualization via `Get-WaterReminderHistory`
+- **Quiet Hours** — No notifications between 22:00-07:00
+- **Background Mode** — Run as a background process with `water -Background`
+- **Zero Dependencies** — Uses built-in WinForms NotifyIcon BalloonTip, no external modules required
+
 ### 📁 Everyday QoL
 - **Quick Aliases** — `ll`, `..`, `~`, `which` for faster navigation
 - **Modular Structure** — Self-contained `ShellPrompt/` module, single entry point
@@ -77,6 +85,8 @@ PowerShell/
 │
 ├── Microsoft.PowerShell_profile.ps1   # 🎯 Minimal entry — imports the module
 ├── quotes.txt                         # 💬 Random startup quotes
+├── data/
+│   └── water-history.json             # 💧 Daily water intake records
 ├── README.md / README_zh.md
 └── ShellPrompt/                      # 📦 Self-contained module
     ├── ShellPrompt.psd1              # 📋 Module manifest
@@ -85,25 +95,28 @@ PowerShell/
     │   ├── Initialize-Config.ps1      # ⚙️  Global config ($UserScoop_CONF)
     │   ├── Invoke-ConsoleMenu.ps1       # 🖼️  Generic UI menu (no tmux knowledge)
     │   ├── Get-TmuxSessions.ps1         # 🔌 SSH → tmux ls parser
-    │   └── Invoke-SessionSelector.ps1   # 🔀 Session picker submenu
+    │   ├── Invoke-SessionSelector.ps1   # 🔀 Session picker submenu
+    │   ├── Invoke-WaterReminder.ps1     # 💧 Core reminder logic (weather, intervals, logging)
+    │   └── Send-WaterNotification.ps1   # 🔔 Windows toast notification sender
     └── Public/
         ├── Initialize-Environment.ps1  # 🛠️  Starship / Fnm / PSReadLine + logo
         ├── Show-UserScoopLogo.ps1       # 🎨 Startup logo and quotes
         ├── Invoke-Reload.ps1            # 🔄 reload command
         ├── Set-ProfileAliases.ps1        # 🔗 ll, .., ~, which
-        └── Start-TmuxSession.ps1        # 🚀 Main entry (exported)
+        ├── Start-TmuxSession.ps1        # 🚀 Tmux session manager (exported)
+        └── Start-WaterReminder.ps1      # 💧 Water reminder entry (exported)
 ```
 
 ### Module Architecture
 
 `ShellPrompt.psm1` loads files in strict order:
 
-1. **Private/Initialize-Config.ps1** — sets up `$global:UserScoop_CONF` (colors, keys, SSH/Tmux options, quotes path)
-2. **Private/** — internal helpers (Invoke-ConsoleMenu, Get-TmuxSessions, Invoke-SessionSelector)
-3. **Public/** — user-facing commands (Initialize-Environment, Show-UserScoopLogo, Start-TmuxSession, reload)
+1. **Private/Initialize-Config.ps1** — sets up `$global:UserScoop_CONF` (colors, keys, SSH/Tmux options, quotes path, water reminder config)
+2. **Private/** — internal helpers (Invoke-ConsoleMenu, Get-TmuxSessions, Invoke-SessionSelector, Invoke-WaterReminder, Send-WaterNotification)
+3. **Public/** — user-facing commands (Initialize-Environment, Show-UserScoopLogo, Start-TmuxSession, Start-WaterReminder, Get-WaterReminderHistory, reload)
 4. **Export-ModuleMember** — only Public/*.ps1 functions are exported; Private is invisible to consumers
 
-This enforces the MVC boundary: UI logic (`Invoke-ConsoleMenu`) knows nothing about tmux or SSH.
+This enforces the MVC boundary: UI logic (`Invoke-ConsoleMenu`) knows nothing about tmux or SSH, and notification delivery (`Send-WaterNotification`) is decoupled from reminder scheduling.
 
 ---
 
@@ -149,6 +162,10 @@ Edit `ShellPrompt/Private/Initialize-Config.ps1` to change colors, key codes, SS
 | Command | What it does |
 |---------|-------------|
 | `sss <host>` | 🖥️ Open tmux manager → connect to remote host |
+| `water` | 💧 Start water reminder (interactive foreground mode) |
+| `water -Background` | 💧 Start water reminder as background process |
+| `water -Status` | 💧 Show today's water intake progress |
+| `Get-WaterReminderHistory` | 💧 View recent water intake history |
 | `reload` | 🔄 Reload your PowerShell profile |
 | `ll` | 📋 List files with details |
 | `..` | ⬆️ Jump to parent directory |
