@@ -20,3 +20,6 @@ function sss
 
 $ProfileTimer.Stop()
 Write-Host "PowerShell Profile Loaded: $($ProfileTimer.ElapsedMilliseconds)ms" -ForegroundColor DarkGray
+
+# 初始化 starship
+Invoke-Expression (&starship init powershell)
