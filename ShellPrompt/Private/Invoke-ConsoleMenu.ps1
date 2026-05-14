@@ -1,6 +1,6 @@
 # ============================================================
-# Invoke-ConsoleMenu.ps1 — 通用终端交互式菜单 UI 组件
-# 纯渲染逻辑，无任何 tmux/SSH 业务知识
+# Invoke-ConsoleMenu.ps1 - 通用终端交互式菜单 UI 组件
+# 硬核黑客风格 - 结构化信息, 路径/分支标签
 # ============================================================
 
 function Invoke-ConsoleMenu {
@@ -13,10 +13,16 @@ function Invoke-ConsoleMenu {
         [array]$Options,
 
         [Parameter(Mandatory = $false)]
-        [string]$ColorCyan = $global:UserScoop_CONF.Colors.Cyan,
+        [string]$ColorPrimary = $global:UserScoop_CONF.Colors.FreshGreen,
 
         [Parameter(Mandatory = $false)]
-        [string]$ColorGray = $global:UserScoop_CONF.Colors.Gray,
+        [string]$ColorAccent = $global:UserScoop_CONF.Colors.SageGreen,
+
+        [Parameter(Mandatory = $false)]
+        [string]$ColorMuted = $global:UserScoop_CONF.Colors.MidGray,
+
+        [Parameter(Mandatory = $false)]
+        [string]$ColorHighlight = $global:UserScoop_CONF.Colors.MintGreen,
 
         [Parameter(Mandatory = $false)]
         [hashtable]$Keys = $global:UserScoop_CONF.Keys,
@@ -27,7 +33,9 @@ function Invoke-ConsoleMenu {
 
     $idx = 0
     $count = $Options.Count
-    $reset = "`e[0m"   # 重置 ANSI SGR 状态
+    $exitIdx = $count
+    $total = $count + 1
+    $rst = "`e[0m"
 
     $items = $Options | ForEach-Object {
         if ($_ -is [string]) {
@@ -40,48 +48,73 @@ function Invoke-ConsoleMenu {
     while ($true) {
         Clear-Host
 
-        # 标题
-        Write-Host ""
-        Write-Host "  ${ColorCyan}${Title}${ColorGray}"
-        Write-Host "  $($('─') * 50)"
+        # Get system info for labels
+        $hostname = $env:COMPUTERNAME ?? "local"
+        $userName = $env:USERNAME ?? "user"
+        $cwd = $PWD.Path.Split('\')[-1]
+        $hLine = "━" * 45
 
-        # 选项
+        # ══════════════════════════════════════════════════════
+        # Hardcore header with labels
+        # ══════════════════════════════════════════════════════
+        Write-Host ""
+        Write-Host "  ${ColorPrimary}┌──〈 ${ColorMuted}${userName}@${hostname}${ColorPrimary} 〉━━[ ${ColorAccent}${cwd}${ColorPrimary} ]━━[ ${ColorPrimary}${Title}${ColorPrimary} ]${rst}"
+        Write-Host "  ${ColorPrimary}┃${rst}"
+        Write-Host "  ${ColorPrimary}│${rst}  ${ColorPrimary}┄${rst}"
+
+        # ══════════════════════════════════════════════════════
+        # Options list with key indicators
+        # ══════════════════════════════════════════════════════
         for ($i = 0; $i -lt $count; $i++) {
-            if ($i -eq $idx) {
-                Write-Host "  [>]  ${ColorCyan}$($items[$i].Label)${reset}"
-            } else {
-                Write-Host "  [ ]  $($items[$i].Label)"
-            }
+            $key = ($i + 1).ToString().PadLeft(2, '0')
+            $prefix = if ($i -eq $idx) { "${ColorHighlight}▸" } else { "${ColorMuted} " }
+            $labelColor = if ($i -eq $idx) { $ColorPrimary } else { $ColorMuted }
+            
+            Write-Host "  ${ColorPrimary}│${rst}  ${prefix}${rst} ${ColorPrimary}[${key}]${rst} ${labelColor}$($items[$i].Label)${rst}"
         }
 
-        # 退出项（固定在最后，无选中态）
-        Write-Host "  [q]  $ExitLabel"
+        # Exit
+        $exitKey = ($count + 1).ToString().PadLeft(2, '0')
+        $exitPrefix = if ($idx -eq $exitIdx) { "${ColorAccent}▸" } else { "${ColorMuted} " }
+        $exitColor = if ($idx -eq $exitIdx) { $ColorAccent } else { $ColorMuted }
+        Write-Host "  ${ColorPrimary}│${rst}  ${exitPrefix}${rst} ${ColorAccent}[${exitKey}]${rst} ${exitColor}${ExitLabel}${rst}"
 
-        # 动态描述
-        Write-Host ""
-        Write-Host "  $($('─') * 50)"
-        if ($idx -lt $count) {
-            $desc = $items[$idx].Desc
-            if ($desc) {
-                Write-Host "  ${ColorGray}$desc${reset}" -ForegroundColor DarkGray
-            }
-        } else {
-            Write-Host "  ${ColorGray}return to local terminal${reset}" -ForegroundColor DarkGray
+        # ══════════════════════════════════════════════════════
+        # Description at bottom
+        # ══════════════════════════════════════════════════════
+        Write-Host "  ${ColorPrimary}┃${rst}"
+        Write-Host "  ${ColorPrimary}│${rst}  ${ColorPrimary}┄${rst}"
+
+        if ($idx -lt $count -and $items[$idx].Desc) {
+            Write-Host "  ${ColorPrimary}│${rst}  ${ColorMuted}$($items[$idx].Desc)${rst}"
+        } elseif ($idx -eq $exitIdx) {
+            Write-Host "  ${ColorPrimary}│${rst}  ${ColorMuted}return to local terminal${rst}"
         }
 
+        # Footer
+        Write-Host "  ${ColorPrimary}┃${rst}"
+        Write-Host "  ${ColorPrimary}└${hLine}━━━ ○${rst}"
+
+        # Hint
         Write-Host ""
-        Write-Host "  ↑↓ navigate  ·  Enter confirm  ·  q quit" -ForegroundColor DarkGray
+        Write-Host "  ${ColorMuted}↑↓ navigate · Enter confirm · Q quit${rst}" -ForegroundColor DarkGray
         Write-Host ""
 
-        # 按键
+        # Key handling
         $key = $Host.UI.RawUI.ReadKey("NoEcho, IncludeKeyDown")
         $vK = $key.VirtualKeyCode
 
-        if ($vK -eq $Keys.Up)   { $idx = ($idx - 1 + ($count + 1)) % ($count + 1); continue }
-        if ($vK -eq $Keys.Down) { $idx = ($idx + 1) % ($count + 1); continue }
+        if ($vK -eq $Keys.Up) {
+            $idx = ($idx - 1 + $total) % $total
+            continue
+        }
+        if ($vK -eq $Keys.Down) {
+            $idx = ($idx + 1) % $total
+            continue
+        }
 
         if ($vK -eq $Keys.Enter) {
-            if ($idx -eq $count) { return $null }
+            if ($idx -eq $exitIdx) { return $null }
             return $items[$idx]
         }
 

@@ -23,7 +23,7 @@ function Invoke-SessionSelector
     $choice = Invoke-ConsoleMenu `
         -Title "TMUX MANAGER | $HostName" `
         -Options $subOptions `
-        -ExitLabel "BACK"
+        -ExitLabel "EXIT"
 
     if ($null -eq $choice)
     {

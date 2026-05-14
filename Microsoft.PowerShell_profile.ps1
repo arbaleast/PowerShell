@@ -23,3 +23,15 @@ Write-Host "PowerShell Profile Loaded: $($ProfileTimer.ElapsedMilliseconds)ms" -
 
 # 初始化 starship
 Invoke-Expression (&starship init powershell)
+
+# PSReadLine Tab 补全配置（确保最后执行）
+Import-Module PSReadLine -ErrorAction SilentlyContinue
+if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue)
+{
+    Set-PSReadLineOption -PredictionSource History
+    Set-PSReadLineOption -EditMode Windows
+    Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
+    Set-PSReadLineKeyHandler -Key RightArrow -Function AcceptSuggestion
+    Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
+    Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
+}
