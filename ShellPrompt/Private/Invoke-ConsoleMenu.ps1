@@ -54,12 +54,8 @@ function Invoke-ConsoleMenu {
             }
         }
 
-        # 退出项
-        if ($idx -eq $count) {
-            Write-Host "  [q]  ${ColorCyan}${ExitLabel}${reset}"
-        } else {
-            Write-Host "  [q]  $ExitLabel"
-        }
+        # 退出项（固定在最后，无选中态）
+        Write-Host "  [q]  $ExitLabel"
 
         # 动态描述
         Write-Host ""
