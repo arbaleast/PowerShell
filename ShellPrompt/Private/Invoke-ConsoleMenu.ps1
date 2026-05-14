@@ -50,7 +50,7 @@ function Invoke-ConsoleMenu {
             if ($i -eq $idx) {
                 Write-Host "  [>]  ${ColorCyan}$($items[$i].Label)${reset}"
             } else {
-                Write-Host "  " * 3 $items[$i].Label
+                Write-Host ("     {0}" -f $items[$i].Label)
             }
         }
 
