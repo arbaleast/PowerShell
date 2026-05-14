@@ -6,9 +6,9 @@
 $global:UserScoop_ROOT = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 
 $global:UserScoop_CONF = @{
-    Quotes = "$global:UserScoop_ROOT\quotes.txt"
+    Quotes        = "$global:UserScoop_ROOT\quotes.txt"
 
-    Colors = @{
+    Colors        = @{
         # User preferred palette - soft greens
         FreshGreen = "`e[38;2;137;209;133m"
         SageGreen  = "`e[38;2;159;177;159m"
@@ -27,19 +27,30 @@ $global:UserScoop_CONF = @{
         Dim        = "`e[2m"
     }
 
-    Keys   = @{
+    Keys          = @{
         Up    = 38
         Down  = 40
         Enter = 13
         Esc   = 27
     }
 
-    SSH    = @{
+    SSH           = @{
         ConnectTimeout = 5
         ForceTTy       = $true
     }
 
-    Tmux   = @{
+    Tmux          = @{
         DefaultSessionName = "main"
+    }
+
+    WaterReminder = @{
+        Enabled         = $true
+        IntervalMin     = 60           # 基础间隔(分钟)
+        DayGoalMl       = 2000         # 每日目标(ml)
+        QuietHoursStart = 22           # 夜间休眠开始(22:00)
+        QuietHoursEnd   = 7            # 夜间休眠结束(07:00)
+        WeatherEnabled  = $true        # 是否启用天气感知
+        HistoryPath     = "$global:UserScoop_ROOT\data\water-history.json"
+        LogPath         = "$global:UserScoop_ROOT\data\water-reminder.log"
     }
 }
