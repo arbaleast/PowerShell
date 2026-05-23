@@ -4,26 +4,37 @@
 
 智能喝水提醒系统，基于科学饮水规律，通过 Windows 通知中心定时提醒，并形成用户反馈闭环。
 
-## 核心功能
+## ⚠️ 模块已独立
 
-| 功能 | 说明 |
+**喝⽔提醒功能已抽取为独立模块**，详见 [`WaterReminder/`](WaterReminder/) 目录。
+
+> **重要**：原始实现位于 `ShellPrompt/Private/Invoke-WaterReminder.ps1` 等文件，建议切换到新独立模块使用。
+
+---
+
+## 新模块架构
+
+```
+WaterReminder/
+├── WaterReminder.psm1   # 核心模块
+├── config.ps1           # 配置文件
+├── todo.ps1             # 待办事项和 bug 追踪
+├── data/                # 数据目录
+└── logs/                # 日志目录
+```
+
+### 核心函数
+
+| 函数 | 说明 |
 |------|------|
-| 智能提醒 | 定时推送喝水提醒，用户确认后自动延后下次提醒 |
-| 每日历史 | 记录每日喝水量，形成历史趋势 |
-| 天气感知 | 根据气温/湿度动态调整提醒策略 |
-
-## 系统架构
-
-```
-ShellPrompt 模块
-├── Public/
-│   └── Start-WaterReminder.ps1     # 后台任务入口
-├── Private/
-│   ├── Initialize-Config.ps1       # 配置管理
-│   └── Invoke-WaterReminder.ps1    # 核心提醒逻辑
-└── 数据存储
-    └── water-history.json          # 每日喝水记录
-```
+| `Invoke-WaterReminder` | 发送一次喝水提醒 |
+| `Start-WaterReminderDaemon` | 启动后台守护进程 |
+| `Stop-WaterReminderDaemon` | 停止后台守护进程 |
+| `Get-WaterReminderStatus` | 查看当前状态 |
+| `Get-WaterReminderHistory` | 查看历史记录 |
+| `Get-WeatherMultiplier` | 获取天气调整系数 |
+| `Test-QuietHours` | 检测是否在安静时段 |
+| `Send-WaterNotification` | 发送系统通知 |
 
 ## 智能闭环机制
 
@@ -105,6 +116,7 @@ WaterReminder = @{
 ### 2. 新建 `Private/Invoke-WaterReminder.ps1`
 
 核心逻辑:
+
 - 获取当前温度 → 计算调整后间隔
 - 生成时段感知文案
 - 调用 Windows 通知 `[Windows.UI.Notifications]`
@@ -113,6 +125,7 @@ WaterReminder = @{
 ### 3. 新建 `Public/Start-WaterReminder.ps1`
 
 后台任务:
+
 - 主循环 `while ($true)`
 - 计算下次提醒时间
 - 检测安静时段 → 跳过
@@ -130,8 +143,20 @@ WaterReminder = @{
 
 | 文件 | 操作 |
 |------|------|
-| `ShellPrompt/Private/Initialize-Config.ps1` | 修改 |
-| `ShellPrompt/Private/Invoke-WaterReminder.ps1` | 新建 |
-| `ShellPrompt/Public/Start-WaterReminder.ps1` | 新建 |
-| `ShellPrompt/ShellPrompt.psm1` | 修改 |
-| `README_zh.md` | 修改 |
+| `WaterReminder/WaterReminder.psm1` | **新建** - 独立核心模块 |
+| `WaterReminder/config.ps1` | **新建** - 配置文件 |
+| `WaterReminder/todo.ps1` | **新建** - 待办事项追踪 |
+| `WaterReminder/README.md` | **新建** - 模块文档 |
+| `plans/water-reminder-plan.md` | 修改 - 添加独立模块说明 |
+
+---
+
+## 原始 ShellPrompt 实现（保留兼容性）
+
+| 文件 | 用途 |
+|------|------|
+| `ShellPrompt/Private/Invoke-WaterReminder.ps1` | 核心提醒逻辑 |
+| `ShellPrompt/Private/Send-WaterNotification.ps1` | 通知发送（独立脚本） |
+| `ShellPrompt/Public/Start-WaterReminder.ps1` | 后台任务入口 |
+
+> **建议**：新项目使用独立的 `WaterReminder/` 模块，原始实现仅供兼容参考。

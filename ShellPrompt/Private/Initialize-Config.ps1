@@ -6,7 +6,10 @@
 $global:UserScoop_ROOT = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 
 $global:UserScoop_CONF = @{
-    Quotes        = "$global:UserScoop_ROOT\quotes.txt"
+    Quotes        = "$global:UserScoop_ROOT\data\quotes.txt"
+    
+    # 日志路径（由 TUILogger 使用）
+    LogPath       = "$env:TEMP\ShellPrompt\shellprompt.log"
 
     Colors        = @{
         # User preferred palette - soft greens
@@ -54,3 +57,79 @@ $global:UserScoop_CONF = @{
         LogPath         = "$global:UserScoop_ROOT\data\water-reminder.log"
     }
 }
+
+# -----------------------------
+# 兼容性辅助函数
+# -----------------------------
+function Get-PowerShellExe {
+    <#
+    返回可用的 PowerShell 可执行文件路径或名称，优先顺序：pwsh, pwsh.exe, powershell.exe
+    用于在不同 PowerShell 版本/发行版间兼容地启动新进程。
+    #>
+    try {
+        $candidates = @('pwsh', 'pwsh.exe', 'powershell.exe')
+        foreach ($name in $candidates) {
+            $cmd = Get-Command $name -ErrorAction SilentlyContinue
+            if ($cmd) {
+                if ($cmd.Path) { return $cmd.Path }
+                if ($cmd.Source) { return $cmd.Source }
+                return $name
+            }
+        }
+    } catch {
+        # 忽略错误，回退到 powershell.exe
+    }
+    return 'powershell.exe'
+}
+
+function ConvertFromJsonCompat {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Json
+    )
+
+    function _ConvertRecursive {
+        param($value)
+        if ($null -eq $value) { return $null }
+
+        if ($value -is [System.Management.Automation.PSObject]) {
+            $ht = @{}
+            foreach ($p in $value.psobject.Properties) {
+                $ht[$p.Name] = _ConvertRecursive $p.Value
+            }
+            return $ht
+        } elseif ($value -is [System.Collections.IEnumerable] -and -not ($value -is [string])) {
+            # 使用 ArrayList 避免数组拼接的 O(n²) 性能问题
+            $arr = New-Object System.Collections.ArrayList
+            foreach ($i in $value) { [void]$arr.Add((_ConvertRecursive $i)) }
+            return $arr
+        } else {
+            return $value
+        }
+    }
+
+    if (-not $Json) { return @{} }
+
+    $obj = $Json | ConvertFrom-Json
+    return _ConvertRecursive $obj
+}
+
+# Ensure data and log directories exist and provide a default empty history file
+try {
+    $wr = $global:UserScoop_CONF.WaterReminder
+    if ($wr) {
+        $historyDir = Split-Path $wr.HistoryPath -Parent
+        if (-not (Test-Path $historyDir)) { New-Item -ItemType Directory -Path $historyDir -Force | Out-Null }
+
+        $logDir = Split-Path $wr.LogPath -Parent
+        if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+
+        if (-not (Test-Path $wr.HistoryPath)) {
+            '{}' | Out-File -FilePath $wr.HistoryPath -Encoding UTF8 -Force
+        }
+    }
+} catch {
+    # 不要阻塞模块加载：只记录到主机日志
+    Write-Verbose "初始化数据目录失败: $($_.Exception.Message)"
+}
+

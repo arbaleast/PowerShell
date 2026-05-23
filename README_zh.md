@@ -22,29 +22,36 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 
 ## 📸 截图
 
+**启动语录:**
+
 ```
-  * ACTIVE -- 14:32
-
-    💬 代码是写给人看的，顺便给机器运行。
-
-  ──────────────────────────────────────────────
+  ┌──〈 arbaleast@G7 〉━━[ PowerShell ]━━[ SHELL PROMPT ]
+  │
+  │  ┄
+  │  DONE  代码是写给人看的，顺便给机器运行。
+  │  2026-05-23 07:34:17
+  │
+  │  ┄
+  └───────────────────────────────────────────── ○
 ```
 
 **Tmux 管理器 (`sss <host>`):**
 
 ```
-  REMOTE TMUX | myhost
-  ──────────────────────────────────────────────────
-     RESUME
-     ATTACH
-     NEW
-     LIST
-     KILL
-  [q]  EXIT
-  ──────────────────────────────────────────────────
-    attach to 'main', create if missing
+  +--< arbaleast@G7 >--[ PowerShell ]--[ REMOTE TMUX | myhost ]
+  |
+  |  +
+  |    [01] RESUME
+  |    [02] ATTACH
+  |  > [03] NEW
+  |    [04] LIST
+  |    [05] KILL
+  |    [06] EXIT
+  |
+  |  +
+  |  -- create a new named session
 
-  ↑↓ navigate  ·  Enter confirm  ·  q quit
+  up/down navigate + Enter confirm + Q quit
 ```
 
 ---
@@ -52,27 +59,41 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 ## ✨ 功能特点
 
 ### 🚀 性能
+
 - **懒加载** — tmux 模块仅在你首次输入 `sss` 时才加载
 - **快速启动** — 最小化足迹，毫秒级加载
 
 ### 🛠️ 开发者工具
+
 - **Starship 提示符** — 跨 Shell 提示符，显示 git 上下文、Node 版本
 - **Fnm 集成** — cd 切换项目时自动切换 Node 版本
 - **PSReadLine** — 基于历史的自动补全，更好的导航体验
 
 ### 🔧 远程会话
+
 - **Tmux 管理器** — 交互式菜单管理远程 tmux 会话
 - **快速连接** — `sss <host>` 立即附加/恢复/创建会话
+- **SSH 回退** — 远程主机无 tmux 时，自动回退到普通 SSH 登录
 
 ### 💧 喝水提醒
+
 - **智能提醒** — Windows Toast 通知，每 ~60 分钟根据时段(早/午/晚)发送不同文案
 - **天气感知** — 通过 wttr.in 获取当前温度，自动缩短高温时段间隔、延长低温时段
-- **每日目标** — 2000ml 目标追踪，可视化历史记录查看
+- **每日目标** — 2000ml 目标追踪，可视化历史记录查看，支持 `Get-WaterReminderHistory` 及其别名 `Get-WaterHistory`
 - **夜间免打扰** — 22:00-07:00 自动进入休眠模式，不推送通知
 - **后台运行** — `water -Background` 在后台静默运行，不占用终端
-- **零依赖** — 使用内置 WinForms NotifyIcon BalloonTip，无需安装外部模块
+- **零依赖** — 依赖 Windows 原生通知 API，优先使用 Toast，支持 WinForms / msg.exe 回退，无需额外 PowerShell 模块
 
-### 📁 日常优化
+### 🎇 后台服务指南（若启用喝水提醒）
+
+- 启动后台运行：`water -Background`
+- 停止后台运行：`water -Stop`
+- 查看状态：`water -Status`
+- 如果 `water -Background` 启动后未出现通知，请查看 `data/water-reminder.log`，确认通知回退或者天气获取是否异常。
+- 提示会优先使用 Windows 原生 Toast；若系统不支持，将回退到 WinForms 通知或 `msg.exe`。
+
+### �📁 日常优化
+
 - **快捷别名** — `ll`、`..`、`~`、`which` 加速导航
 - **模块化结构** — 自包含 `ShellPrompt/` 模块，单一入口，易于维护
 
@@ -86,7 +107,8 @@ PowerShell/
 ├── Microsoft.PowerShell_profile.ps1   # 🎯 极简入口 — 导入模块
 ├── quotes.txt                         # 💬 随机启动语录
 ├── data/
-│   └── water-history.json             # 💧 每日喝水记录
+│   ├── quotes.txt                     # 💬 随机启动语录
+│   └── water-history.json             # 💧 每日喝水记录（若启用喝水提醒）
 ├── README.md / README_zh.md
 └── ShellPrompt/                      # 📦 自包含模块
     ├── ShellPrompt.psd1              # 📋 模块清单
@@ -130,7 +152,9 @@ PowerShell/
 |------|------|----------|
 | [Starship](https://starship.rs/) | 美观提示符，带 git 上下文 | [安装](https://starship.rs/guide/#🚀-installation) |
 | [Fnm](https://github.com/Schniz/fnm) | 快速 Node 版本管理器 | [安装](https://github.com/Schniz/fnm#installation) |
-| [tmux](https://github.com/tmux/tmux) | 远程会话保持 | [安装](https://github.com/tmux/tmux/wiki) |
+| [OpenSSH](https://docs.microsoft.com/windows-server/administration/openssh/openssh_install_firstuse) | 远程 SSH 客户端 | Windows 10/11 内置或安装 OpenSSH |
+| [tmux](https://github.com/tmux/tmux) | 远程会话保持 | [安装](https://github.com/tmux/tmux/wiki/Installing) |
+| Windows 通知支持 | Windows 原生 Toast / WinForms / msg.exe 回退 | 现代 Windows 已内置，旧版可使用 msg.exe |
 
 ### 2️⃣ 安装
 
@@ -164,8 +188,10 @@ reload
 | `sss <host>` | 🖥️ 打开 tmux 管理器 → 连接远程主机 |
 | `water` | 💧 启动喝水提醒（前台交互模式，倒计时显示） |
 | `water -Background` | 💧 启动喝水提醒（后台静默运行） |
+| `water -Stop` | 💧 停止后台喝水提醒 |
 | `water -Status` | 💧 查看今日饮水进度 |
 | `Get-WaterReminderHistory` | 💧 查看最近喝水历史（默认最近 7 天） |
+| `Get-WaterHistory` | 💧 `Get-WaterReminderHistory` 的别名 |
 | `reload` | 🔄 重载 PowerShell 配置 |
 | `ll` | 📋 详细列出文件 |
 | `..` | ⬆️ 跳转到父目录 |

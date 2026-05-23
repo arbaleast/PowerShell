@@ -20,31 +20,42 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 
 ---
 
-## 📸 Screenshot
+## 📸 Real interface preview
+
+Below is a sample terminal preview showing the prompt and remote tmux session menu. Actual appearance may vary by shell theme and current host configuration.
+
+### Terminal preview
+
+**Startup quote:**
 
 ```
-  * ACTIVE -- 14:32
-
-    💬 代码是写给人看的，顺便给机器运行。
-
-  ──────────────────────────────────────────────
+  ┌──〈 arbaleast@G7 〉━━[ PowerShell ]━━[ SHELL PROMPT ]
+  │
+  │  ┄
+  │  DONE  代码是写给人看的，顺便给机器运行。
+  │  2026-05-23 07:34:17
+  │
+  │  ┄
+  └───────────────────────────────────────────── ○
 ```
 
-**Tmux Manager (`sss <host>`):**
+### Tmux Manager (`sss <host>`)
 
 ```
-  REMOTE TMUX | myhost
-  ──────────────────────────────────────────────────
-     RESUME
-     ATTACH
-     NEW
-     LIST
-     KILL
-  [q]  EXIT
-  ──────────────────────────────────────────────────
-    attach to 'main', create if missing
+  +--< arbaleast@G7 >--[ PowerShell ]--[ REMOTE TMUX | myhost ]
+  |
+  |  +
+  |    [01] RESUME
+  |    [02] ATTACH
+  |  > [03] NEW
+  |    [04] LIST
+  |    [05] KILL
+  |    [06] EXIT
+  |
+  |  +
+  |  -- create a new named session
 
-  ↑↓ navigate  ·  Enter confirm  ·  q quit
+  up/down navigate + Enter confirm + Q quit
 ```
 
 ---
@@ -52,27 +63,41 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 ## ✨ Features
 
 ### 🚀 Performance
+
 - **Lazy Loading** — tmux module loads only when you first type `sss`
 - **Fast Startup** — Minimal footprint, loads in milliseconds
 
 ### 🛠️ Developer Tools
+
 - **Starship Prompt** — Cross-shell prompt with git awareness, Node version display
 - **Fnm Integration** — Auto-switch Node versions as you cd between projects
 - **PSReadLine** — History-based autocompletion, better navigation
 
 ### 🔧 Remote Sessions
+
 - **Tmux Manager** — Interactive menu for managing remote tmux sessions
 - **Quick Connect** — `sss <host>` to attach/resume/create sessions instantly
+- **Fallback SSH** — If remote host has no tmux, falls back to plain SSH login
 
 ### 💧 Water Reminder
+
 - **Smart Reminders** — Windows toast notifications every ~60 minutes with time-aware messages (morning/afternoon/evening)
 - **Weather-Aware** — Automatically adjusts interval based on temperature via wttr.in
-- **Daily Goal** — 2000ml target tracking with history visualization via `Get-WaterReminderHistory`
+- **Daily Goal** — 2000ml target tracking with history visualization via `Get-WaterReminderHistory` (`Get-WaterHistory` alias available)
 - **Quiet Hours** — No notifications between 22:00-07:00
 - **Background Mode** — Run as a background process with `water -Background`
-- **Zero Dependencies** — Uses built-in WinForms NotifyIcon BalloonTip, no external modules required
+- **No external PowerShell modules** — Uses built-in Windows notification APIs with Toast/WinForms/msg.exe fallback; no external PowerShell gallery modules required
 
-### 📁 Everyday QoL
+### 🎇 Background service guide (if water reminder enabled)
+
+- Start background mode: `water -Background`
+- Stop background mode: `water -Stop`
+- Check status: `water -Status`
+- If `water -Background` starts but notifications do not appear, check `data/water-reminder.log` for notification fallback or weather lookup warnings.
+- The reminder uses Windows native notifications; on older Windows editions it may fall back to `msg.exe` if Toast is unavailable.
+
+### �📁 Everyday QoL
+
 - **Quick Aliases** — `ll`, `..`, `~`, `which` for faster navigation
 - **Modular Structure** — Self-contained `ShellPrompt/` module, single entry point
 
@@ -86,7 +111,8 @@ PowerShell/
 ├── Microsoft.PowerShell_profile.ps1   # 🎯 Minimal entry — imports the module
 ├── quotes.txt                         # 💬 Random startup quotes
 ├── data/
-│   └── water-history.json             # 💧 Daily water intake records
+│   ├── quotes.txt                     # 💬 Random startup quotes
+│   └── water-history.json             # 💧 Daily water intake records (if water reminder enabled)
 ├── README.md / README_zh.md
 └── ShellPrompt/                      # 📦 Self-contained module
     ├── ShellPrompt.psd1              # 📋 Module manifest
@@ -130,7 +156,9 @@ Ensure the following tools are installed on your system:
 |------|---------|---------|
 | [Starship](https://starship.rs/) | Pretty prompt with git context | [Guide](https://starship.rs/guide/#🚀-installation) |
 | [Fnm](https://github.com/Schniz/fnm) | Fast Node version manager | [Guide](https://github.com/Schniz/fnm#installation) |
-| [tmux](https://github.com/tmux/tmux) | Remote session persistence | [Wiki](https://github.com/tmux/tmux/wiki) |
+| [OpenSSH](https://docs.microsoft.com/windows-server/administration/openssh/openssh_install_firstuse) | SSH client for remote tmux | Built into Windows 10/11 or install via OpenSSH |
+| [tmux](https://github.com/tmux/tmux) | Remote session persistence | [Installation](https://github.com/tmux/tmux/wiki/Installing) |
+| Windows notification support | Native Windows toast/WinForms/msg.exe fallback | Built into modern Windows, or use msg.exe on older editions |
 
 ### 2️⃣ Install
 
@@ -165,7 +193,9 @@ Edit `ShellPrompt/Private/Initialize-Config.ps1` to change colors, key codes, SS
 | `water` | 💧 Start water reminder (interactive foreground mode) |
 | `water -Background` | 💧 Start water reminder as background process |
 | `water -Status` | 💧 Show today's water intake progress |
+| `water -Stop` | 💧 Stop the background water reminder process |
 | `Get-WaterReminderHistory` | 💧 View recent water intake history |
+| `Get-WaterHistory` | 💧 Alias for `Get-WaterReminderHistory` |
 | `reload` | 🔄 Reload your PowerShell profile |
 | `ll` | 📋 List files with details |
 | `..` | ⬆️ Jump to parent directory |

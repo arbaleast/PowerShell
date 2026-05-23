@@ -7,11 +7,15 @@
 
     FunctionsToExport = @(
         'Initialize-Environment'
-        'Show-UserScoopLogo'
         'Start-TmuxSession'
         'Start-WaterReminder'
         'Get-WaterReminderHistory'
         'reload'
+        'Initialize-TUILogger'
+        'Initialize-TUIPerformance'
+        'Get-TUIPerformance'
+        'Show-TUIDebugOverlay'
+        'Test-TUIDebugMode'
     )
 
     CmdletsToExport   = @()

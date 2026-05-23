@@ -4,8 +4,7 @@
 
 $Global:LastSshHost = ""
 
-function Get-TmuxSessions
-{
+function Get-TmuxSessions {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
@@ -16,27 +15,23 @@ function Get-TmuxSessions
     )
 
     $output = ssh -o "ConnectTimeout=$ConnectTimeout" $HostName "tmux ls" 2>$null | Out-String
-    $sessionList = @()
-
-    foreach ($line in ($output -split "`n"))
-    {
-        if ($line -match '^[^:]+:')
-        {
+    $sessionList = New-Object System.Collections.ArrayList
+    foreach ($line in ($output -split "`n")) {
+        if ($line -match '^[^:]+:') {
             $name = ($line -split ':')[0].Trim()
-            $status = if ($line -match "attached")
-            { "已挂载" 
-            } else
-            { "后台中" 
+            $status = if ($line -match "attached") {
+                "已挂载" 
+            } else {
+                "后台中" 
             }
-            $sessionList += @{ Name = $name; Status = $status }
+            $sessionList.Add([PSCustomObject]@{ Name = $name; Status = $status }) | Out-Null
         }
     }
 
     return @{ Sessions = $sessionList; RawOutput = $output }
 }
 
-function Test-TmuxAvailable
-{
+function Test-TmuxAvailable {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
