@@ -99,7 +99,9 @@ function Start-TmuxSession {
                 }
                 $subResult = Invoke-SessionSelector -Sessions $data.Sessions -HostName $HostName -ConnectTimeout $timeout
                 if ($subResult -and $subResult.Type -eq "ssh") {
-                    Write-Host "`n[SSH] 连接中..`n" -ForegroundColor DarkCyan
+                    # 清空菜单，在底部显示连接提示
+                    [Console]::Write("`e[2J`e[H`e[0m")
+                    Write-Host "[SSH] 连接中..`n" -ForegroundColor DarkCyan
                     & ssh.exe $subResult.Args $subResult.Command
 
                     # SSH 连接结束后，完整重置终端状态（解决光标错位、清屏失效等问题）
@@ -113,7 +115,9 @@ function Start-TmuxSession {
         }
 
         if ($cmd) {
-            Write-Host "`n[SSH] 连接中..`n" -ForegroundColor DarkCyan
+            # 清空菜单，在底部显示连接提示
+            [Console]::Write("`e[2J`e[H`e[0m")
+            Write-Host "[SSH] 连接中..`n" -ForegroundColor DarkCyan
             $sshArgs = @("-o", "ConnectTimeout=$timeout", "-tt", $HostName, $cmd)
             & ssh.exe @sshArgs
             $sshExitCode = $LASTEXITCODE
@@ -138,7 +142,9 @@ function Start-TmuxSession {
             }
         } elseif ($fallbackSsh) {
             # 远程无 tmux，直接 SSH 登录
-            Write-Host "`n[SSH] 远程无 tmux，直接连接中..`n" -ForegroundColor DarkCyan
+            # 清空菜单，在底部显示连接提示
+            [Console]::Write("`e[2J`e[H`e[0m")
+            Write-Host "[SSH] 远程无 tmux，直接连接中..`n" -ForegroundColor DarkCyan
             $sshArgs = @("-o", "ConnectTimeout=$timeout", "-tt", $HostName)
             & ssh.exe @sshArgs
             $sshExitCode = $LASTEXITCODE
