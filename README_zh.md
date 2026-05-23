@@ -54,6 +54,17 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
   up/down navigate + Enter confirm + Q quit
 ```
 
+**新建会话输入：**
+
+```
+  +--< arbaleast@G7 >--[ PowerShell ]--[ REMOTE TMUX | myhost ]
+  |
+  |  +
+  |  -- create a new named session
+  > session name (Enter = random):
+  +------------------------------------------
+```
+
 ---
 
 ## ✨ 功能特点

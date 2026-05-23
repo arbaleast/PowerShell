@@ -58,6 +58,17 @@ Below is a sample terminal preview showing the prompt and remote tmux session me
   up/down navigate + Enter confirm + Q quit
 ```
 
+**New session input:**
+
+```
+  +--< arbaleast@G7 >--[ PowerShell ]--[ REMOTE TMUX | myhost ]
+  |
+  |  +
+  |  -- create a new named session
+  > session name (Enter = random):
+  +------------------------------------------
+```
+
 ---
 
 ## ✨ Features
