@@ -17,6 +17,18 @@ Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -Filter '*.ps1' -ErrorAction Si
     . $_.FullName
 }
 
+# 4. 注册 SSH Config 别名到 PowerShell 命令补全
+$sshHosts = Get-SshConfigHosts
+if ($sshHosts.Count -gt 0) {
+    Register-ArgumentCompleter -CommandName 'Start-TmuxSession' -ParameterName 'HostName' -ScriptBlock {
+        param($wordToComplete, $commandAst, $cursorPosition)
+        $global:sshConfigHosts = Get-SshConfigHosts
+        $global:sshConfigHosts | Where-Object { $_ -like "*$wordToComplete*" } | ForEach-Object {
+            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        }
+    }
+}
+
 # 4. 别名
 Set-Alias ll Get-ChildItem -ErrorAction SilentlyContinue
 Set-Alias which where.exe -ErrorAction SilentlyContinue

@@ -8,8 +8,6 @@
     FunctionsToExport = @(
         'Initialize-Environment'
         'Start-TmuxSession'
-        'Start-WaterReminder'
-        'Get-WaterReminderHistory'
         'reload'
         'Initialize-TUILogger'
         'Initialize-TUIPerformance'
