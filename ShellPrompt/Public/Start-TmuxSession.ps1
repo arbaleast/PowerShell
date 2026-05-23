@@ -77,7 +77,10 @@ function Start-TmuxSession {
                 }
             }
             "NEW" {
-                $name = Read-Host "`n > session name (Enter = random)"
+                # 清除菜单，清空描述区域准备输入
+                [Console]::Write("`e[2J`e[H`e[0m")
+                Write-Host "" 
+                $name = Read-Host "session name (Enter = random)"
                 if ([string]::IsNullOrWhiteSpace($name)) {
                     $name = "G7-$(Get-Random -Min 1000 -Max 9999)"
                 } elseif ($name -match '[\s''"\\`]') {

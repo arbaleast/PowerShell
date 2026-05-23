@@ -61,12 +61,7 @@ Below is a sample terminal preview showing the prompt and remote tmux session me
 **New session input:**
 
 ```
-  +--< arbaleast@G7 >--[ PowerShell ]--[ REMOTE TMUX | myhost ]
-  |
-  |  +
-  |  -- create a new named session
-  > session name (Enter = random):
-  +------------------------------------------
+  session name (Enter = random):
 ```
 
 ---
