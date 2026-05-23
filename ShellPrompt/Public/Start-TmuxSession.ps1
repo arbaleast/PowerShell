@@ -1,168 +1,281 @@
-# ============================================================
-# Start-TmuxSession.ps1 — 远程 tmux 会话管理器（主入口）
+﻿# ============================================================
+# Start-TmuxSession.ps1 - 远程 Tmux 会话管理器
+# 功能: 主机选择 -> tmux 检测 -> 会话管理 -> SSH 连接
+# 安全: 使用 Invoke-SshCommand + ConvertTo-SshEscapedString 防止命令注入
+# 关键: 使用 Start-Process -NoNewWindow -Wait ssh.exe 解决 PTY 问题
 # ============================================================
 
 function Start-TmuxSession {
     [CmdletBinding()]
     param(
         [Parameter(Position = 0)]
+        [ValidateNotNullOrEmpty()]
         [string]$HostName
     )
 
+    # ========================================
+    # 内部验证：检查 HostName 是否包含 Shell 注入字符（允许空格和中文）
+    # ========================================
+    if ($HostName -match '[\t\n|&;`$(){}<>#@!*?\[\]~"]') {
+        throw "主机名 [$HostName] 包含非法字符，仅允许字母、数字、空格、点、短横线和下划线"
+    }
+
+    # ========================================
+    # Phase 1: 主机选择（SSH 配置主机列表）
+    # ========================================
+
     if (-not $HostName) {
-        $HostName = $Global:LastSshHost
-    }
-    if (-not $HostName) {
-        Write-Host " [!] 缺少主机名" -ForegroundColor Red
-        return
-    }
-
-    $Global:LastSshHost = $HostName
-    $timeout = $global:UserScoop_CONF.SSH.ConnectTimeout
-    $defaultSession = $global:UserScoop_CONF.Tmux.DefaultSessionName
-
-    if (-not (Get-Command ssh.exe -ErrorAction SilentlyContinue)) {
-        Write-Host " [!] ssh.exe 未找到，请确保 OpenSSH 已安装并在 PATH 中" -ForegroundColor Red
-        return
-    }
-
-    # 精简选项，每项带描述
-    $menuOptions = @(
-        @{ Label = "RESUME"; Desc = "attach to '$defaultSession', create if missing" }
-        @{ Label = "ATTACH"; Desc = "attach only, never create" }
-        @{ Label = "NEW"; Desc = "create a new named session" }
-        @{ Label = "LIST"; Desc = "pick from active sessions on host" }
-        @{ Label = "KILL"; Desc = "terminate ALL tmux sessions on host" }
-    )
-
-    while ($true) {
-        # 每次循环开始时重置终端状态，防止远程断开后的残留问题
-        Clear-Host
-        if (Get-Command Show-UserScoopLogo -ErrorAction SilentlyContinue) {
-            Show-UserScoopLogo
+        $hosts = Get-SshConfigHosts
+        if ($hosts.Count -eq 0) {
+            Write-Host "`n [!] SSH 配置中未找到任何主机" -ForegroundColor Red
+            Write-Host "     请先在 ~/.ssh/config 中配置主机" -ForegroundColor DarkGray
+            return
         }
 
-        $selection = Invoke-ConsoleMenu `
-            -Title "REMOTE TMUX | $HostName" `
-            -Options $menuOptions `
-            -ExitLabel "EXIT"
+        # 将上次使用的主机置顶
+        if ($Global:LastSshHost -and ($hosts -contains $Global:LastSshHost)) {
+            $hosts = @($Global:LastSshHost) + ($hosts | Where-Object { $_ -ne $Global:LastSshHost })
+        }
 
-        if ($null -eq $selection) {
-            # 退出时清除菜单残留内容，确保终端回到干净状态
+        # 构建主机选择菜单
+        $hostOptions = $hosts | ForEach-Object {
+            $desc = "SSH 远程主机"
+            if ($Global:LastSshHost -and $_ -eq $Global:LastSshHost) {
+                $desc = "上次使用的主机"
+            }
+            @{ Label = $_; Desc = $desc }
+        }
+
+        # 显示主机选择菜单
+        $selected = Invoke-ConsoleMenu -Title "SSH 主机选择器" -Options $hostOptions -ExitLabel "退出"
+        if ($null -eq $selected) {
             Clear-Host
             return
         }
 
-        $label = $selection.Label
-        $cmd = $null
-        $fallbackSsh = $false
+        $HostName = $selected.Label
+    }
 
-        switch ($label) {
-            "RESUME" {
-                # 检查远程是否有 tmux
-                if (Test-TmuxAvailable -HostName $HostName -ConnectTimeout $timeout) {
-                    $cmd = "tmux attach -t $defaultSession 2>/dev/null || tmux new -s $defaultSession"
-                } else {
-                    # 无 tmux fallback：直接 SSH 登录
-                    $cmd = $null
-                    $fallbackSsh = $true
-                }
-            }
-            "ATTACH" {
-                if (Test-TmuxAvailable -HostName $HostName -ConnectTimeout $timeout) {
-                    $cmd = 'if tmux has-session -t ' + $defaultSession + ' >/dev/null 2>&1; then tmux attach -t ' + $defaultSession + '; else echo ''tmux session "' + $defaultSession + '" not found'' >&2; exit 1; fi'
-                } else {
-                    $cmd = $null
-                    $fallbackSsh = $true
-                }
-            }
-            "NEW" {
-                # 清除菜单，清空描述区域准备输入
-                [Console]::Write("`e[2J`e[H`e[0m")
-                Write-Host "" 
-                $name = Read-Host "session name (Enter = random)"
-                if ([string]::IsNullOrWhiteSpace($name)) {
-                    $name = "G7-$(Get-Random -Min 1000 -Max 9999)"
-                } elseif ($name -match '[\s''"\\`]') {
-                    Write-Host " [错误] 会话名不能包含空格、引号、反引号或反斜杠" -ForegroundColor Red
-                    Start-Sleep -Seconds 1
-                    continue
-                }
-                $cmd = "tmux new -d -s '$name' && tmux attach -t '$name'"
-            }
-            "LIST" {
-                $data = Get-TmuxSessions -HostName $HostName -ConnectTimeout $timeout
-                if ($data.Sessions.Count -eq 0) {
-                    Write-Host "`n [!] 无活跃会话" -ForegroundColor Yellow
-                    Start-Sleep -Seconds 1
-                    continue
-                }
-                $subResult = Invoke-SessionSelector -Sessions $data.Sessions -HostName $HostName -ConnectTimeout $timeout
-                if ($subResult -and $subResult.Type -eq "ssh") {
-                    # 清空菜单，在底部显示连接提示
-                    Clear-Host
-                    Write-Host "`n`n`n[SSH] 连接中..`n" -ForegroundColor DarkCyan
-                    & ssh.exe $subResult.Args $subResult.Command
+    # 记录上次使用的主机
+    $Global:LastSshHost = $HostName
 
-                    # SSH 连接结束后，完整重置终端状态（解决光标错位、清屏失效等问题）
-                    [Console]::Write("`e[2J`e[H`e[0m`e[?25h`e[?3l`e[!p")
-                }
-                continue
-            }
-            "KILL" {
-                $cmd = "tmux kill-server"
-            }
+    # ========================================
+    # 无条件生成随机会话名（始终为 tmux 会话使用随机名称）
+    # ========================================
+    # 生成 tmux-<6位数字> 格式的随机会话名
+    $randomSessionName = "tmux-$(Get-Random -Minimum 100000 -Maximum 999999)"
+
+    Write-Host "`n [SSH] 目标主机: $HostName" -ForegroundColor Cyan
+
+    # ========================================
+    # Phase 2: 检测远程 tmux 是否可用
+    # ========================================
+
+    Write-Host " [..] 正在检测远程 tmux..." -ForegroundColor DarkGray
+    $hasTmux = Test-TmuxAvailable -HostName $HostName
+
+    if (-not $hasTmux) {
+        Write-Host " [!!] 远程主机 $HostName 未安装 tmux" -ForegroundColor Yellow
+        Write-Host " [SSH] 直接连接..." -ForegroundColor Green
+        # 直接 SSH 登录，不需要远程命令
+        Invoke-SshCommand -HostName $HostName -Interactive
+        Write-Host "`n [OK] SSH 连接已关闭，回到本地 PowerShell" -ForegroundColor Cyan
+        return
+    }
+
+    Write-Host " [OK] 远程 tmux 可用" -ForegroundColor Green
+
+    # ========================================
+    # Phase 3: 获取远程 tmux 会话列表
+    # ========================================
+
+    $sessionData = Get-TmuxSessions -HostName $HostName
+    $sessions = $sessionData.Sessions
+
+    # 无会话时自动创建随机会话并附着（使用随机名，避免名称冲突）
+    if ($sessions.Count -eq 0) {
+        Write-Host " [TMUX] $HostName 上无现有会话" -ForegroundColor Yellow
+        $defaultSession = $randomSessionName
+        Write-Host " [TMUX] 自动创建默认会话 '$defaultSession' ..." -ForegroundColor Green
+        # 会话名是内部生成的随机字符串或常量，无需转义
+        Invoke-SshCommand -HostName $HostName -Interactive -RemoteCommand "tmux new-session -A -s $defaultSession 2>/dev/null || exec bash"
+        Write-Host "`n [OK] tmux 会话已关闭，回到本地 PowerShell" -ForegroundColor Cyan
+        return
+    }
+
+    # ========================================
+    # Phase 4: 会话管理菜单循环
+    # ========================================
+
+    while ($true) {
+        # 每次循环刷新会话列表
+        $sessionData = Get-TmuxSessions -HostName $HostName
+        $sessions = $sessionData.Sessions
+
+        # 会话摘要信息
+        $attachedCount = ($sessions | Where-Object { $_.Status -eq "attached" }).Count
+        $detachedCount = ($sessions | Where-Object { $_.Status -eq "detached" }).Count
+        $sessionSummary = "会话: $($sessions.Count) 个 (已附着=$attachedCount 已分离=$detachedCount)"
+
+        # 操作菜单项
+        $actionOptions = @(
+            @{ Label = "附着/恢复 tmux 会话"; Desc = "选择并附着到远程 tmux 会话" }
+            @{ Label = "创建新 tmux 会话"; Desc = "在远程主机上创建新的 tmux 会话" }
+            @{ Label = "删除 tmux 会话"; Desc = "删除远程主机上的 tmux 会话" }
+            @{ Label = "直接 SSH 登录"; Desc = "不使用 tmux，直接 SSH 登录" }
+            @{ Label = "刷新会话列表"; Desc = "重新获取远程 tmux 会话状态" }
+        )
+
+        # 显示管理菜单
+        $action = Invoke-ConsoleMenu -Title "TMUX 管理器 [$HostName] | $sessionSummary" -Options $actionOptions -ExitLabel "断开连接"
+
+        # 用户选择断开连接
+        if ($null -eq $action) {
+            Clear-Host
+            Write-Host " [OK] 已从 $HostName 断开连接" -ForegroundColor Cyan
+            return
         }
 
-        if ($cmd) {
-            # 清空菜单，在底部显示连接提示
-            Clear-Host
-            Write-Host "`n`n`n[SSH] 连接中..`n" -ForegroundColor DarkCyan
-            $sshArgs = @("-o", "ConnectTimeout=$timeout", "-tt", $HostName, $cmd)
-            & ssh.exe @sshArgs
-            $sshExitCode = $LASTEXITCODE
+        # 根据选择执行操作
+        switch ($action.Label) {
 
-            # SSH 连接结束（包括远程断开）后，完整重置终端状态
-            # 解决：卡死、光标错位、清屏失效等远程断开后的遗留问题
-            [Console]::Write("`e[2J`e[H`e[0m`e[?25h`e[?3l`e[!p")
-
-            if ($sshExitCode -ne 0) {
-                if ($sshExitCode -eq 255) {
-                    Write-Host " [!] SSH 连接失败，请检查主机名、网络和 OpenSSH 配置" -ForegroundColor Yellow
-                } else {
-                    Write-Host " [!] SSH / tmux 命令执行失败，退出码: $sshExitCode" -ForegroundColor Yellow
+            # --------------------------------------------------
+            # 操作 1: 附着/恢复 tmux 会话
+            # --------------------------------------------------
+            "附着/恢复 tmux 会话" {
+                if ($sessions.Count -eq 0) {
+                    Write-Host " [!] 没有可用的 tmux 会话" -ForegroundColor Yellow
+                    continue
                 }
-                Start-Sleep -Seconds 1
-            }
 
-            # 短暂延迟后清空输入缓冲区，确保远程断开时的残留按键不会影响下次菜单
-            Start-Sleep -Milliseconds 200
-            if ($Host.UI.RawUI.KeyAvailable) {
-                $Host.UI.RawUI.FlushInputBuffer()
-            }
-        } elseif ($fallbackSsh) {
-            # 远程无 tmux，直接 SSH 登录
-            # 清空菜单，在底部显示连接提示
-            Clear-Host
-            Write-Host "`n`n`n[SSH] 远程无 tmux，直接连接中..`n" -ForegroundColor DarkCyan
-            $sshArgs = @("-o", "ConnectTimeout=$timeout", "-tt", $HostName)
-            & ssh.exe @sshArgs
-            $sshExitCode = $LASTEXITCODE
-
-            [Console]::Write("`e[2J`e[H`e[0m`e[?25h`e[?3l`e[!p")
-
-            if ($sshExitCode -ne 0) {
-                if ($sshExitCode -eq 255) {
-                    Write-Host " [!] SSH 连接失败，请检查主机名、网络和 OpenSSH 配置" -ForegroundColor Yellow
-                } else {
-                    Write-Host " [!] SSH 连接失败，退出码: $sshExitCode" -ForegroundColor Yellow
+                # 构建会话选择菜单（带状态图标和原始名称）
+                $sessionOptions = $sessions | ForEach-Object {
+                    $icon = if ($_.Status -eq "attached") { "[A]" } else { "[D]" }
+                    @{
+                        # 显示标签：图标 + 名称（用于显示）
+                        Label   = "$icon $($_.Name)"
+                        # 原始名称（用于命令构建，避免正则提取歧义）
+                        RawName = $_.Name
+                        Desc    = "状态: $($_.Status)"
+                    }
                 }
-                Start-Sleep -Seconds 1
+
+                $selected = Invoke-ConsoleMenu -Title "TMUX 会话列表 [$HostName]" -Options $sessionOptions -ExitLabel "返回"
+                if ($null -eq $selected) { continue }
+
+                # 使用 RawName 获取纯会话名称（避免从 Label 中正则提取的歧义问题）
+                $sessionName = $selected.RawName
+
+                Write-Host " [TMUX] 正在连接到会话 '$sessionName' ..." -ForegroundColor Green
+                # 安全：使用 ConvertTo-SshEscapedString 转义 $sessionName，防止命令注入
+                $escapedName = ConvertTo-SshEscapedString $sessionName
+                Invoke-SshCommand -HostName $HostName -Interactive -RemoteCommand "tmux attach -d -t $escapedName 2>/dev/null || tmux new-session -A -s $escapedName"
+                Write-Host "`n [OK] tmux 会话已分离，回到管理菜单" -ForegroundColor Cyan
             }
 
-            Start-Sleep -Milliseconds 200
-            if ($Host.UI.RawUI.KeyAvailable) {
-                $Host.UI.RawUI.FlushInputBuffer()
+            # --------------------------------------------------
+            # 操作 2: 创建新 tmux 会话
+            # --------------------------------------------------
+            "创建新 tmux 会话" {
+                # 在菜单框内部绘制输入区域，避免显示错位
+                # Invoke-ConsoleMenu 布局：1空行 + 3行header + N选项 + 1EXIT + 2分隔 + 1描述 + 1| + 1底边 + 2底部空行
+                # 描述行的 ANSI 行号 = 8 + 选项数
+                $optCount = $actionOptions.Count
+                $descRow = 8 + $optCount  # 描述行在框内的 ANSI 行号（1-based）
+                $inputRow = $descRow + 1   # 输入行在描述行下方
+
+                # 获取菜单颜色配置，保持视觉效果一致
+                $rst = "`e[0m"
+                $cp = $global:UserScoop_CONF.Colors.FreshGreen
+                $cm = $global:UserScoop_CONF.Colors.MidGray
+                $ca = $global:UserScoop_CONF.Colors.SageGreen
+
+                # 清空从描述行到菜单底部的区域，准备绘制输入界面
+                $clearEndRow = $descRow + 6
+                for ($r = $descRow; $r -le $clearEndRow; $r++) {
+                    [Console]::Write("`e[${r};1H`e[K")
+                }
+
+                # 始终提示使用随机名称
+                $defaultHint = "直接回车使用随机名称"
+
+                # 在框内绘制输入提示行（保持菜单边框样式）
+                [Console]::Write("`e[$($descRow);1H  ${cp}|${rst}  ${cm}-- 输入会话名称（${defaultHint}）${rst}")
+
+                # 绘制输入行（使用 > 符号作为输入指示符）
+                [Console]::Write("`e[$($inputRow);1H  ${cp}|${rst}  ${ca}>${rst} ")
+
+                # 定位光标到输入位置（CursorTop 是 0-based，需 ANSI 行号减 1）
+                [Console]::CursorTop = $inputRow - 1
+                [Console]::CursorLeft = 7
+
+                # 使用 [Console]::ReadLine() 而非 Read-Host，避免额外输出破坏边框布局
+                try {
+                    $newName = [Console]::ReadLine()
+                } catch {
+                    # Ctrl+C 或中断时使用默认名称
+                    $newName = $null
+                }
+
+                # 处理空输入：始终使用随机名称
+                if ([string]::IsNullOrWhiteSpace($newName)) {
+                    $newName = $randomSessionName
+                }
+
+                # 输出操作状态（覆盖残留的菜单框区域，避免视觉混乱）
+                # 先定位光标到输入行下方，再用 Write-Host 输出
+                [Console]::Write("`e[$($inputRow + 1);1H`e[K")
+                [Console]::Write("`e[$($inputRow + 2);1H`e[K")
+                [Console]::Write("`e[$($inputRow + 1);1H")
+                Write-Host " [TMUX] 正在创建并连接到会话 '$newName' ..." -ForegroundColor Green
+                # 安全：使用 ConvertTo-SshEscapedString 转义 $newName，防止命令注入
+                $escapedName = ConvertTo-SshEscapedString $newName
+                Invoke-SshCommand -HostName $HostName -Interactive -RemoteCommand "tmux new-session -A -s $escapedName 2>/dev/null || exec bash"
+                Write-Host "`n [OK] tmux 会话已分离，回到管理菜单" -ForegroundColor Cyan
+            }
+
+            # --------------------------------------------------
+            # 操作 3: 删除 tmux 会话
+            # --------------------------------------------------
+            "删除 tmux 会话" {
+                if ($sessions.Count -eq 0) {
+                    Write-Host " [!] 没有可删除的会话" -ForegroundColor Yellow
+                    continue
+                }
+
+                # 构建删除选择菜单
+                $killOptions = $sessions | ForEach-Object {
+                    @{ Label = "$($_.Name)"; Desc = "状态: $($_.Status)" }
+                }
+
+                $selected = Invoke-ConsoleMenu -Title "删除 TMUX 会话 [$HostName]" -Options $killOptions -ExitLabel "取消"
+                if ($null -eq $selected) { continue }
+
+                # 执行删除（同步 SSH，不需要 Start-Process）
+                Write-Host " [..] 正在删除会话 '$($selected.Label)' ..." -ForegroundColor DarkGray
+                # 安全：使用 ConvertTo-SshEscapedString 转义 $selected.Label，防止命令注入
+                # 删除操作不需要交互式 PTY，使用非交互模式
+                $escapedLabel = ConvertTo-SshEscapedString $selected.Label
+                Invoke-SshCommand -HostName $HostName -RemoteCommand "tmux kill-session -t $escapedLabel"
+                Write-Host " [OK] 会话 '$($selected.Label)' 已删除" -ForegroundColor Green
+            }
+
+            # --------------------------------------------------
+            # 操作 4: 直接 SSH 登录
+            # --------------------------------------------------
+            "直接 SSH 登录" {
+                Write-Host " [SSH] 直接连接..." -ForegroundColor Green
+                # 直接 SSH 登录，不需要远程命令
+                Invoke-SshCommand -HostName $HostName -Interactive
+                Write-Host "`n [OK] SSH 连接已关闭，回到管理菜单" -ForegroundColor Cyan
+            }
+
+            # --------------------------------------------------
+            # 操作 5: 刷新会话列表
+            # --------------------------------------------------
+            "刷新会话列表" {
+                Write-Host " [..] 正在刷新会话列表..." -ForegroundColor DarkGray
+                # 下次循环迭代时会自动重新获取
             }
         }
     }

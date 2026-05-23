@@ -23,18 +23,18 @@ class TUILogEntry {
     [string] ToString() {
         $levelStr = $this.Level.ToString().ToUpper().PadRight(7)
         $fieldStr = ""
-        
+
         if ($this.Fields -and $this.Fields.Count -gt 0) {
-            $fieldStr = " | " + ($this.Fields.GetEnumerator() | ForEach-Object { 
-                    "$($_.Key)=$($_.Value)" 
+            $fieldStr = " | " + ($this.Fields.GetEnumerator() | ForEach-Object {
+                    "$($_.Key)=$($_.Value)"
                 }) -join " "
         }
-        
+
         $sourceStr = ""
         if ($this.Source) {
             $sourceStr = " [$($this.Source)]"
         }
-        
+
         $timeStr = $this.Time.ToString('HH:mm:ss.fff')
         return "[$timeStr] $levelStr$sourceStr $($this.Message)$fieldStr"
     }
@@ -49,30 +49,30 @@ class TUILogger {
     [string]$LogFilePath
     [int]$MaxFileSizeMb = 10
     [int]$MaxBackupFiles = 3
-    
+
     TUILogger() {
         $this.MinLevel = [TUILogLevel]::Warning
         $this.EnableConsole = $true
         $this.EnableFile = $false
     }
-    
+
     TUILogger([TUILogLevel]$level, [string]$logFile) {
         $this.MinLevel = $level
         $this.EnableConsole = $true
-        
+
         if ($logFile) {
             $this.LogFilePath = $logFile
             $this.EnableFile = $this.InitFileWriter($logFile)
         }
     }
-    
+
     [bool] InitFileWriter([string]$logFile) {
         try {
             $logDir = Split-Path $logFile -Parent
             if (-not (Test-Path $logDir)) {
                 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
             }
-            
+
             $this.FileWriter = [System.IO.StreamWriter]::new($logFile, $true)
             $this.FileWriter.AutoFlush = $true
             return $true
@@ -81,18 +81,18 @@ class TUILogger {
             return $false
         }
     }
-    
+
     [void] Log([TUILogLevel]$level, [string]$message) {
         $this.Log($level, $message, $null, $null)
     }
-    
+
     [void] Log([TUILogLevel]$level, [string]$message, [string]$source) {
         $this.Log($level, $message, $null, $source)
     }
-    
+
     [void] Log([TUILogLevel]$level, [string]$message, [hashtable]$fields, [string]$source) {
         if ($level -lt $this.MinLevel) { return }
-        
+
         $entry = [TUILogEntry]@{
             Time    = [DateTime]::UtcNow
             Level   = $level
@@ -100,9 +100,9 @@ class TUILogger {
             Fields  = $fields
             Source  = $source
         }
-        
+
         $output = $entry.ToString()
-        
+
         # 控制台输出（带颜色）
         if ($this.EnableConsole) {
             $color = switch ($level) {
@@ -114,7 +114,7 @@ class TUILogger {
             }
             Write-Host $output -ForegroundColor $color
         }
-        
+
         # 文件输出
         if ($this.EnableFile -and $this.FileWriter) {
             # 检查文件大小，执行滚动
@@ -122,15 +122,15 @@ class TUILogger {
             $this.FileWriter.WriteLine($output)
         }
     }
-    
+
     [void] RotateIfNeeded() {
         if (-not $this.LogFilePath -or -not (Test-Path $this.LogFilePath)) { return }
-        
+
         try {
             $fileInfo = Get-Item $this.LogFilePath -ErrorAction SilentlyContinue
             if ($fileInfo -and $fileInfo.Length -gt ($this.MaxFileSizeMb * 1MB)) {
                 $this.FileWriter.Close()
-                
+
                 # 滚动备份文件
                 for ($i = $this.MaxBackupFiles; $i -gt 1; $i--) {
                     $oldFile = "$($this.LogFilePath).$($i - 1)"
@@ -139,10 +139,10 @@ class TUILogger {
                         Move-Item -Path $oldFile -Destination $newFile -Force
                     }
                 }
-                
+
                 # 当前日志文件变成 .1
                 Move-Item -Path $this.LogFilePath -Destination "$($this.LogFilePath).1" -Force
-                
+
                 # 重新打开
                 $this.FileWriter = [System.IO.StreamWriter]::new($this.LogFilePath, $true)
                 $this.FileWriter.AutoFlush = $true
@@ -151,32 +151,32 @@ class TUILogger {
             # 忽略滚动错误
         }
     }
-    
+
     # 便捷方法
     [void] Trace([string]$message) {
         $this.Log([TUILogLevel]::Trace, $message, $null, $this.GetCaller())
     }
-    
+
     [void] Debug([string]$message) {
         $this.Log([TUILogLevel]::Debug, $message, $null, $this.GetCaller())
     }
-    
+
     [void] Info([string]$message) {
         $this.Log([TUILogLevel]::Info, $message, $null, $this.GetCaller())
     }
-    
+
     [void] Warning([string]$message) {
         $this.Log([TUILogLevel]::Warning, $message, $null, $this.GetCaller())
     }
-    
+
     [void] Error([string]$message) {
         $this.Log([TUILogLevel]::Error, $message, $null, $this.GetCaller())
     }
-    
+
     [void] Error([string]$message, [hashtable]$fields) {
         $this.Log([TUILogLevel]::Error, $message, $fields, $this.GetCaller())
     }
-    
+
     # 获取调用者信息
     hidden [string] GetCaller() {
         $caller = (Get-PSCallStack)[2]
@@ -186,7 +186,7 @@ class TUILogger {
         }
         return $null
     }
-    
+
     [void] Dispose() {
         if ($this.FileWriter) {
             $this.FileWriter.Close()
@@ -203,11 +203,11 @@ function Initialize-TUILogger {
     <#
     .SYNOPSIS
     初始化 TUI 日志记录器
-    
+
     .DESCRIPTION
     根据 DEBUG 环境变量和配置初始化日志系统
     #>
-    
+
     # 读取配置中的日志路径
     $logPath = $null
     if ($global:UserScoop_CONF -and $global:UserScoop_CONF.LogPath) {
@@ -220,25 +220,25 @@ function Initialize-TUILogger {
         }
         $logPath = Join-Path $logDir "shellprompt.log"
     }
-    
+
     # 确定日志级别
     $logLevel = [TUILogLevel]::Warning
-    
+
     if ($env:DEBUG -eq "1" -or $env:DEBUG -eq "true") {
         $logLevel = [TUILogLevel]::Debug
     }
     if ($env:DEBUG_TRACE -eq "1") {
         $logLevel = [TUILogLevel]::Trace
     }
-    
+
     # 创建日志记录器
     $Global:TUI_Logger = [TUILogger]::new($logLevel, $logPath)
-    
+
     # 如果启用了调试，输出一条启动日志
     if ($logLevel -ge [TUILogLevel]::Debug) {
         $Global:TUI_Logger.Info("TUI Logger initialized. Debug mode: $($env:DEBUG), LogLevel: $logLevel, LogFile: $logPath")
     }
-    
+
     return $Global:TUI_Logger
 }
 
@@ -251,15 +251,18 @@ function Write-TUILog {
     param(
         [Parameter(Mandatory = $true)]
         [TUILogLevel]$Level,
-        
+
         [Parameter(Mandatory = $true)]
         [string]$Message,
-        
+
         [hashtable]$Fields = $null,
-        
+
         [string]$Source = $null
     )
-    
+
+    # 仅在调试模式下写入日志，防止非调试模式下意外文件 I/O
+    if (-not $script:IsDebugMode) { return }
+
     if ($Global:TUI_Logger) {
         $Global:TUI_Logger.Log($Level, $Message, $Fields, $Source)
     }
@@ -273,5 +276,3 @@ function Test-TUIDebugMode {
     #>
     return ($env:DEBUG -eq "1" -or $env:DEBUG -eq "true")
 }
-
-# 便捷访问函数

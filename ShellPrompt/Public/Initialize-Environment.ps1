@@ -75,23 +75,21 @@ function Show-UserScoopLogo {
     $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 
     # Get system info
-    $hostname = $env:COMPUTERNAME ?? "local"
-    $userName = $env:USERNAME ?? "user"
+    $hostname = if ($env:COMPUTERNAME) { $env:COMPUTERNAME } else { "local" }
+    $userName = if ($env:USERNAME) { $env:USERNAME } else { "user" }
     $cwd = $PWD.Path.Split('\')[-1]
-    $hLine = "━" * 45
+    $hLine = "=" * 45
 
-    # ══════════════════════════════════════════════════════
-    # Hardcore terminal style header
-    # ══════════════════════════════════════════════════════
+    # Header
     Write-Host ""
-    Write-Host "  ${BorderColor}┌──〈 ${ColorMuted}${userName}@${hostname}${BorderColor} 〉━━[ ${ColorAccent}${cwd}${BorderColor} ]━━[ ${ColorPrimary}SHELL PROMPT${BorderColor} ]${rst}"
-    Write-Host "  ${BorderColor}│${rst}"
-    Write-Host "  ${BorderColor}│${rst}  ${BorderColor}┄${rst}"
-    Write-Host "  ${BorderColor}│${rst}  ${ColorPrimary}DONE${rst}  ${ColorPrimary}$quote${rst}"
-    Write-Host "  ${BorderColor}│${rst}  ${ColorMuted}$timestamp${rst}"
-    Write-Host "  ${BorderColor}│${rst}"
-    Write-Host "  ${BorderColor}│${rst}  ${BorderColor}┄${rst}"
-    Write-Host "  ${BorderColor}└${hLine}━━━ ○${rst}"
+    Write-Host "  $BorderColor--< $ColorMuted$userName@$hostname$BorderColor >--[ $ColorAccent$cwd$BorderColor ]--[ ${ColorPrimary}SHELL PROMPT$BorderColor ]$rst"
+    Write-Host "  $BorderColor|$rst"
+    Write-Host "  $BorderColor|$rst  $BorderColor~$rst"
+    Write-Host "  $BorderColor|$rst  ${ColorPrimary}DONE$rst  ${ColorPrimary}$quote$rst"
+    Write-Host "  $BorderColor|$rst  $ColorMuted$timestamp$rst"
+    Write-Host "  $BorderColor|$rst"
+    Write-Host "  $BorderColor|$rst  $BorderColor~$rst"
+    Write-Host "  $BorderColor+$hLine---$rst"
 
     Write-Host ""
 }

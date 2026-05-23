@@ -6,6 +6,18 @@
 # 加载配置
 $script:Config = & (Join-Path $PSScriptRoot 'config.ps1')
 
+# ============================================================
+# 模块级状态变量（在模块加载时初始化一次，避免每次检查注册表）
+# ============================================================
+
+# AppUserModelID - Windows Toast 通知的应用标识符
+$script:AppUserModelId = 'WaterReminder'
+
+# 通知系统状态标志
+$script:ToastInitialized = $false   # Toast 通知系统是否已完成初始化
+$script:BurntToastAvailable = $null # BurntToast 模块可用性缓存（$null=未检测）
+$script:AppIdRegistered = $false    # AppUserModelID 是否已注册
+
 function Get-Config {
     # 返回配置，支持路径变量展开
     $conf = $script:Config.Clone()
@@ -274,87 +286,251 @@ function Get-WaterStatus {
 }
 
 # ============================================================
-# 通知发送
+# AppUserModelID 注册（Windows Toast 通知必需）
 # ============================================================
-function Send-WaterNotification {
-    param(
-        [string]$Title = "💧 喝水提醒",
-        [string]$Body = "该喝水了！",
-        [int]$Interval = 60
-    )
-    
-    $conf = Get-Config
-    
-    # 方案 1: Windows Toast 通知
+
+<#
+.SYNOPSIS
+  注册 AppUserModelID 到 HKCU 注册表，使 Windows Toast 通知可用
+.DESCRIPTION
+  在模块加载时调用一次。将当前 $script:AppUserModelId 写入注册表，
+  并设置 DisplayName 和 IconUri。如果注册失败（如权限不足），
+  不会抛出终止异常，而是记录警告并返回 $false。
+#>
+function Register-AppUserModelID {
+    [CmdletBinding()]
+    param()
+
+    # 仅在 Windows 上执行
     if (-not $IsWindows) {
-        Write-WaterLog -Level 'WARN' -Message 'Toast notification not available on non-Windows'
+        Write-WaterLog -Level 'DEBUG' -Message "AppUserModelID 注册跳过: 非 Windows 平台"
         return $false
     }
-    
+
     try {
-        Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction Stop
-        $null = [Windows.UI.Notifications.ToastNotificationManager, Windows, ContentType = WindowsRuntime]
-        
-        $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent(
-            [Windows.UI.Notifications.ToastTemplateType]::ToastText02
-        )
-        $texts = $xml.GetElementsByTagName('text')
-        $texts.Item(0).AppendChild($xml.CreateTextNode($Title)) | Out-Null
-        $texts.Item(1).AppendChild($xml.CreateTextNode($Body)) | Out-Null
-        
-        $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
-        $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('PowerShellWaterReminder')
-        $notifier.Show($toast)
-        
-        Write-WaterLog -Level 'INFO' -Message "Toast 通知已发送: $Title"
-        return $true
-    } catch {
-        Write-WaterLog -Level 'WARN' -Message "Toast 通知失败: $($_.Exception.Message)"
-    }
-    
-    # 方案 2: WinForms NotifyIcon
-    if (-not [System.Environment]::UserInteractive) {
-        Write-WaterLog -Level 'WARN' -Message 'WinForms 通知跳过: 非交互会话'
-        return $false
-    }
-    
-    try {
-        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
-        Add-Type -AssemblyName System.Drawing -ErrorAction Stop
-        
-        $notify = New-Object System.Windows.Forms.NotifyIcon
-        $notify.Icon = [System.Drawing.SystemIcons]::Information
-        $notify.Visible = $true
-        $notify.ShowBalloonTip(5000, $Title, $Body, [System.Windows.Forms.ToolTipIcon]::Info)
-        
-        Start-Sleep -Seconds 6
-        $notify.Visible = $false
-        $notify.Dispose()
-        
-        Write-WaterLog -Level 'INFO' -Message "WinForms 通知已发送: $Title"
-        return $true
-    } catch {
-        Write-WaterLog -Level 'WARN' -Message "WinForms 通知失败: $($_.Exception.Message)"
-    }
-    
-    # 方案 3: msg.exe 兜底
-    try {
-        $msgExe = Get-Command msg.exe -ErrorAction SilentlyContinue
-        if ($msgExe) {
-            # 移除 emoji 避免编码问题
-            $cleanTitle = $Title -replace '[^\x20-\x7E\u4e00-\u9fff]', ''
-            $cleanBody = $Body -replace '[^\x20-\x7E\u4e00-\u9fff]', ''
-            $message = "$cleanTitle`r`n$cleanBody`r`n下次提醒: $Interval 分钟后"
-            
-            Start-Process -FilePath msg.exe -ArgumentList "/TIME:5", $env:USERNAME, $message -WindowStyle Hidden -ErrorAction SilentlyContinue
-            Write-WaterLog -Level 'INFO' -Message "msg.exe 通知已发送: $Title"
+        # AppUserModelID 注册表路径
+        $regPath = "HKCU:\Software\Classes\AppUserModelId\$script:AppUserModelId"
+
+        # 检查是否已注册
+        if (Test-Path $regPath) {
+            Write-WaterLog -Level 'DEBUG' -Message "AppUserModelID 已注册: $script:AppUserModelId"
+            $script:AppIdRegistered = $true
             return $true
         }
+
+        # 创建注册表项
+        $null = New-Item -Path $regPath -Force -ErrorAction Stop
+
+        # 设置 DisplayName
+        $null = New-ItemProperty -Path $regPath -Name 'DisplayName' -PropertyType String `
+            -Value '饮水提醒' -Force -ErrorAction Stop
+
+        # 设置 IconUri（使用系统图标作为 fallback）
+        $iconUri = "%SystemRoot%\System32\notepad.exe,0"
+        $null = New-ItemProperty -Path $regPath -Name 'IconUri' -PropertyType String `
+            -Value $iconUri -Force -ErrorAction Stop
+
+        # 设置 ShowInSettings（在系统通知设置中可见）
+        $null = New-ItemProperty -Path $regPath -Name 'ShowInSettings' -PropertyType DWord `
+            -Value 1 -Force -ErrorAction SilentlyContinue
+
+        $script:AppIdRegistered = $true
+        Write-WaterLog -Level 'INFO' -Message "AppUserModelID 已注册: $script:AppUserModelId"
+        return $true
+
     } catch {
-        Write-WaterLog -Level 'ERROR' -Message "msg.exe 通知失败: $($_.Exception.Message)"
+        # 注册失败不抛出异常，通知会自动降级
+        Write-WaterLog -Level 'WARN' -Message "AppUserModelID 注册失败: $($_.Exception.Message)"
+        $script:AppIdRegistered = $false
+        return $false
     }
-    
+}
+
+# ============================================================
+# BurntToast 模块可用性检测
+# ============================================================
+
+<#
+.SYNOPSIS
+  检测 BurntToast PowerShell 模块是否已安装
+.DESCRIPTION
+  通过 Get-Module -ListAvailable 检查 BurntToast 模块是否存在。
+  结果缓存到 $script:BurntToastAvailable，避免每次通知都重复检查。
+#>
+function Test-BurntToastAvailable {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+
+    # 如果已缓存结果，直接返回
+    if ($null -ne $script:BurntToastAvailable) {
+        return $script:BurntToastAvailable
+    }
+
+    try {
+        $module = Get-Module -ListAvailable -Name 'BurntToast' -ErrorAction SilentlyContinue
+        $available = ($null -ne $module)
+        $script:BurntToastAvailable = $available
+        if (-not $available) {
+            Write-WaterLog -Level 'DEBUG' -Message "BurntToast 模块未安装，跳过 BurntToast 通知"
+        }
+        return $available
+    } catch {
+        $script:BurntToastAvailable = $false
+        return $false
+    }
+}
+
+# ============================================================
+# 通知发送（三级回退机制）
+# ============================================================
+
+<#
+.SYNOPSIS
+  发送喝水提醒通知，包含三级回退机制
+.DESCRIPTION
+  优先级:
+    1级 - BurntToast 通知（功能最丰富，需要安装 BurntToast 模块）
+    2级 - 原生 Windows Toast 通知（需要 AppUserModelID 注册）
+    3级 - 控制台彩色输出（最可靠的 fallback）
+  全部失败后落日志记录。
+#>
+function Send-WaterNotification {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Title = "💧 喝水提醒",
+
+        [Parameter(Mandatory = $false)]
+        [string]$Body = "该喝水了！",
+
+        [Parameter(Mandatory = $false)]
+        [int]$Interval = 60
+    )
+
+    $conf = Get-Config
+
+    # ---- 非 Windows 平台：直接降级到控制台输出 ----
+    if (-not $IsWindows) {
+        Write-WaterLog -Level 'WARN' -Message "Windows 通知在非 Windows 平台不可用，降级到控制台输出"
+        _Send-ConsoleNotification -Title $Title -Body $Body
+        return $false
+    }
+
+    # ============================================================
+    # 1级通知：BurntToast 通知（需要安装 BurntToast 模块）
+    # ============================================================
+    if (-not (Test-BurntToastAvailable)) {
+        Write-WaterLog -Level 'DEBUG' -Message "1级 BurntToast 跳过: 模块未安装。如需使用，请执行: Install-Module BurntToast"
+    } else {
+        try {
+            # BurntToast 模块已加载，直接发送通知
+            # New-BurntToastNotification 会自动处理 AppUserModelID
+            $null = Import-Module BurntToast -Force -ErrorAction Stop
+            New-BurntToastNotification -AppLogo $null `
+                -Text $Title, $Body `
+                -AppId $script:AppUserModelId `
+                -ErrorAction Stop | Out-Null
+
+            Write-WaterLog -Level 'INFO' -Message "1级 BurntToast 通知已发送: $Title"
+            return $true
+        } catch {
+            Write-WaterLog -Level 'WARN' -Message "1级 BurntToast 通知失败: $($_.Exception.Message)，降级到 2级"
+        }
+    }
+
+    # ============================================================
+    # 2级通知：原生 Windows Toast 通知（利用 Windows Runtime API）
+    # ============================================================
+    # 在首次发送前确保 AppUserModelID 已注册
+    if (-not $script:AppIdRegistered) {
+        Write-WaterLog -Level 'DEBUG' -Message "2级 Toast 前检查: AppUserModelID 未注册，尝试注册"
+        $null = Register-AppUserModelID
+    }
+
+    if ($script:AppIdRegistered) {
+        try {
+            # 加载 Windows Runtime 类型
+            Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction Stop
+            $null = [Windows.UI.Notifications.ToastNotificationManager, Windows, ContentType = WindowsRuntime]
+
+            # 创建 Toast XML 模板（ToastText02 = 标题 + 正文两行）
+            $xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent(
+                [Windows.UI.Notifications.ToastTemplateType]::ToastText02
+            )
+            $texts = $xml.GetElementsByTagName('text')
+            $texts.Item(0).AppendChild($xml.CreateTextNode($Title)) | Out-Null
+            $texts.Item(1).AppendChild($xml.CreateTextNode($Body)) | Out-Null
+
+            # 使用已注册的 AppUserModelID 创建通知器
+            $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+            $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($script:AppUserModelId)
+            $notifier.Show($toast)
+
+            Write-WaterLog -Level 'INFO' -Message "2级 Toast 通知已发送: $Title"
+            return $true
+        } catch {
+            Write-WaterLog -Level 'WARN' -Message "2级 Toast 通知失败: $($_.Exception.Message)，降级到 3级"
+        }
+    }
+
+    # ============================================================
+    # 3级通知：控制台彩色输出 + 弹窗提示
+    # ============================================================
+    try {
+        _Send-ConsoleNotification -Title $Title -Body $Body -Interval $Interval
+        Write-WaterLog -Level 'INFO' -Message "3级 控制台通知已发送: $Title"
+        return $true
+    } catch {
+        Write-WaterLog -Level 'ERROR' -Message "3级 控制台通知失败: $($_.Exception.Message)"
+    }
+
+    # ============================================================
+    # 全部失败：记录到日志
+    # ============================================================
+    Write-WaterLog -Level 'ERROR' -Message "全部通知方式均失败，仅记录日志: $Title - $Body"
     return $false
+}
+
+# ============================================================
+# 内部辅助函数：控制台通知
+# ============================================================
+function _Send-ConsoleNotification {
+    [CmdletBinding()]
+    param(
+        [string]$Title,
+        [string]$Body,
+        [int]$Interval = 0
+    )
+
+    # 彩色控制台输出
+    Write-Host ""
+    Write-Host "  ╔══════════════════════════════════════╗" -ForegroundColor Cyan
+    Write-Host "  ║        💧 喝水提醒                   ║" -ForegroundColor Cyan
+    Write-Host "  ╠══════════════════════════════════════╣" -ForegroundColor Cyan
+    Write-Host "  ║  $($Title.PadRight(35))║" -ForegroundColor White
+    Write-Host "  ║                                      ║" -ForegroundColor Cyan
+    Write-Host "  ║  $($Body.PadRight(35))║" -ForegroundColor Yellow
+    Write-Host "  ║                                      ║" -ForegroundColor Cyan
+    if ($Interval -gt 0) {
+        Write-Host "  ║  下次提醒: ${Interval} 分钟后           ║" -ForegroundColor DarkGray
+        Write-Host "  ║                                      ║" -ForegroundColor Cyan
+    }
+    Write-Host "  ╚══════════════════════════════════════╝" -ForegroundColor Cyan
+    Write-Host ""
+
+    # 尝试使用 MessageBox 弹窗（可能在非交互式会话失败）
+    try {
+        if ([System.Environment]::UserInteractive) {
+            Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+            $null = [System.Windows.Forms.MessageBox]::Show($Body, $Title,
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Information)
+        }
+    } catch {
+        # MessageBox 弹窗失败不影响主流程
+        Write-WaterLog -Level 'DEBUG' -Message "MessageBox 弹窗跳过: $($_.Exception.Message)"
+    }
 }
 
 # ============================================================
@@ -604,6 +780,27 @@ function Get-WaterReminderHistory {
     }
     
     Write-Host ""
+}
+
+# ============================================================
+# 模块初始化（仅在模块加载时执行一次）
+# ============================================================
+
+# 在模块加载时尝试注册 AppUserModelID，结果缓存到 $script:AppIdRegistered
+# 这样后续每次发送通知时不需要再检查注册表
+if ($IsWindows) {
+    $null = Register-AppUserModelID
+
+    # 检查 BurntToast 模块是否已安装（缓存结果）
+    $null = Test-BurntToastAvailable
+
+    # 输出初始化状态（仅在前台模式下显示）
+    if (-not $script:AppIdRegistered) {
+        Write-WaterLog -Level 'INFO' -Message "AppUserModelID 未注册，Toast 通知将自动降级到控制台输出"
+    }
+    if (-not $script:BurntToastAvailable) {
+        Write-WaterLog -Level 'DEBUG' -Message "BurntToast 模块未安装，如需更丰富的通知体验请执行: Install-Module BurntToast"
+    }
 }
 
 # ============================================================

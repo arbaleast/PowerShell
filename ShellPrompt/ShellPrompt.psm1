@@ -1,80 +1,68 @@
 # ============================================================
-# ShellPrompt.psm1 - 模块入口
+# ShellPrompt.psm1 - Module Entry Point
 # ============================================================
 
-# 1. 加载配置（最先加载，用户配置可能覆盖默认值）
+# Load configuration first
 . "$PSScriptRoot\Private\Initialize-Config.ps1"
 
-# 2. 加载所有私有函数（排除配置和按需加载的模块）
-# 优化：使用通配符一次性加载，避免逐个文件检查和循环开销
-# 注意：TUILogger.ps1 和 TUIPerformanceState.ps1 在首次访问时才加载
-Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -Filter '*.ps1' -ErrorAction SilentlyContinue | Where-Object { 
-    $_.Name -ne 'Initialize-Config.ps1' -and
-    $_.Name -ne 'TUILogger.ps1' -and
-    $_.Name -ne 'TUIPerformanceState.ps1'
+# 调试模式标志（影响 TUI 日志和性能监控行为）
+$script:IsDebugMode = ($env:DEBUG -eq "1" -or $env:DEBUG -eq "true" -or $env:DEBUG_TRACE -eq "1")
+
+# Load private functions（所有文件均已点引用加载，TUI 文件始终定义以便函数可用）
+Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" | Where-Object {
+    $_.Name -notin @('Initialize-Config.ps1')
 } | ForEach-Object {
-    . $_.FullName
+    try {
+        . $_.FullName
+    } catch {
+        Write-Warning "[ShellPrompt] 加载私有模块失败 $($_.Name): $($_.Exception.Message)"
+    }
 }
 
-# 3. 加载所有公有函数
-# 优化：使用通配符一次性加载，避免数组定义和循环开销
-Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -Filter '*.ps1' -ErrorAction SilentlyContinue | ForEach-Object {
-    . $_.FullName
+# Load public functions
+Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" | ForEach-Object {
+    try {
+        . $_.FullName
+    } catch {
+        Write-Warning "[ShellPrompt] 加载公共模块失败 $($_.Name): $($_.Exception.Message)"
+    }
 }
 
-# 4. 用户配置覆盖（延迟加载）
-# 用户可以在 ~/.ShellPrompt/config.ps1 中覆盖默认配置
-# 此文件在模块加载后执行，允许用户自定义所有配置项
+# User config override
 $userConfigPath = Join-Path $HOME ".ShellPrompt\config.ps1"
 if (Test-Path $userConfigPath) {
     try {
         . $userConfigPath
-        if ($Global:TUI_Logger) {
-            $Global:TUI_Logger.Info("用户配置已加载", @{ Path = $userConfigPath })
-        }
     } catch {
         Write-Host "[ShellPrompt] 用户配置加载失败: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 }
 
-# 5. 注册 SSH Config 别名到 PowerShell 命令补全
+# SSH Config 自动补全
 $sshHosts = Get-SshConfigHosts
 if ($sshHosts.Count -gt 0) {
     Register-ArgumentCompleter -CommandName 'Start-TmuxSession' -ParameterName 'HostName' -ScriptBlock {
         param($wordToComplete, $commandAst, $cursorPosition)
-        $global:sshConfigHosts = Get-SshConfigHosts
-        $global:sshConfigHosts | Where-Object { $_ -like "*$wordToComplete*" } | ForEach-Object {
+        # 使用局部变量，避免污染全局作用域
+        $hosts = Get-SshConfigHosts
+        $hosts | Where-Object { $_ -like "*$wordToComplete*" } | ForEach-Object {
             [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
         }
     }
 }
 
-# 6. 别名
-Set-Alias ll Get-ChildItem -ErrorAction SilentlyContinue
-Set-Alias which where.exe -ErrorAction SilentlyContinue
-
-# 7. 显式导出所有公有函数
-$publicFunctions = @(
-    'Initialize-Environment'
-    'Start-TmuxSession'
-    'reload'
-    # 日志和性能监控（延迟加载，按需初始化）
-    'Initialize-TUILogger'
-    'Initialize-TUIPerformance'
-    'Get-TUIPerformance'
-    'Show-TUIDebugOverlay'
-    'Test-TUIDebugMode'
-    # 多终端复用器支持
-    'Get-MultiplexerSessions'
-    'Test-MultiplexerAvailable'
-)
-
-Export-ModuleMember -Function $publicFunctions
-
-# 8. 延迟加载：日志和性能监控根据 DEBUG 环境变量初始化
-# 改为按需加载，不在模块加载时立即初始化
-if ($env:DEBUG -eq "1" -or $env:DEBUG -eq "true" -or $env:DEBUG_TRACE -eq "1") {
-    # 立即初始化调试模式所需的功能
-    Initialize-TUILogger | Out-Null
-    Initialize-TUIPerformance | Out-Null
+# 调试模式初始化
+# TUI 文件已在上面被点引用加载，所以函数定义始终可用
+# 以下仅在启用调试模式时激活 TUI 功能
+if ($script:IsDebugMode) {
+    try {
+        Initialize-TUILogger | Out-Null
+        Initialize-TUIPerformance | Out-Null
+        Write-Host "[ShellPrompt] DEBUG 模式已激活" -ForegroundColor Cyan
+    } catch {
+        Write-Warning "[ShellPrompt] DEBUG 初始化失败: $($_.Exception.Message)"
+    }
 }
+
+# 注意：别名（ll、which）在 Set-ProfileAliases.ps1 中统一管理
+# 避免在 psm1 中重复注册导致冲突

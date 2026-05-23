@@ -32,6 +32,11 @@ function Invoke-ConsoleMenu {
         [string]$ExitLabel = "EXIT"
     )
 
+    # 仅在调试模式下写入调试日志，避免无条件文件 I/O
+    if ($script:IsDebugMode) {
+        "DEBUG: Invoke-ConsoleMenu called, Title='$Title', Options.Count=$($Options.Count)" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Encoding utf8
+    }
+
     $idx = 0
     $count = $Options.Count
     $exitIdx = $count
@@ -89,12 +94,12 @@ function Invoke-ConsoleMenu {
     # 首次渲染：完整输出菜单
     [Console]::Write("`e[2J`e[H`e[0m")
 
-    if ($Global:TUI_PerfState) {
+    if ($Global:TUI_PerfState -and (Test-Path variable:Global:TUI_PerfState)) {
         $Global:TUI_PerfState.ReportFrame()
     }
 
-    $hostname = $env:COMPUTERNAME ?? "local"
-    $userName = $env:USERNAME ?? "user"
+    $hostname = if ($env:COMPUTERNAME) { $env:COMPUTERNAME } else { "local" }
+    $userName = if ($env:USERNAME) { $env:USERNAME } else { "user" }
     $cwd = $PWD.Path.Split('\')[-1]
     $hLine = "-" * 40
 
@@ -141,10 +146,17 @@ function Invoke-ConsoleMenu {
     while ($true) {
         $oldIdx = $idx
 
-        $key = $Host.UI.RawUI.ReadKey("NoEcho, IncludeKeyDown")
+        try {
+            $key = $Host.UI.RawUI.ReadKey("NoEcho, IncludeKeyDown")
+        } catch {
+            if ($script:IsDebugMode) {
+                "DEBUG: ReadKey exception: $($_.Exception.Message)" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Append -Encoding utf8
+            }
+            return $null
+        }
         $vK = $key.VirtualKeyCode
 
-        if ($Global:TUI_PerfState) {
+        if ($Global:TUI_PerfState -and (Test-Path variable:Global:TUI_PerfState)) {
             $Global:TUI_PerfState.ReportKeyPress()
         }
 
@@ -153,9 +165,23 @@ function Invoke-ConsoleMenu {
         } elseif ($vK -eq $Keys.Down) {
             $idx = ($idx + 1) % $total
         } elseif ($vK -eq $Keys.Enter) {
-            if ($idx -eq $exitIdx) { return $null }
+            if ($script:IsDebugMode) {
+                "DEBUG: Enter pressed, idx=$idx, exitIdx=$exitIdx" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Append -Encoding utf8
+            }
+            if ($idx -eq $exitIdx) {
+                if ($script:IsDebugMode) {
+                    "DEBUG: returning null (exit)" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Append -Encoding utf8
+                }
+                return $null
+            }
+            if ($script:IsDebugMode) {
+                "DEBUG: returning item $($items[$idx].Label)" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Append -Encoding utf8
+            }
             return $items[$idx]
         } elseif ($key.Character -eq 'q' -or $key.Character -eq 'Q') {
+            if ($script:IsDebugMode) {
+                "DEBUG: returning null (q)" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Append -Encoding utf8
+            }
             return $null
         }
 

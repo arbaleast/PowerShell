@@ -8,3 +8,9 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Temp / plans
+plans/
+_test_*.ps1
+_write_tmux.ps1
+_fix_tmux.ps1

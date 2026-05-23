@@ -43,10 +43,6 @@ $global:UserScoop_CONF = @{
         ForceTTy       = $true
     }
 
-    Tmux          = @{
-        DefaultSessionName = "main"
-    }
-
     WaterReminder = @{
         Enabled         = $true
         IntervalMin     = 60           # 基础间隔(分钟)
