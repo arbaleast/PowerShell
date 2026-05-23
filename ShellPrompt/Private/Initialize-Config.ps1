@@ -1,6 +1,7 @@
 # ============================================================
 # Initialize-Config.ps1 - 模块配置初始化
 # 定义全局配置（仅在此处修改默认值）
+# 支持用户配置覆盖：~/.ShellPrompt/config.ps1
 # ============================================================
 
 $global:UserScoop_ROOT = (Get-Item $PSScriptRoot).Parent.Parent.FullName
@@ -56,6 +57,87 @@ $global:UserScoop_CONF = @{
         HistoryPath     = "$global:UserScoop_ROOT\data\water-history.json"
         LogPath         = "$global:UserScoop_ROOT\data\water-reminder.log"
     }
+}
+
+# -----------------------------
+# 用户配置覆盖
+# -----------------------------
+function Merge-UserConfig {
+    <#
+    .SYNOPSIS
+    合并用户配置到全局配置
+    
+    .DESCRIPTION
+    从 ~/.ShellPrompt/config.ps1 加载用户配置
+    用户配置使用 $global:UserScoop_CONF 变量来覆盖默认值
+    支持 hashtable 深度合并
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$DefaultConfig,
+        
+        [Parameter(Mandatory = $false)]
+        [string]$UserConfigPath = (Join-Path $HOME ".ShellPrompt\config.ps1")
+    )
+    
+    if (-not (Test-Path $UserConfigPath)) {
+        return $DefaultConfig
+    }
+    
+    try {
+        # 使用脚本块执行用户配置，获取返回值
+        # 用户配置脚本应该返回要合并的 hashtable
+        $userConfig = & $UserConfigPath
+        if ($userConfig -is [hashtable]) {
+            return Merge-Hashtable -Base $DefaultConfig -Override $userConfig
+        }
+    } catch {
+        Write-Host "[Initialize-Config] 用户配置加载失败: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+    
+    return $DefaultConfig
+}
+
+function Merge-Hashtable {
+    <#
+    .SYNOPSIS
+    深度合并两个 hashtable
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Base,
+        
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Override
+    )
+    
+    $result = @{}
+    
+    # 复制基础配置
+    foreach ($key in $Base.Keys) {
+        if ($Base[$key] -is [hashtable] -and $Override.ContainsKey($key) -and $Override[$key] -is [hashtable]) {
+            $result[$key] = Merge-Hashtable -Base $Base[$key] -Override $Override[$key]
+        } else {
+            $result[$key] = $Base[$key]
+        }
+    }
+    
+    # 合并覆盖配置
+    foreach ($key in $Override.Keys) {
+        if ($result.ContainsKey($key) -and $result[$key] -is [hashtable] -and $Override[$key] -is [hashtable]) {
+            $result[$key] = Merge-Hashtable -Base $result[$key] -Override $Override[$key]
+        } else {
+            $result[$key] = $Override[$key]
+        }
+    }
+    
+    return $result
+}
+
+# 尝试加载用户配置覆盖（如果存在）
+$userConfigPath = Join-Path $HOME ".ShellPrompt\config.ps1"
+if (Test-Path $userConfigPath) {
+    $global:UserScoop_CONF = Merge-UserConfig -DefaultConfig $global:UserScoop_CONF -UserConfigPath $userConfigPath
 }
 
 # -----------------------------
