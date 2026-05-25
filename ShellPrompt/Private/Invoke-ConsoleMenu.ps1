@@ -1,8 +1,18 @@
-# ============================================================
+﻿# ============================================================
 # Invoke-ConsoleMenu.ps1 - 通用终端交互式菜单 UI 组件
 # 硬核黑客风格 - 结构化信息, 路径/分支标签
-# 优化：方向键导航时只重绘变化的行，避免闪烁和残留
+# 全部使用 [Console]::Write + ANSI 转义，禁止混合 Write-Host
+# 避免 Write-Host 与 Console API 光标追踪不同步导致的偏移
 # ============================================================
+
+# 重写指定行（ANSI 定位 + \e[2K 清整行 + 写内容）
+function Write-MenuLine {
+    param([int]$Line, [string]$Text)
+    # $Line 是 1-based ANSI 行号
+    # \e[${Line};1H = 定位到行 $Line, 列 1
+    # \e[2K         = 清空整行
+    [Console]::Write("`e[${Line};1H`e[2K${Text}")
+}
 
 function Invoke-ConsoleMenu {
     [CmdletBinding()]
@@ -47,37 +57,36 @@ function Invoke-ConsoleMenu {
         if ($_ -is [string]) {
             @{ Label = $_; Desc = "" }
         } else {
-            @{ Label = $_.Label; Desc = $_.Desc }
+            # 透传 PSCustomObject 的所有属性（包括 RawName 等调用方自定义字段）
+            $_
         }
     }
 
-    # 计算各区域的行号（1-based ANSI）
-    # 清屏后：
-    #   行1: Write-Host ""  (空行)
-    #   行2: header line 1
-    #   行3: header line 2
-    #   行4: header line 3
-    #   行5..(5+count-1): 选项行
-    #   行(5+count): EXIT行
-    #   行(5+count+1): 分隔线 |
-    #   行(5+count+2): 分隔线 |
-    #   行(5+count+3): 描述行
-    #   行(5+count+4): footer |
-    #   行(5+count+5): footer +
-    $headerEndRow = 4
+    # 所有行列号使用 1-based ANSI 行号
+    # 行1: 空行
+    # 行2: header line 1  (+--< ... >--)
+    # 行3: header line 2  (|)
+    # 行4: header line 3  (|  +)
+    # 行5..(5+count-1): N 个选项行
+    # 行(5+count): EXIT行
+    # 行(5+count+1): 分隔线 (|)
+    # 行(5+count+2): 分隔线 (|  +)
+    # 行(5+count+3): 描述行
+    # 行(5+count+4): footer (|)
+    # 行(5+count+5): footer (+---)
+    # 行(5+count+6): 空行
+    # 行(5+count+7): 导航提示行
+    # 行(5+count+8): 空行
     $optionStartRow = 5
     $exitRow = $optionStartRow + $count
     $descRow = $exitRow + 3
 
-    # 提前计算 exitKey（供后续缓存行使用）
     $exitKey = ($count + 1).ToString().PadLeft(2, '0')
 
-    # 构建选项行文本（缓存，避免重复构建）
-    # 使用强类型 ArrayList 避免数组拼接的 O(n²) 性能问题
+    # 构建选项行文本缓存
     $optionLines = New-Object System.Collections.ArrayList ($count)
     for ($i = 0; $i -lt $count; $i++) {
         $key = ($i + 1).ToString().PadLeft(2, '0')
-        # 两种状态：选中/未选中
         $selectedLine = "  ${ColorPrimary}|${rst}  ${ColorHighlight}>${rst} ${ColorPrimary}[${key}]${rst} ${ColorPrimary}$($items[$i].Label)${rst}"
         $unselectedLine = "  ${ColorPrimary}|${rst}  ${ColorMuted} ${rst} ${ColorPrimary}[${key}]${rst} ${ColorMuted}$($items[$i].Label)${rst}"
         [void]$optionLines.Add([PSCustomObject]@{ Selected = $selectedLine; Unselected = $unselectedLine })
@@ -85,13 +94,10 @@ function Invoke-ConsoleMenu {
     $exitSelected = "  ${ColorPrimary}|${rst}  ${ColorAccent}>${rst} ${ColorAccent}[${exitKey}]${rst} ${ColorAccent}${ExitLabel}${rst}"
     $exitUnselected = "  ${ColorPrimary}|${rst}  ${ColorMuted} ${rst} ${ColorAccent}[${exitKey}]${rst} ${ColorMuted}${ExitLabel}${rst}"
 
-    # 重写指定行的函数（定位到行首，清行，写内容）
-    function Write-MenuLine {
-        param([int]$Line, [string]$Text)
-        [Console]::Write("`e[${Line};1H`e[K${Text}")
-    }
-
-    # 首次渲染：完整输出菜单
+    # ============================================================
+    # 首次渲染：全部使用 [Console]::Write + ANSI 转义
+    # 不用 Write-Host，避免光标追踪不一致
+    # ============================================================
     [Console]::Write("`e[2J`e[H`e[0m")
 
     if ($Global:TUI_PerfState -and (Test-Path variable:Global:TUI_PerfState)) {
@@ -100,47 +106,48 @@ function Invoke-ConsoleMenu {
 
     $hostname = if ($env:COMPUTERNAME) { $env:COMPUTERNAME } else { "local" }
     $userName = if ($env:USERNAME) { $env:USERNAME } else { "user" }
-    $cwd = $PWD.Path.Split('\')[-1]
+    # 获取当前目录名（兼容 Windows \ 和 Unix / 路径）
+    $cwd = Split-Path $PWD.Path -Leaf
+    if (-not $cwd) { $cwd = $PWD.Path }
     $hLine = "-" * 40
 
-    # Header
-    Write-Host ""
-    Write-Host "  ${ColorPrimary}+--< ${ColorMuted}${userName}@${hostname}${ColorPrimary} >--[ ${ColorAccent}${cwd}${ColorPrimary} ]--[ ${ColorPrimary}${Title}${ColorPrimary} ]${rst}"
-    Write-Host "  ${ColorPrimary}|${rst}"
-    Write-Host "  ${ColorPrimary}|${rst}  ${ColorPrimary}+${rst}"
+    # 行1: 空行
+    Write-MenuLine -Line 1 -Text ""
+    # 行2: header line 1
+    Write-MenuLine -Line 2 -Text "  ${ColorPrimary}+--< ${ColorMuted}${userName}@${hostname}${ColorPrimary} >--[ ${ColorAccent}${cwd}${ColorPrimary} ]--[ ${ColorPrimary}${Title}${ColorPrimary} ]${rst}"
+    # 行3: header line 2
+    Write-MenuLine -Line 3 -Text "  ${ColorPrimary}|${rst}"
+    # 行4: header line 3
+    Write-MenuLine -Line 4 -Text "  ${ColorPrimary}|${rst}  ${ColorPrimary}+${rst}"
 
-    # Options
+    # 行5..(5+count-1): 选项行
     for ($i = 0; $i -lt $count; $i++) {
         if ($i -eq $idx) {
-            Write-Host $optionLines[$i].Selected
+            Write-MenuLine -Line ($optionStartRow + $i) -Text $optionLines[$i].Selected
         } else {
-            Write-Host $optionLines[$i].Unselected
+            Write-MenuLine -Line ($optionStartRow + $i) -Text $optionLines[$i].Unselected
         }
     }
 
-    # Exit（首次渲染，使用缓存的行文本）
-    if ($idx -eq $exitIdx) {
-        Write-Host $exitSelected
-    } else {
-        Write-Host $exitUnselected
-    }
+    # 行(5+count): EXIT行
+    Write-MenuLine -Line $exitRow -Text $exitUnselected
 
-    # Description area
-    Write-Host "  ${ColorPrimary}|${rst}"
-    Write-Host "  ${ColorPrimary}|${rst}  ${ColorPrimary}+${rst}"
-
-    if ($idx -lt $count -and $items[$idx].Desc) {
-        Write-Host "  ${ColorPrimary}|${rst}  ${ColorMuted}-- $($items[$idx].Desc)${rst}"
-    } elseif ($idx -eq $exitIdx) {
-        Write-Host "  ${ColorPrimary}|${rst}  ${ColorMuted}-- return to local terminal${rst}"
-    }
-
-    # Footer
-    Write-Host "  ${ColorPrimary}|${rst}"
-    Write-Host "  ${ColorPrimary}+${hLine}--${rst}"
-    Write-Host ""
-    Write-Host "  ${ColorMuted}up/down navigate + Enter confirm + Q quit${rst}" -ForegroundColor DarkGray
-    Write-Host ""
+    # 行(5+count+1): 分隔线
+    Write-MenuLine -Line ($exitRow + 1) -Text "  ${ColorPrimary}|${rst}"
+    # 行(5+count+2): 分隔线
+    Write-MenuLine -Line ($exitRow + 2) -Text "  ${ColorPrimary}|${rst}  ${ColorPrimary}+${rst}"
+    # 行(5+count+3): 描述行
+    Write-MenuLine -Line $descRow -Text "  ${ColorPrimary}|${rst}  ${ColorMuted}-- $($items[$idx].Desc)${rst}"
+    # 行(5+count+4): footer
+    Write-MenuLine -Line ($descRow + 1) -Text "  ${ColorPrimary}|${rst}"
+    # 行(5+count+5): footer
+    Write-MenuLine -Line ($descRow + 2) -Text "  ${ColorPrimary}+${hLine}--${rst}"
+    # 行(5+count+6): 空行
+    Write-MenuLine -Line ($descRow + 3) -Text ""
+    # 行(5+count+7): 导航提示行
+    Write-MenuLine -Line ($descRow + 4) -Text "  ${ColorMuted}up/down navigate + Enter confirm + Q quit${rst}"
+    # 行(5+count+8): 空行
+    Write-MenuLine -Line ($descRow + 5) -Text ""
 
     # 导航循环
     while ($true) {
@@ -152,6 +159,8 @@ function Invoke-ConsoleMenu {
             if ($script:IsDebugMode) {
                 "DEBUG: ReadKey exception: $($_.Exception.Message)" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Append -Encoding utf8
             }
+            [Console]::Write("`e[2J`e[H`e[0m")
+            Clear-Host
             return $null
         }
         $vK = $key.VirtualKeyCode
@@ -169,19 +178,10 @@ function Invoke-ConsoleMenu {
                 "DEBUG: Enter pressed, idx=$idx, exitIdx=$exitIdx" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Append -Encoding utf8
             }
             if ($idx -eq $exitIdx) {
-                if ($script:IsDebugMode) {
-                    "DEBUG: returning null (exit)" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Append -Encoding utf8
-                }
                 return $null
-            }
-            if ($script:IsDebugMode) {
-                "DEBUG: returning item $($items[$idx].Label)" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Append -Encoding utf8
             }
             return $items[$idx]
         } elseif ($key.Character -eq 'q' -or $key.Character -eq 'Q') {
-            if ($script:IsDebugMode) {
-                "DEBUG: returning null (q)" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Append -Encoding utf8
-            }
             return $null
         }
 
@@ -202,11 +202,9 @@ function Invoke-ConsoleMenu {
             }
 
             # 更新描述行
-            $descText = ""
+            $descText = "  ${ColorPrimary}|${rst}  ${ColorMuted}-- return to local terminal${rst}"
             if ($idx -lt $count -and $items[$idx].Desc) {
                 $descText = "  ${ColorPrimary}|${rst}  ${ColorMuted}-- $($items[$idx].Desc)${rst}"
-            } elseif ($idx -eq $exitIdx) {
-                $descText = "  ${ColorPrimary}|${rst}  ${ColorMuted}-- return to local terminal${rst}"
             }
             Write-MenuLine -Line $descRow -Text $descText
         }

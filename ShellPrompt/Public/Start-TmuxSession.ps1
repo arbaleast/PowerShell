@@ -38,12 +38,14 @@ function Start-TmuxSession {
         }
 
         # 构建主机选择菜单
-        $hostOptions = $hosts | ForEach-Object {
+        # 注意：使用 foreach 循环代替 ForEach-Object 管道输出，避免 PowerShell 管道收集 hashtable 时的索引问题
+        $hostOptions = New-Object System.Collections.ArrayList
+        foreach ($h in $hosts) {
             $desc = "SSH 远程主机"
-            if ($Global:LastSshHost -and $_ -eq $Global:LastSshHost) {
+            if ($Global:LastSshHost -and $h -eq $Global:LastSshHost) {
                 $desc = "上次使用的主机"
             }
-            @{ Label = $_; Desc = $desc }
+            [void]$hostOptions.Add([PSCustomObject]@{ Label = $h; Desc = $desc })
         }
 
         # 显示主机选择菜单
@@ -60,10 +62,15 @@ function Start-TmuxSession {
     $Global:LastSshHost = $HostName
 
     # ========================================
-    # 无条件生成随机会话名（始终为 tmux 会话使用随机名称）
+    # 基础配置常量
     # ========================================
-    # 生成 tmux-<6位数字> 格式的随机会话名
-    $randomSessionName = "tmux-$(Get-Random -Minimum 100000 -Maximum 999999)"
+    # tmux 随机会话名前缀
+    $sessionPrefix = "tmux-"
+
+    # 定义生成随机会话名的内联函数（每次调用生成不同名称，避免循环中名称冲突）
+    function New-RandomSessionName {
+        "$sessionPrefix$(Get-Random -Minimum 100000 -Maximum 999999)"
+    }
 
     Write-Host "`n [SSH] 目标主机: $HostName" -ForegroundColor Cyan
 
@@ -95,10 +102,11 @@ function Start-TmuxSession {
     # 无会话时自动创建随机会话并附着（使用随机名，避免名称冲突）
     if ($sessions.Count -eq 0) {
         Write-Host " [TMUX] $HostName 上无现有会话" -ForegroundColor Yellow
-        $defaultSession = $randomSessionName
+        $defaultSession = New-RandomSessionName
         Write-Host " [TMUX] 自动创建默认会话 '$defaultSession' ..." -ForegroundColor Green
-        # 会话名是内部生成的随机字符串或常量，无需转义
-        Invoke-SshCommand -HostName $HostName -Interactive -RemoteCommand "tmux new-session -A -s $defaultSession 2>/dev/null || exec bash"
+        # 会话名是内部生成的随机字符串，每次调用不同，会话名由数字和短横线组成，安全无害
+        $escapedSession = ConvertTo-SshEscapedString $defaultSession
+        Invoke-SshCommand -HostName $HostName -Interactive -RemoteCommand "tmux new-session -A -s $escapedSession 2>/dev/null || exec sh"
         Write-Host "`n [OK] tmux 会话已关闭，回到本地 PowerShell" -ForegroundColor Cyan
         return
     }
@@ -149,15 +157,17 @@ function Start-TmuxSession {
                 }
 
                 # 构建会话选择菜单（带状态图标和原始名称）
-                $sessionOptions = $sessions | ForEach-Object {
-                    $icon = if ($_.Status -eq "attached") { "[A]" } else { "[D]" }
-                    @{
-                        # 显示标签：图标 + 名称（用于显示）
-                        Label   = "$icon $($_.Name)"
-                        # 原始名称（用于命令构建，避免正则提取歧义）
-                        RawName = $_.Name
-                        Desc    = "状态: $($_.Status)"
-                    }
+                # 注意：使用 ArrayList 代替 ForEach-Object 管道输出，避免 PowerShell 管道收集 hashtable 时的索引问题
+                $sessionOptions = New-Object System.Collections.ArrayList
+                foreach ($s in $sessions) {
+                    $icon = if ($s.Status -eq "attached") { "[A]" } else { "[D]" }
+                    [void]$sessionOptions.Add([PSCustomObject]@{
+                            # 显示标签：图标 + 名称（用于显示）
+                            Label   = "$icon $($s.Name)"
+                            # 原始名称（用于命令构建，避免正则提取歧义）
+                            RawName = $s.Name
+                            Desc    = "状态: $($s.Status)"
+                        })
                 }
 
                 $selected = Invoke-ConsoleMenu -Title "TMUX 会话列表 [$HostName]" -Options $sessionOptions -ExitLabel "返回"
@@ -165,11 +175,17 @@ function Start-TmuxSession {
 
                 # 使用 RawName 获取纯会话名称（避免从 Label 中正则提取的歧义问题）
                 $sessionName = $selected.RawName
+                if (-not $sessionName) {
+                    # 防御性回退：从 Label 中提取名称（格式: "[A] tmux-xxxxxx"）
+                    $sessionName = $selected.Label -replace '^\[[AD]\]\s+', ''
+                }
 
                 Write-Host " [TMUX] 正在连接到会话 '$sessionName' ..." -ForegroundColor Green
                 # 安全：使用 ConvertTo-SshEscapedString 转义 $sessionName，防止命令注入
                 $escapedName = ConvertTo-SshEscapedString $sessionName
                 Invoke-SshCommand -HostName $HostName -Interactive -RemoteCommand "tmux attach -d -t $escapedName 2>/dev/null || tmux new-session -A -s $escapedName"
+                # 交互式 SSH 退出后，给 SSH 连接留出清理时间
+                Start-Sleep -Seconds 1
                 Write-Host "`n [OK] tmux 会话已分离，回到管理菜单" -ForegroundColor Cyan
             }
 
@@ -217,9 +233,9 @@ function Start-TmuxSession {
                     $newName = $null
                 }
 
-                # 处理空输入：始终使用随机名称
+                # 处理空输入：始终使用随机名称（每次调用生成不同名称，避免冲突）
                 if ([string]::IsNullOrWhiteSpace($newName)) {
-                    $newName = $randomSessionName
+                    $newName = New-RandomSessionName
                 }
 
                 # 输出操作状态（覆盖残留的菜单框区域，避免视觉混乱）
@@ -230,7 +246,9 @@ function Start-TmuxSession {
                 Write-Host " [TMUX] 正在创建并连接到会话 '$newName' ..." -ForegroundColor Green
                 # 安全：使用 ConvertTo-SshEscapedString 转义 $newName，防止命令注入
                 $escapedName = ConvertTo-SshEscapedString $newName
-                Invoke-SshCommand -HostName $HostName -Interactive -RemoteCommand "tmux new-session -A -s $escapedName 2>/dev/null || exec bash"
+                Invoke-SshCommand -HostName $HostName -Interactive -RemoteCommand "tmux new-session -A -s $escapedName 2>/dev/null || exec sh"
+                # 交互式 SSH 退出后，给 SSH 连接留出清理时间
+                Start-Sleep -Seconds 1
                 Write-Host "`n [OK] tmux 会话已分离，回到管理菜单" -ForegroundColor Cyan
             }
 
@@ -244,8 +262,10 @@ function Start-TmuxSession {
                 }
 
                 # 构建删除选择菜单
-                $killOptions = $sessions | ForEach-Object {
-                    @{ Label = "$($_.Name)"; Desc = "状态: $($_.Status)" }
+                # 注意：使用 foreach 循环代替 ForEach-Object 管道输出，避免 PowerShell 管道收集 hashtable 时的索引问题
+                $killOptions = New-Object System.Collections.ArrayList
+                foreach ($s in $sessions) {
+                    [void]$killOptions.Add([PSCustomObject]@{ Label = $s.Name; Desc = "状态: $($s.Status)" })
                 }
 
                 $selected = Invoke-ConsoleMenu -Title "删除 TMUX 会话 [$HostName]" -Options $killOptions -ExitLabel "取消"
@@ -267,6 +287,8 @@ function Start-TmuxSession {
                 Write-Host " [SSH] 直接连接..." -ForegroundColor Green
                 # 直接 SSH 登录，不需要远程命令
                 Invoke-SshCommand -HostName $HostName -Interactive
+                # 交互式 SSH 退出后，给 SSH 连接留出清理时间
+                Start-Sleep -Seconds 1
                 Write-Host "`n [OK] SSH 连接已关闭，回到管理菜单" -ForegroundColor Cyan
             }
 

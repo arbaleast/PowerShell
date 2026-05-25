@@ -31,11 +31,19 @@ function Get-TmuxSessions {
     # 检查 SSH 命令是否成功执行（退出码为 0）
     # Invoke-SshCommand -PassThru 返回包含 Output 和 ExitCode 的对象
     if ($null -eq $result.ExitCode -or $result.ExitCode -ne 0) {
-        # SSH 连接失败或不稳定，输出不可信，返回空列表
+        # SSH 连接失败或不稳定，等待 1 秒后重试一次
         if ($Global:TUI_Logger) {
-            $Global:TUI_Logger.Warning("SSH 执行 tmux ls 失败（退出码: $($result.ExitCode)）", @{ Host = $HostName })
+            $Global:TUI_Logger.Warning("SSH 执行 tmux ls 失败（退出码: $($result.ExitCode)），等待后重试...", @{ Host = $HostName })
         }
-        return @{ Sessions = New-Object System.Collections.ArrayList; RawOutput = $result.Output }
+        Start-Sleep -Seconds 1
+        $result = Invoke-SshCommand -HostName $HostName -RemoteCommand "tmux ls 2>/dev/null" -CaptureOutput -ConnectTimeout $ConnectTimeout -PassThru
+        if ($null -eq $result.ExitCode -or $result.ExitCode -ne 0) {
+            # 重试仍失败，返回空列表
+            if ($Global:TUI_Logger) {
+                $Global:TUI_Logger.Warning("SSH 重试后仍失败（退出码: $($result.ExitCode)）", @{ Host = $HostName })
+            }
+            return @{ Sessions = New-Object System.Collections.ArrayList; RawOutput = "" }
+        }
     }
     
     $output = $result.Output
@@ -55,11 +63,32 @@ function Get-TmuxSessions {
     # 只匹配标准 tmux ls 格式行，避免误解析 SSH banner/warning/MOTD 等
     $tmuxLineRegex = '^([^:]+):\s+\d+\s+windows?\s+\(created'
 
+    # 调试：记录原始输出和解析结果
+    if ($Global:TUI_Logger -or $script:IsDebugMode) {
+        $debugInfo = "[Get-TmuxSessions] 原始输出 (${HostName}):`n$output"
+        if ($Global:TUI_Logger) {
+            $Global:TUI_Logger.Debug($debugInfo)
+        }
+        if ($script:IsDebugMode) {
+            $debugInfo | Out-File -FilePath "$env:TEMP\tmux-debug.txt" -Encoding utf8
+        }
+    }
+
     foreach ($line in ($output -split "`n")) {
         $line = $line.Trim()
         if ($line -match $tmuxLineRegex) {
             $name = $matches[1].Trim()
             $status = if ($line -match "attached") { "attached" } else { "detached" }
+            # 调试：记录每个解析出的会话
+            if ($Global:TUI_Logger -or $script:IsDebugMode) {
+                $debugLine = "  -> 解析会话: Name='$name', Status='$status'"
+                if ($Global:TUI_Logger) {
+                    $Global:TUI_Logger.Debug($debugLine)
+                }
+                if ($script:IsDebugMode) {
+                    $debugLine | Out-File -FilePath "$env:TEMP\tmux-debug.txt" -Append -Encoding utf8
+                }
+            }
             $sessionList.Add([PSCustomObject]@{ Name = $name; Status = $status }) | Out-Null
         }
     }
@@ -169,7 +198,20 @@ function Test-MultiplexerAvailable {
         return $null -ne (Get-Command $Type -ErrorAction SilentlyContinue)
     }
      
-    return (Test-Path (Get-Command tmux -ErrorAction SilentlyContinue).Source) -or
-    (Test-Path (Get-Command screen -ErrorAction SilentlyContinue).Source) -or
-    (Test-Path (Get-Command byobu -ErrorAction SilentlyContinue).Source)
+    # 检查 tmux 是否可用
+    $tmuxCmd = Get-Command tmux -ErrorAction SilentlyContinue
+    $tmuxOk = $null -ne $tmuxCmd -and $tmuxCmd.CommandType -eq 'Application'
+    if (-not $tmuxOk) { $tmuxCmd = $null }
+     
+    # 检查 screen 是否可用
+    $screenCmd = Get-Command screen -ErrorAction SilentlyContinue
+    $screenOk = $null -ne $screenCmd -and $screenCmd.CommandType -eq 'Application'
+    if (-not $screenOk) { $screenCmd = $null }
+     
+    # 检查 byobu 是否可用
+    $byobuCmd = Get-Command byobu -ErrorAction SilentlyContinue
+    $byobuOk = $null -ne $byobuCmd -and $byobuCmd.CommandType -eq 'Application'
+    if (-not $byobuOk) { $byobuCmd = $null }
+     
+    return $tmuxOk -or $screenOk -or $byobuOk
 }
