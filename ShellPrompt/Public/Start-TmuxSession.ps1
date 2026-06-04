@@ -140,6 +140,10 @@ function Start-TmuxSession {
         # 用户选择断开连接
         if ($null -eq $action) {
             Clear-Host
+            # 双重保障：菜单退出时也重置终端状态
+            if (Get-Command Reset-TerminalMode -ErrorAction SilentlyContinue) {
+                Reset-TerminalMode
+            }
             Write-Host " [OK] 已从 $HostName 断开连接" -ForegroundColor Cyan
             return
         }

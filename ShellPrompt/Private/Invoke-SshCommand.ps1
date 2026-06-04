@@ -1,18 +1,45 @@
 ﻿# ============================================================
-# Invoke-SshCommand.ps1 - SSH 杩滅▼鍛戒护鎵ц杈呭姪鍑芥暟
-# 鍔熻兘: 缁熶竴绠＄悊 SSH 杩炴帴锛岄槻姝㈠懡浠ゆ敞鍏?
-# 瀹夊叏绛栫暐:
-#   - HostName 鍙傛暟杈撳叆楠岃瘉锛堟嫆缁?shell 鐗规畩瀛楃锛?
-#   - 杩滅▼鍛戒护瀛楃涓茬敱璋冪敤鏂硅浆涔夌敤鎴峰彉閲?
-#   - 浣跨敤 Start-Process 浼犻€掑弬鏁版暟缁勶紙閬垮厤 cmd.exe 瑙ｉ噴锛?
-# 鍙樻洿璁板綍:
-#   - [2026-05-23] 鏂板 -PassThru 鍙傛暟锛岃繑鍥?SSH 杩涚▼閫€鍑虹爜渚涜皟鐢ㄦ柟鏍￠獙
+# Invoke-SshCommand.ps1 - SSH 远程命令执行辅助函数
+# 功能: 统一管理 SSH 连接，防止命令注入
+# 安全策略:
+#   - HostName 参数输入验证（拒绝 shell 特殊字符）
+#   - 远程命令字符串由调用方转义用户变量
+#   - 使用 Start-Process 传递参数数组（避免 cmd.exe 解释）
+# 变更记录:
+#   - [2026-05-23] 新增 -PassThru 参数，返回 SSH 进程退出码供调用方校验
+#   - [2026-05-25] 新增 -SkipHostKeyCheck 参数，默认 false 更安全
+#   - [2026-06-04] 交互式 SSH 返回后自动重置终端状态（鼠标追踪、备选屏幕缓冲区等）
 # ============================================================
 
-# 灏嗙敤鎴疯緭鍏ョ殑鍊艰繘琛?POSIX shell 鍗曞紩鍙疯浆涔?
-# 鍘熺悊锛? 鈫?'\''锛堥棴鍚堝崟寮曞彿 鈫?杞箟鍗曞紩鍙?鈫?閲嶆柊寮€鍚崟寮曞彿锛?
-# 杩欐槸 POSIX shell 鏍囧噯鐨勫畨鍏ㄨ浆涔夋柟寮?
-# 绀轰緥: "test'session" 鈫?"test'\''session"锛堝湪杩滅▼ shell 涓繚鎸佷负瀛楅潰鍊硷級
+# ============================================================
+# Reset-TerminalMode - 重置终端状态
+# SSH/tmux 会话可能启用鼠标追踪、备选屏幕缓冲区等特性
+# 断开后需要重置，否则本地终端显示异常
+# ============================================================
+function Reset-TerminalMode {
+    # 1. 禁用所有鼠标追踪模式（确保完整清除）
+    [Console]::Write("`e[?1000l")   # 禁用按钮事件鼠标追踪
+    [Console]::Write("`e[?1002l")   # 禁用拖拽事件鼠标追踪
+    [Console]::Write("`e[?1003l")   # 禁用所有鼠标追踪（部分终端）
+    [Console]::Write("`e[?1006l")   # 禁用扩展鼠标模式（SGR）
+    
+    # 2. 退出备选屏幕缓冲区（tmux/SSH 可能切换到备选缓冲区）
+    [Console]::Write("`e[?1049l")
+    
+    # 3. 显示光标（可能被远程会话隐藏）
+    [Console]::Write("`e[?25h")
+    
+    # 4. 重置字符属性（颜色、粗体等）
+    [Console]::Write("`e[m")
+    
+    # 5. 重置终端软属性（DECSC 参数）
+    [Console]::Write("`e[!p")
+}
+
+# 将用户输入的值进行 POSIX shell 单引号转义
+# 原理: ' -> '\''（关闭单引号 -> 转义单引号 -> 重新开启单引号）
+# 这是 POSIX shell 标准的安全转义方式
+# 示例: "test'session" -> "test'\''session"（在远程 shell 中保持为字面值）
 function ConvertTo-SshEscapedString {
     [CmdletBinding()]
     param(
@@ -20,7 +47,7 @@ function ConvertTo-SshEscapedString {
         [AllowEmptyString()]
         [string]$Value
     )
-    # 瀵规瘡涓崟寮曞彿杩涜杞箟锛? 鈫?'\''
+    # 对每个单引号进行转义: ' -> '\''
     return "'" + ($Value -replace "'", "'\''") + "'"
 }
 
@@ -30,68 +57,77 @@ function Invoke-SshCommand {
         [Parameter(Mandatory = $true, Position = 0)]
         [ValidateNotNullOrEmpty()]
         [ValidateScript({
-                # 楠岃瘉涓绘満鍚嶅彧鑳藉寘鍚瓧姣嶃€佹暟瀛椼€佺偣銆佺煭妯嚎鍜屼笅鍒掔嚎
-                # 鎷掔粷绌烘牸銆佺閬撶銆佷笌鍙枫€佸垎鍙枫€佸弽寮曞彿銆佹嫭鍙枫€佽姳鎷彿銆佸紩鍙风瓑 shell 鐗规畩瀛楃
+                # 验证主机名只能包含字母、数字、点、短横线和下划线
+                # 拒绝空格、管道符、与号、分号、反引号、括号、花括号、引号等 shell 特殊字符
                 if ($_ -match '[\s|&;`$(){}<>#@!*?\[\]~"]') {
-                    throw "涓绘満鍚嶅寘鍚潪娉曞瓧绗︼紝浠呭厑璁稿瓧姣嶃€佹暟瀛椼€佺偣銆佺煭妯嚎鍜屼笅鍒掔嚎"
+                    throw "主机名包含非法字符，仅允许字母、数字、点、短横线和下划线"
                 }
                 return $true
             })]
         [string]$HostName,
 
-        # 杩滅▼鍛戒护瀛楃涓诧紙鍙€夛紝涓嶆彁渚涘垯鐩存帴 SSH 鐧诲綍锛?
+        # 远程命令字符串（可选，不提供则直接 SSH 登录）
         [Parameter(Mandatory = $false, Position = 1)]
         [string]$RemoteCommand,
 
-        # 鏄惁涓轰氦浜掑紡杩炴帴锛堝垎閰?PTY锛夛紝鐢ㄤ簬 tmux attach/new-session 绛夐渶瑕佺粓绔氦浜掔殑鍦烘櫙
+        # 是否为交互式连接（分配 PTY），用于 tmux attach/new-session 等需要终端交互的场景
         [switch]$Interactive,
 
-        # 鎹曡幏鏍囧噯杈撳嚭锛岀敤浜庤幏鍙栬繙绋嬪懡浠ゆ墽琛岀粨鏋?
+        # 捕获标准输出，用于获取远程命令执行结果
         [switch]$CaptureOutput,
 
-        # SSH 杩炴帴瓒呮椂锛堢锛?
+        # SSH 连接超时（秒）
         [int]$ConnectTimeout = 5,
 
-        # PassThru: 鍦?CaptureOutput 妯″紡涓嬶紝杩斿洖鍖呭惈 Output 鍜?ExitCode 鐨勫璞?
-        # 璋冪敤鏂瑰彲閫氳繃 ExitCode 鍒ゆ柇杩滅▼鍛戒护鏄惁鎵ц鎴愬姛
+        # 跳过 SSH 主机密钥检查（仅在信任网络中使用，默认关闭）
+        [switch]$SkipHostKeyCheck,
+
+        # PassThru: 在 CaptureOutput 模式下，返回包含 Output 和 ExitCode 的对象
+        # 调用方可通过 ExitCode 判断远程命令是否执行成功
         [switch]$PassThru
     )
 
-    # 鏋勫缓 SSH 鍙傛暟鍒楄〃
+    # 构建 SSH 参数列表
     $sshArgs = New-Object System.Collections.ArrayList
 
-    # 鍩虹杩炴帴鍙傛暟
+    # 基础连接参数
     [void]$sshArgs.Add("-o")
     [void]$sshArgs.Add("ConnectTimeout=$ConnectTimeout")
-    [void]$sshArgs.Add("-o")
-    [void]$sshArgs.Add("StrictHostKeyChecking=no")
 
-    # 濡傛灉鏄氦浜掑紡杩炴帴锛屽垎閰?PTY锛?t 鏍囧織锛?
+    # 仅在显式启用时才跳过主机密钥检查（默认关闭，更安全）
+    if ($SkipHostKeyCheck) {
+        [void]$sshArgs.Add("-o")
+        [void]$sshArgs.Add("StrictHostKeyChecking=no")
+        [void]$sshArgs.Add("-o")
+        [void]$sshArgs.Add("UserKnownHostsFile=NUL")
+    }
+
+    # 如果是交互式连接，分配 PTY（-t 标志）
     if ($Interactive) {
         [void]$sshArgs.Add("-t")
     }
 
-    # 涓绘満鍚嶄綔涓虹嫭绔嬪弬鏁颁紶閫掞紙涓嶄細琚?shell 瑙ｉ噴锛?
+    # 主机名作为独立参数传递（不会被 shell 解释）
     [void]$sshArgs.Add($HostName)
 
-    # 濡傛灉鎻愪緵浜嗚繙绋嬪懡浠わ紝鍒欓檮鍔犲埌鍙傛暟鍒楄〃
-    # 娉ㄦ剰锛氭瀛楃涓插皢浼犻€掑埌杩滅▼涓绘満鐨?/bin/sh -c 鎵ц
-    # 璋冪敤鏂归渶鑷杞箟鐢ㄦ埛鎻愪緵鐨勫彉閲忓€硷紙浣跨敤 ConvertTo-SshEscapedString锛?
+    # 如果提供了远程命令，则附加到参数列表
+    # 注意：此字符串将传递到远程主机的 /bin/sh -c 执行
+    # 调用方需自行转义用户提供的变量值（使用 ConvertTo-SshEscapedString）
     if ($PSBoundParameters.ContainsKey('RemoteCommand')) {
         [void]$sshArgs.Add($RemoteCommand)
     }
 
     if ($CaptureOutput) {
-        # 鎹曡幏杈撳嚭妯″紡锛氶噸瀹氬悜鏍囧噯杈撳嚭鍒颁复鏃舵枃浠?
+        # 捕获输出模式：重定向标准输出到临时文件
         $tempFile = [System.IO.Path]::GetTempFileName()
         try {
-            # 鍚姩 ssh.exe 杩涚▼锛屾崟鑾?stdout
+            # 启动 ssh.exe 进程，捕获 stdout
             $process = Start-Process -FilePath "ssh.exe" -ArgumentList $sshArgs.ToArray() -NoNewWindow -Wait -RedirectStandardOutput $tempFile -PassThru
 
             # 读取输出内容（Get-Content -Raw 已返回纯文本字符串）
             $output = Get-Content $tempFile -Raw
 
-            # 濡傛灉鍚敤浜?-PassThru锛岃繑鍥炲寘鍚?Output 鍜?ExitCode 鐨勫璞?
+            # 如果启用了 -PassThru，返回包含 Output 和 ExitCode 的对象
             if ($PassThru) {
                 return [PSCustomObject]@{
                     Output   = $output
@@ -99,21 +135,24 @@ function Invoke-SshCommand {
                 }
             }
 
-            # 鍏煎鏃ц皟鐢ㄦ柟寮忥細鐩存帴杩斿洖杈撳嚭瀛楃涓?
+            # 兼容旧调用方式：直接返回输出字符串
             return $output
         } finally {
             Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
         }
     } else {
-        # 闈炴崟鑾锋ā寮忥細鐩存帴杩愯锛岃緭鍑烘樉绀哄湪缁堢
-        # 鍚屾椂鑾峰彇杩涚▼閫€鍑虹爜锛堥潪鎹曡幏妯″紡涓嬩笉鍚敤 PassThru 褰卞搷涓嶅ぇ锛屼絾淇濈暀涓€鑷存€э級 
+        # 非捕获模式：直接运行，输出显示在终端
+        # 交互式 SSH 返回后必须重置终端状态（鼠标追踪、备选屏幕缓冲区等）
         if ($PassThru) {
             $process = Start-Process -FilePath "ssh.exe" -ArgumentList $sshArgs.ToArray() -NoNewWindow -Wait -PassThru
+            Reset-TerminalMode
             return [PSCustomObject]@{
                 Output   = ""
                 ExitCode = $process.ExitCode
             }
         }
         Start-Process -FilePath "ssh.exe" -ArgumentList $sshArgs.ToArray() -NoNewWindow -Wait
+        # SSH 进程结束后重置终端状态
+        Reset-TerminalMode
     }
 }
