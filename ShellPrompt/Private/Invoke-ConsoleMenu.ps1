@@ -98,7 +98,7 @@ function Invoke-ConsoleMenu {
     # 首次渲染：全部使用 [Console]::Write + ANSI 转义
     # 不用 Write-Host，避免光标追踪不一致
     # ============================================================
-    [Console]::Write("`e[2J`e[H`e[0m")
+    [Console]::Clear()
 
     # 使用快速引用检查替代 Test-Path（TUIPerformanceState 已实现单例）
     if ($null -ne $Global:TUI_PerfState) {
@@ -160,8 +160,7 @@ function Invoke-ConsoleMenu {
             if ($script:IsDebugMode) {
                 "DEBUG: ReadKey exception: $($_.Exception.Message)" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Append -Encoding utf8
             }
-            [Console]::Write("`e[2J`e[H`e[0m")
-            Clear-Host
+            [Console]::Clear()
             return $null
         }
         $vK = $key.VirtualKeyCode
