@@ -63,15 +63,10 @@ function Get-TmuxSessions {
     # 只匹配标准 tmux ls 格式行，避免误解析 SSH banner/warning/MOTD 等
     $tmuxLineRegex = '^([^:]+):\s+\d+\s+windows?\s+\(created'
 
-    # 调试：记录原始输出和解析结果
+    # P4 优化：批量收集调试日志，避免多次 I/O 操作
+    $debugLines = @()
     if ($Global:TUI_Logger -or $script:IsDebugMode) {
-        $debugInfo = "[Get-TmuxSessions] 原始输出 (${HostName}):`n$output"
-        if ($Global:TUI_Logger) {
-            $Global:TUI_Logger.Debug($debugInfo)
-        }
-        if ($script:IsDebugMode) {
-            $debugInfo | Out-File -FilePath "$env:TEMP\tmux-debug.txt" -Encoding utf8
-        }
+        $debugLines += "[Get-TmuxSessions] 原始输出 (${HostName}):`n$output"
     }
 
     foreach ($line in ($output -split "`n")) {
@@ -79,17 +74,21 @@ function Get-TmuxSessions {
         if ($line -match $tmuxLineRegex) {
             $name = $matches[1].Trim()
             $status = if ($line -match "attached") { "attached" } else { "detached" }
-            # 调试：记录每个解析出的会话
+            # P4 优化：收集调试行而非立即输出
             if ($Global:TUI_Logger -or $script:IsDebugMode) {
-                $debugLine = "  -> 解析会话: Name='$name', Status='$status'"
-                if ($Global:TUI_Logger) {
-                    $Global:TUI_Logger.Debug($debugLine)
-                }
-                if ($script:IsDebugMode) {
-                    $debugLine | Out-File -FilePath "$env:TEMP\tmux-debug.txt" -Append -Encoding utf8
-                }
+                $debugLines += "  -> 解析会话: Name='$name', Status='$status'"
             }
             $sessionList.Add([PSCustomObject]@{ Name = $name; Status = $status }) | Out-Null
+        }
+    }
+
+    # P4 优化：批量输出调试日志
+    if ($debugLines.Count -gt 0) {
+        if ($Global:TUI_Logger) {
+            $Global:TUI_Logger.Debug($debugLines -join "`n")
+        }
+        if ($script:IsDebugMode) {
+            $debugLines -join "`n" | Out-File -FilePath "$env:TEMP\tmux-debug.txt" -Encoding utf8
         }
     }
 

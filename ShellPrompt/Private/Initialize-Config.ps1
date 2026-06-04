@@ -16,8 +16,6 @@ $global:UserScoop_CONF = @{
         # User preferred palette - soft greens
         FreshGreen = "`e[38;2;137;209;133m"
         SageGreen  = "`e[38;2;159;177;159m"
-        MintGreen  = "`e[38;2;137;209;133m"
-        SoftGreen  = "`e[38;2;159;177;159m"
         
         # Neutrals
         DarkGray   = "`e[38;2;50;50;50m"
@@ -191,6 +189,12 @@ function ConvertFromJsonCompat {
     $obj = $Json | ConvertFrom-Json
     return _ConvertRecursive $obj
 }
+
+# -----------------------------
+# 全局状态变量初始化
+# -----------------------------
+# SSH/TMUX 上次使用的主机名（用于菜单置顶）
+$Global:LastSshHost = $null
 
 # Ensure data and log directories exist and provide a default empty history file
 try {

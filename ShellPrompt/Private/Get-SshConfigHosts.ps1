@@ -10,8 +10,10 @@ function Get-SshConfigHosts {
         $hosts = @()
         foreach ($line in (Get-Content $sshConfig -Encoding UTF8 -ErrorAction Stop)) {
             if ($line -match '^Host\s+(.+)$') {
-                $alias = $matches[1].Trim()
-                if ($alias -and $alias -notmatch '\*') {
+                # SSH config 支持多模式: Host myserver *.example.com
+                # 只取第一个别名作为有效主机名（后续模式含通配符应忽略）
+                $alias = ($matches[1] -split '\s+')[0]
+                if ($alias -and $alias -notmatch '[*?]') {
                     $hosts += $alias
                 }
             }

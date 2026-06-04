@@ -52,7 +52,7 @@ function Show-UserScoopLogo {
         [string]$ColorMuted = $global:UserScoop_CONF.Colors.MidGray,
 
         [Parameter(Mandatory = $false)]
-        [string]$BorderColor = $global:UserScoop_CONF.Colors.MintGreen
+        [string]$BorderColor = $global:UserScoop_CONF.Colors.FreshGreen
     )
 
     $rst = "`e[0m"
@@ -63,8 +63,9 @@ function Show-UserScoopLogo {
         $quote = ($lines | Get-Random).Trim()
     }
 
-    $h = (Get-Date).Hour
-    if ((Get-Random -Max 100) -lt 40) {
+    # 仅在未从文件加载到有效引用（仍为默认值）时，以较低概率使用时间问候
+    if ($quote -eq "SYSTEM READY" -and (Get-Random -Max 100) -lt 15) {
+        $h = (Get-Date).Hour
         if ($h -in 0..5) {
             $quote = "Night mode. Rest well."
         } elseif ($h -in 18..20) {

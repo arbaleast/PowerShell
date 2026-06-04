@@ -23,8 +23,7 @@ function Reset-TerminalMode {
     [Console]::Write("`e[?1003l")   # 禁用所有鼠标追踪（部分终端）
     [Console]::Write("`e[?1006l")   # 禁用扩展鼠标模式（SGR）
     
-    # 2. 退出备选屏幕缓冲区（tmux/SSH 可能切换到备选缓冲区）
-    [Console]::Write("`e[?1049l")
+    # 2. ConPTY 自动处理 alt buffer 切换，无需手动退出
     
     # 3. 显示光标（可能被远程会话隐藏）
     [Console]::Write("`e[?25h")
@@ -32,8 +31,8 @@ function Reset-TerminalMode {
     # 4. 重置字符属性（颜色、粗体等）
     [Console]::Write("`e[m")
     
-    # 5. 重置终端软属性（DECSC 参数）
-    [Console]::Write("`e[!p")
+    # 5. 不再使用 \e[!p（软复位），因为它会导致清屏，破坏终端内容
+    # 仅保留上面的 1-4 重置操作已足够清理 SSH/tmux 会话遗留的状态
 }
 
 # 将用户输入的值进行 POSIX shell 单引号转义
@@ -118,41 +117,47 @@ function Invoke-SshCommand {
     }
 
     if ($CaptureOutput) {
-        # 捕获输出模式：重定向标准输出到临时文件
-        $tempFile = [System.IO.Path]::GetTempFileName()
-        try {
-            # 启动 ssh.exe 进程，捕获 stdout
-            $process = Start-Process -FilePath "ssh.exe" -ArgumentList $sshArgs.ToArray() -NoNewWindow -Wait -RedirectStandardOutput $tempFile -PassThru
+        # P1 优化：使用 .NET Process 直接捕获 stdout，避免临时文件 I/O
+        $psi = [System.Diagnostics.ProcessStartInfo]::new()
+        $psi.FileName = "ssh.exe"
+        $psi.Arguments = $sshArgs.ToArray() -join ' '
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.CreateNoWindow = $true
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        $output = $proc.StandardOutput.ReadToEnd()
+        $proc.WaitForExit()
+        $exitCode = $proc.ExitCode
+        $proc.Dispose()
 
-            # 读取输出内容（Get-Content -Raw 已返回纯文本字符串）
-            $output = Get-Content $tempFile -Raw
-
-            # 如果启用了 -PassThru，返回包含 Output 和 ExitCode 的对象
-            if ($PassThru) {
-                return [PSCustomObject]@{
-                    Output   = $output
-                    ExitCode = $process.ExitCode
-                }
+        # 如果启用了 -PassThru，返回包含 Output 和 ExitCode 的对象
+        if ($PassThru) {
+            return [PSCustomObject]@{
+                Output   = $output
+                ExitCode = $exitCode
             }
-
-            # 兼容旧调用方式：直接返回输出字符串
-            return $output
-        } finally {
-            Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
         }
+
+        # 兼容旧调用方式：直接返回输出字符串
+        return $output
     } else {
         # 非捕获模式：直接运行，输出显示在终端
-        # 交互式 SSH 返回后必须重置终端状态（鼠标追踪、备选屏幕缓冲区等）
+        # 仅在交互式 SSH 时重置终端状态（-Interactive 分配 PTY，可能切换备选缓冲区）
         if ($PassThru) {
             $process = Start-Process -FilePath "ssh.exe" -ArgumentList $sshArgs.ToArray() -NoNewWindow -Wait -PassThru
-            Reset-TerminalMode
+            if ($Interactive) {
+                Reset-TerminalMode
+            }
             return [PSCustomObject]@{
                 Output   = ""
                 ExitCode = $process.ExitCode
             }
         }
         Start-Process -FilePath "ssh.exe" -ArgumentList $sshArgs.ToArray() -NoNewWindow -Wait
-        # SSH 进程结束后重置终端状态
-        Reset-TerminalMode
+        if ($Interactive) {
+            # SSH 进程结束后重置终端状态
+            Reset-TerminalMode
+        }
     }
 }

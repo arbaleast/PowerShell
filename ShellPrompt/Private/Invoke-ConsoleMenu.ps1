@@ -100,7 +100,8 @@ function Invoke-ConsoleMenu {
     # ============================================================
     [Console]::Write("`e[2J`e[H`e[0m")
 
-    if ($Global:TUI_PerfState -and (Test-Path variable:Global:TUI_PerfState)) {
+    # 使用快速引用检查替代 Test-Path（TUIPerformanceState 已实现单例）
+    if ($null -ne $Global:TUI_PerfState) {
         $Global:TUI_PerfState.ReportFrame()
     }
 
@@ -161,15 +162,12 @@ function Invoke-ConsoleMenu {
             }
             [Console]::Write("`e[2J`e[H`e[0m")
             Clear-Host
-            # 异常退出时重置终端状态（鼠标追踪、备选屏幕缓冲区等）
-            if (Get-Command Reset-TerminalMode -ErrorAction SilentlyContinue) {
-                Reset-TerminalMode
-            }
             return $null
         }
         $vK = $key.VirtualKeyCode
 
-        if ($Global:TUI_PerfState -and (Test-Path variable:Global:TUI_PerfState)) {
+        # 使用快速引用检查替代 Test-Path
+        if ($null -ne $Global:TUI_PerfState) {
             $Global:TUI_PerfState.ReportKeyPress()
         }
 
@@ -182,22 +180,10 @@ function Invoke-ConsoleMenu {
                 "DEBUG: Enter pressed, idx=$idx, exitIdx=$exitIdx" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Append -Encoding utf8
             }
             if ($idx -eq $exitIdx) {
-                # 退出菜单时重置终端状态
-                if (Get-Command Reset-TerminalMode -ErrorAction SilentlyContinue) {
-                    Reset-TerminalMode
-                }
                 return $null
-            }
-            # 选中选项退出时重置终端状态（可能在 SSH 后使用菜单）
-            if (Get-Command Reset-TerminalMode -ErrorAction SilentlyContinue) {
-                Reset-TerminalMode
             }
             return $items[$idx]
         } elseif ($key.Character -eq 'q' -or $key.Character -eq 'Q') {
-            # 按 Q 退出时重置终端状态
-            if (Get-Command Reset-TerminalMode -ErrorAction SilentlyContinue) {
-                Reset-TerminalMode
-            }
             return $null
         }
 

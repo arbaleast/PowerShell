@@ -49,6 +49,10 @@ class TUILogger {
     [string]$LogFilePath
     [int]$MaxFileSizeMb = 10
     [int]$MaxBackupFiles = 3
+    
+    # RotateIfNeeded 节流计数器（每 N 次日志调用才检查一次文件大小）
+    [int]$_rotateCounter = 0
+    [int]$_rotateCheckInterval = 10
 
     TUILogger() {
         $this.MinLevel = [TUILogLevel]::Warning
@@ -117,9 +121,16 @@ class TUILogger {
 
         # 文件输出
         if ($this.EnableFile -and $this.FileWriter) {
-            # 检查文件大小，执行滚动
-            $this.RotateIfNeeded()
-            $this.FileWriter.WriteLine($output)
+            # 节流：每 N 次调用才检查一次文件大小
+            $this._rotateCounter++
+            if ($this._rotateCounter -ge $this._rotateCheckInterval) {
+                $this._rotateCounter = 0
+                $this.RotateIfNeeded()
+            }
+            # 旋转后再次检查 FileWriter 有效性（避免旋转异常导致写 NULL）
+            if ($this.FileWriter) {
+                $this.FileWriter.WriteLine($output)
+            }
         }
     }
 
@@ -130,6 +141,7 @@ class TUILogger {
             $fileInfo = Get-Item $this.LogFilePath -ErrorAction SilentlyContinue
             if ($fileInfo -and $fileInfo.Length -gt ($this.MaxFileSizeMb * 1MB)) {
                 $this.FileWriter.Close()
+                $this.FileWriter = $null
 
                 # 滚动备份文件
                 for ($i = $this.MaxBackupFiles; $i -gt 1; $i--) {
@@ -148,7 +160,8 @@ class TUILogger {
                 $this.FileWriter.AutoFlush = $true
             }
         } catch {
-            # 忽略滚动错误
+            # 滚动失败后确保 FileWriter 已清理，不残留已关闭的句柄
+            $this.FileWriter = $null
         }
     }
 
@@ -177,7 +190,8 @@ class TUILogger {
         $this.Log([TUILogLevel]::Error, $message, $fields, $this.GetCaller())
     }
 
-    # 获取调用者信息
+    # 获取调用者信息（仅在启用日志时调用）
+    # P6 优化：Level 检查在 Log 方法入口处已处理，此处无需重复检查
     hidden [string] GetCaller() {
         $caller = (Get-PSCallStack)[2]
         if ($caller) {

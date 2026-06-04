@@ -140,10 +140,6 @@ function Start-TmuxSession {
         # 用户选择断开连接
         if ($null -eq $action) {
             Clear-Host
-            # 双重保障：菜单退出时也重置终端状态
-            if (Get-Command Reset-TerminalMode -ErrorAction SilentlyContinue) {
-                Reset-TerminalMode
-            }
             Write-Host " [OK] 已从 $HostName 断开连接" -ForegroundColor Cyan
             return
         }
@@ -184,12 +180,10 @@ function Start-TmuxSession {
                     $sessionName = $selected.Label -replace '^\[[AD]\]\s+', ''
                 }
 
-                Write-Host " [TMUX] 正在连接到会话 '$sessionName' ..." -ForegroundColor Green
                 # 安全：使用 ConvertTo-SshEscapedString 转义 $sessionName，防止命令注入
                 $escapedName = ConvertTo-SshEscapedString $sessionName
                 Invoke-SshCommand -HostName $HostName -Interactive -RemoteCommand "tmux attach -d -t $escapedName 2>/dev/null || tmux new-session -A -s $escapedName"
-                # 交互式 SSH 退出后，给 SSH 连接留出清理时间
-                Start-Sleep -Seconds 1
+                # P3 优化：移除不必要的 Start-Sleep，Reset-TerminalMode 已处理终端状态
                 Write-Host "`n [OK] tmux 会话已分离，回到管理菜单" -ForegroundColor Cyan
             }
 
@@ -242,17 +236,12 @@ function Start-TmuxSession {
                     $newName = New-RandomSessionName
                 }
 
-                # 输出操作状态（覆盖残留的菜单框区域，避免视觉混乱）
-                # 先定位光标到输入行下方，再用 Write-Host 输出
-                [Console]::Write("`e[$($inputRow + 1);1H`e[K")
-                [Console]::Write("`e[$($inputRow + 2);1H`e[K")
-                [Console]::Write("`e[$($inputRow + 1);1H")
-                Write-Host " [TMUX] 正在创建并连接到会话 '$newName' ..." -ForegroundColor Green
+                # 使用 \r 回车回到行首并清空，准备 SSH 连接输出
+                [Console]::Write("`e[$($inputRow + 1);1H`r`e[K")
                 # 安全：使用 ConvertTo-SshEscapedString 转义 $newName，防止命令注入
                 $escapedName = ConvertTo-SshEscapedString $newName
                 Invoke-SshCommand -HostName $HostName -Interactive -RemoteCommand "tmux new-session -A -s $escapedName 2>/dev/null || exec sh"
-                # 交互式 SSH 退出后，给 SSH 连接留出清理时间
-                Start-Sleep -Seconds 1
+                # P3 优化：移除不必要的 Start-Sleep，Reset-TerminalMode 已处理终端状态
                 Write-Host "`n [OK] tmux 会话已分离，回到管理菜单" -ForegroundColor Cyan
             }
 
@@ -291,8 +280,7 @@ function Start-TmuxSession {
                 Write-Host " [SSH] 直接连接..." -ForegroundColor Green
                 # 直接 SSH 登录，不需要远程命令
                 Invoke-SshCommand -HostName $HostName -Interactive
-                # 交互式 SSH 退出后，给 SSH 连接留出清理时间
-                Start-Sleep -Seconds 1
+                # P3 优化：移除不必要的 Start-Sleep，Reset-TerminalMode 已处理终端状态
                 Write-Host "`n [OK] SSH 连接已关闭，回到管理菜单" -ForegroundColor Cyan
             }
 

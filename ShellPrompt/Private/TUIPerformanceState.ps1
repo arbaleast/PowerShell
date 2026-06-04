@@ -40,7 +40,14 @@ class TUIPerformanceState {
         $this.AvgFrameTime = 0.0
         $this.PeakFrameTime = 0.0
         $this.MinFrameTime = [double]::MaxValue
+        # P5 缓存摘要
+        $this._cachedSummary = $null
+        $this._summaryDirty = $true
     }
+    
+    # P5 缓存字段
+    hidden [hashtable]$_cachedSummary
+    hidden [bool]$_summaryDirty
     
     # 报告新帧完成
     [void] ReportFrame() {
@@ -53,17 +60,22 @@ class TUIPerformanceState {
         # 更新帧时间队列
         $this.FrameTimes.Enqueue($deltaMs)
         if ($this.FrameTimes.Count -gt $this.WindowSize) {
-            $this.FrameTimes.Dequeue() | Out-Null
+            # P5 优化：使用 [void] 替代管道 Out-Null
+            [void]$this.FrameTimes.Dequeue()
         }
         
         # 更新时间戳队列（用于 FPS 计算）
         $this.FrameTimestamps.Enqueue($now.TimeOfDay)
         if ($this.FrameTimestamps.Count -gt $this.WindowSize) {
-            $this.FrameTimestamps.Dequeue() | Out-Null
+            # P5 优化：使用 [void] 替代管道 Out-Null
+            [void]$this.FrameTimestamps.Dequeue()
         }
         
         $this.TotalFrames++
         $this.RenderCount++
+        
+        # P5 优化：数据变更时标记缓存为脏
+        $this._summaryDirty = $true
         
         # 计算统计数据
         $this.CalculateFPS()
