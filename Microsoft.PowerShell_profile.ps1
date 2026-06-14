@@ -46,37 +46,48 @@ function Invoke-DeferredInit {
     $commands = @{}
     Get-Command -Name starship, fnm -ErrorAction SilentlyContinue | ForEach-Object { $commands[$_.Name] = $_ }
 
-    # Starship
+    # Starship — 失败也不能影响 prompt 主链
     if ($commands['starship']) {
-        Invoke-Expression ((&starship init powershell) -join "`n")
+        try { Invoke-Expression ((&starship init powershell) -join "`n") } catch { }
     }
 
-    # Fnm
+    # Fnm — 失败也不能影响 prompt 主链
     if ($commands['fnm']) {
-        Invoke-Expression ((&fnm env --use-on-cd --shell powershell) -join "`n")
+        try { Invoke-Expression ((&fnm env --use-on-cd --shell powershell) -join "`n") } catch { }
     }
 
-    # PSReadLine
+    # PSReadLine — 每个 set 命令独立 try-catch
+    # 原因：PSReadLine 版本不同参数可能不同（-PredictionSource 是 2.2+ 才有的）
+    # 如果任何 set 失败，绝不能阻断 prompt 链
     if (Get-Module -ListAvailable -Name PSReadLine) {
-        Import-Module PSReadLine -ErrorAction SilentlyContinue
-        Set-PSReadLineOption -PredictionSource History
-        Set-PSReadLineOption -EditMode Windows
-        Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
-        Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
-        Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
+        try {
+            Import-Module PSReadLine -ErrorAction SilentlyContinue
+            try { Set-PSReadLineOption -PredictionSource History -ErrorAction Stop } catch { }
+            try { Set-PSReadLineOption -EditMode Windows -ErrorAction Stop } catch { }
+            try { Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete -ErrorAction Stop } catch { }
+            try { Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward -ErrorAction Stop } catch { }
+            try { Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward -ErrorAction Stop } catch { }
+        } catch { }
     }
 }
 
 # 通过包装 prompt 函数来触发延迟初始化
-$script:OriginalPrompt = Get-Item Function:prompt -ErrorAction SilentlyContinue
+# 重要：Get-Item Function:prompt 返回的是 FunctionInfo 对象（不是 ScriptBlock）
+# 显式取 .ScriptBlock 避免类型歧义
+$script:OriginalPrompt = (Get-Item Function:prompt -ErrorAction SilentlyContinue).ScriptBlock
 if (-not $script:OriginalPrompt) { $script:OriginalPrompt = { "PS $PWD> " } }
 
 function global:prompt {
     # 首次调用 prompt 时触发延迟初始化
     Invoke-DeferredInit
-    # 调用原始 prompt
-    & $script:OriginalPrompt
+    # 调用原始 prompt — 兜底防止 prompt 链断裂
+    try {
+        return & $script:OriginalPrompt
+    } catch {
+        return "PS> "
+    }
 }
+
 
 # ============================================================
 # 阶段 3：Profile 加载计时
