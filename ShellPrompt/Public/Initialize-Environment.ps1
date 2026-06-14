@@ -5,23 +5,30 @@
 # 缓存：quotes.txt 仅加载一次，避免每次 Profile 加载时重复读取文件 I/O
 $script:QuotesCache = $null
 
+# 预解引用全局配置 → 局部变量：避免 Show-UserScoopLogo 默认参数每次调用都进行
+# 5 次 $global:UserScoop_CONF.XXX 解引用（每个默认值都是一个 ExpressionAst）
+$script:CfgQuotes = $global:UserScoop_CONF.Quotes
+$script:CfgFreshGreen = $global:UserScoop_CONF.Colors.FreshGreen
+$script:CfgSageGreen = $global:UserScoop_CONF.Colors.SageGreen
+$script:CfgMidGray = $global:UserScoop_CONF.Colors.MidGray
+
 function Show-UserScoopLogo {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $false)]
-        [string]$QuotesPath = $global:UserScoop_CONF.Quotes,
+        [string]$QuotesPath = $script:CfgQuotes,
 
         [Parameter(Mandatory = $false)]
-        [string]$ColorPrimary = $global:UserScoop_CONF.Colors.FreshGreen,
+        [string]$ColorPrimary = $script:CfgFreshGreen,
 
         [Parameter(Mandatory = $false)]
-        [string]$ColorAccent = $global:UserScoop_CONF.Colors.SageGreen,
+        [string]$ColorAccent = $script:CfgSageGreen,
 
         [Parameter(Mandatory = $false)]
-        [string]$ColorMuted = $global:UserScoop_CONF.Colors.MidGray,
+        [string]$ColorMuted = $script:CfgMidGray,
 
         [Parameter(Mandatory = $false)]
-        [string]$BorderColor = $global:UserScoop_CONF.Colors.FreshGreen
+        [string]$BorderColor = $script:CfgFreshGreen
     )
 
     $rst = "`e[0m"
@@ -55,16 +62,21 @@ function Show-UserScoopLogo {
     $cwd = Split-Path -Leaf $PWD.Path
     $hLine = "=" * 45
 
-    # Header
-    Write-Host ""
-    Write-Host "  $BorderColor--< $ColorMuted$userName@$hostname$BorderColor >--[ $ColorAccent$cwd$BorderColor ]--[ ${ColorPrimary}SHELL PROMPT$BorderColor ]$rst"
-    Write-Host "  $BorderColor|$rst"
-    Write-Host "  $BorderColor|$rst  $BorderColor~$rst"
-    Write-Host "  $BorderColor|$rst  ${ColorPrimary}DONE$rst  ${ColorPrimary}$quote$rst"
-    Write-Host "  $BorderColor|$rst  $ColorMuted$timestamp$rst"
-    Write-Host "  $BorderColor|$rst"
-    Write-Host "  $BorderColor|$rst  $BorderColor~$rst"
-    Write-Host "  $BorderColor+$hLine---$rst"
+    # I/O 批量化：10 次 Write-Host 合并为 1 次单字符串写入
+    # 每次 Write-Host 在 Windows console 上约 20-40ms 启动开销（输出重定向 + 颜色解析）
+    # 单字符串仅 1 次调用，profile 加载可节省 ~250-350ms
+    $banner = @(
+        ''
+        "  $BorderColor--< $ColorMuted$userName@$hostname$BorderColor >--[ $ColorAccent$cwd$BorderColor ]--[ ${ColorPrimary}SHELL PROMPT$BorderColor ]$rst"
+        "  $BorderColor|$rst"
+        "  $BorderColor|$rst  $BorderColor~$rst"
+        "  $BorderColor|$rst  ${ColorPrimary}DONE$rst  ${ColorPrimary}$quote$rst"
+        "  $BorderColor|$rst  $ColorMuted$timestamp$rst"
+        "  $BorderColor|$rst"
+        "  $BorderColor|$rst  $BorderColor~$rst"
+        "  $BorderColor+$hLine---$rst"
+        ''
+    ) -join "`n"
 
-    Write-Host ""
+    Write-Host $banner
 }

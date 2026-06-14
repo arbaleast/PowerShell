@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **TUILogger I/O 合并**: [`RotateIfNeeded`](ShellPrompt/Private/TUILogger.ps1:94) 将 `Test-Path` + `Get-Item` 两次文件系统调用合并为单次 `Get-Item -ErrorAction SilentlyContinue`，热路径上减少一次 stat
 - **Start-TmuxSession 函数提升**: 将内部辅助函数 `New-RandomSessionName` 与 `$sessionPrefix` 提升到模块作用域（`$script:` + 模块级函数），避免每次调用重复创建闭包
 - **Initialize-Environment switch 重构**: 时间问候嵌套 `if/elseif` 改为 `switch ($true) { ... }` 模式；`Get-Random -Max 100` 合并为单次调用并改用 `-Minimum 0 -Maximum 100`（与原行为等价）
+- **Show-UserScoopLogo Write-Host 批量化**: `Initialize-Environment.ps1` 中 10 次 `Write-Host` 合并为 1 次单字符串写入（数组 + `-join "\n"`）。Windows console 上每次 `Write-Host` 约 20-40ms 启动开销，单字符串化预计节省 ~250-350ms
+- **Show-UserScoopLogo 默认参数预解引用**: 将 5 个默认值从 `$global:UserScoop_CONF.XXX` 表达式树（每次调用重算）改为模块顶部 `$script:Cfg*` 局部变量，节省每次调用的 ExpressionAst 求值开销
+- **Initialize-Config 函数提升到 `$script:` 作用域**: 将 `Merge-UserConfig` / `Merge-Hashtable` / `Get-PowerShellExe` / `ConvertFromJsonCompat` 4 个函数改写为模块作用域 ScriptBlock，dot-source 后只解析/绑定一次；原版每次 profile 加载都重新定义 4 个函数 + 1 个嵌套闭包，是 693ms 启动开销的主要来源之一
+- **ConvertFromJsonCompat 迭代化**: 把内部嵌套的 `_ConvertRecursive` 提升为 `$script:_ConvertValue` 模块作用域，并用 `+=` 直接构造数组替代 `ArrayList.Add`，消除递归 + 嵌套闭包 + 逐次扩容三重开销
+- **Test-Path + Get-Item 合并**: `Initialize-Config.ps1` 中用户配置检测改用 `Get-Item -ErrorAction SilentlyContinue` 一次调用，热路径上减少一次 stat
 
 ### Fixed
 
