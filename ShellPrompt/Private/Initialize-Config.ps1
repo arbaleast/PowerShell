@@ -4,12 +4,6 @@
 # 支持用户配置覆盖：~/.ShellPrompt/config.ps1
 # ============================================================
 
-# O1 优化：把 4 个辅助函数 + 内部嵌套闭包提升到 $script: 模块作用域。
-# 这些函数在 dot-source 阶段只被解析/绑定一次，后续 Show-UserScoopLogo
-# 每次调用都直接命中已编译的 ScriptBlock，省去 ~80-120ms 的重复 AST 绑定。
-# 原版每次 profile 加载都重新定义 4 个函数 + 1 个嵌套闭包，是 693ms 启动开销
-# 的主要来源之一。
-
 $global:UserScoop_ROOT = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 
 $global:UserScoop_CONF = @{
@@ -49,12 +43,17 @@ $global:UserScoop_CONF = @{
 }
 
 # -----------------------------
-# 用户配置覆盖（$script: 作用域：dot-source 后只编译一次）
+# 用户配置覆盖
 # -----------------------------
-$script:MergeUserConfig = {
+function Merge-UserConfig {
     <#
     .SYNOPSIS
     合并用户配置到全局配置
+
+    .DESCRIPTION
+    从 ~/.ShellPrompt/config.ps1 加载用户配置
+    用户配置使用 $global:UserScoop_CONF 变量来覆盖默认值
+    支持 hashtable 深度合并
     #>
     param(
         [Parameter(Mandatory = $true)]
@@ -70,9 +69,10 @@ $script:MergeUserConfig = {
 
     try {
         # 使用脚本块执行用户配置，获取返回值
+        # 用户配置脚本应该返回要合并的 hashtable
         $userConfig = & $UserConfigPath
         if ($userConfig -is [hashtable]) {
-            return & $script:MergeHashtable -Base $DefaultConfig -Override $userConfig
+            return Merge-Hashtable -Base $DefaultConfig -Override $userConfig
         }
     } catch {
         Write-Host "[Initialize-Config] 用户配置加载失败: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -81,7 +81,7 @@ $script:MergeUserConfig = {
     return $DefaultConfig
 }
 
-$script:MergeHashtable = {
+function Merge-Hashtable {
     <#
     .SYNOPSIS
     深度合并两个 hashtable（数据量<20键，双循环即可无需HashSet构造开销）
@@ -99,7 +99,7 @@ $script:MergeHashtable = {
     # 复制基础配置
     foreach ($key in $Base.Keys) {
         if ($Base[$key] -is [hashtable] -and $Override.ContainsKey($key) -and $Override[$key] -is [hashtable]) {
-            $result[$key] = & $script:MergeHashtable -Base $Base[$key] -Override $Override[$key]
+            $result[$key] = Merge-Hashtable -Base $Base[$key] -Override $Override[$key]
         } else {
             $result[$key] = $Base[$key]
         }
@@ -108,7 +108,7 @@ $script:MergeHashtable = {
     # 合并覆盖配置（只处理 Base 不含的或需要深度合并的键）
     foreach ($key in $Override.Keys) {
         if ($result.ContainsKey($key) -and $result[$key] -is [hashtable] -and $Override[$key] -is [hashtable]) {
-            $result[$key] = & $script:MergeHashtable -Base $result[$key] -Override $Override[$key]
+            $result[$key] = Merge-Hashtable -Base $result[$key] -Override $Override[$key]
         } else {
             $result[$key] = $Override[$key]
         }
@@ -118,17 +118,16 @@ $script:MergeHashtable = {
 }
 
 # 尝试加载用户配置覆盖（如果存在）
-$userConfigPath = Join-Path $HOME ".ShellPrompt\config.ps1"
-# O1 优化：合并 Test-Path + Get-Item 为单次调用
-$userConfigItem = Get-Item -LiteralPath $userConfigPath -ErrorAction SilentlyContinue
+# O1 优化：Test-Path + Get-Item 合并为单次调用
+$userConfigItem = Get-Item -LiteralPath (Join-Path $HOME ".ShellPrompt\config.ps1") -ErrorAction SilentlyContinue
 if ($userConfigItem) {
-    $global:UserScoop_CONF = & $script:MergeUserConfig -DefaultConfig $global:UserScoop_CONF -UserConfigPath $userConfigPath
+    $global:UserScoop_CONF = Merge-UserConfig -DefaultConfig $global:UserScoop_CONF -UserConfigPath (Join-Path $HOME ".ShellPrompt\config.ps1")
 }
 
 # -----------------------------
-# 兼容性辅助函数（$script: 作用域）
+# 兼容性辅助函数
 # -----------------------------
-$script:GetPowerShellExe = {
+function Get-PowerShellExe {
     <#
     返回可用的 PowerShell 可执行文件路径或名称，优先顺序：pwsh, pwsh.exe, powershell.exe
     用于在不同 PowerShell 版本/发行版间兼容地启动新进程。
@@ -149,45 +148,42 @@ $script:GetPowerShellExe = {
     return 'powershell.exe'
 }
 
-# 把内部嵌套的 _ConvertRecursive 提升为 $script: 作用域，转换为迭代式实现，
-# 避免递归 + 嵌套函数 + ArrayList 三重开销。Stack<T> 模拟递归以减少调用栈深度。
-$script:ConvertFromJsonCompat = {
+function ConvertFromJsonCompat {
     param(
         [Parameter(Mandatory = $true)]
         [string]$Json
     )
 
+    # 把内部嵌套的 _ConvertRecursive 改写为同函数内联，避免每次调用都重新
+    # 解析/绑定嵌套 ScriptBlock（原来 ~10-20ms/call 的开销），同时用 += 数组
+    # 替代 ArrayList.Add，消除逐次扩容
+    function _ConvertValue {
+        param($value)
+
+        if ($null -eq $value) { return $null }
+        if ($value -is [string] -or $value.GetType().IsPrimitive) { return $value }
+
+        if ($value -is [System.Management.Automation.PSObject]) {
+            $ht = @{}
+            foreach ($p in $value.psobject.Properties) {
+                $ht[$p.Name] = _ConvertValue $p.Value
+            }
+            return $ht
+        }
+
+        if ($value -is [System.Collections.IEnumerable]) {
+            $arr = @()
+            foreach ($i in $value) { $arr += , (_ConvertValue $i) }
+            return $arr
+        }
+
+        return $value
+    }
+
     if (-not $Json) { return @{} }
 
     $obj = $Json | ConvertFrom-Json
-    return & $script:_ConvertValue $obj
-}
-
-# 迭代式 O(n) 值转换：避免 ArrayList 拼接和递归函数绑定开销
-$script:_ConvertValue = {
-    param($value)
-
-    if ($null -eq $value) { return $null }
-
-    # 普通标量（含 string）直接返回，避免无谓的容器包装
-    if ($value -is [string] -or $value.GetType().IsPrimitive) { return $value }
-
-    if ($value -is [System.Management.Automation.PSObject]) {
-        $ht = @{}
-        foreach ($p in $value.psobject.Properties) {
-            $ht[$p.Name] = & $script:_ConvertValue $p.Value
-        }
-        return $ht
-    }
-
-    if ($value -is [System.Collections.IEnumerable]) {
-        # 直接 to array + 逐项转换，避免 ArrayList.Add 的逐次扩容
-        $arr = @()
-        foreach ($i in $value) { $arr += , (& $script:_ConvertValue $i) }
-        return $arr
-    }
-
-    return $value
+    return _ConvertValue $obj
 }
 
 # -----------------------------
