@@ -1,9 +1,9 @@
-```
 ____  ____  ____  ____   ___  _____ ___ _     _____
 |  _ \/ ___||  _ \|  _ \/ _ \|  ___|_ _| |   | ____|
 | |_) \___ \| |_) | |_) | | | | |_   | || |   |  _|
 |  __/ ___) |  __/|  _ <| |_| |  _|  | || |___| |___
 |_|   |____/|_|   |_| \_\\___/|_|   |___|_____|_____|
+
 ```
 
 ### ⌨️ SSH + tmux Session Manager for PowerShell
@@ -29,6 +29,7 @@ Below is a sample terminal preview showing the prompt and remote tmux session me
 **Startup quote:**
 
 ```
+
   ┌──〈 arbaleast@G7 〉━━[ PowerShell ]━━[ SHELL PROMPT ]
   │
   │  ┄
@@ -37,11 +38,13 @@ Below is a sample terminal preview showing the prompt and remote tmux session me
   │
   │  ┄
   └───────────────────────────────────────────── ○
+
 ```
 
 ### Tmux Manager (`sss <host>`)
 
 ```
+
   +--< arbaleast@G7 >--[ PowerShell ]--[ REMOTE TMUX | myhost ]
   |
   |  +
@@ -56,12 +59,15 @@ Below is a sample terminal preview showing the prompt and remote tmux session me
   |  -- create a new named session
 
   up/down navigate + Enter confirm + Q quit
+
 ```
 
 **New session input:**
 
 ```
+
   session name (Enter = random):
+
 ```
 
 ---
@@ -85,24 +91,7 @@ Below is a sample terminal preview showing the prompt and remote tmux session me
 - **Quick Connect** — `sss <host>` to attach/resume/create sessions instantly
 - **Fallback SSH** — If remote host has no tmux, falls back to plain SSH login
 
-### 💧 Water Reminder
-
-- **Smart Reminders** — Windows toast notifications every ~60 minutes with time-aware messages (morning/afternoon/evening)
-- **Weather-Aware** — Automatically adjusts interval based on temperature via wttr.in
-- **Daily Goal** — 2000ml target tracking with history visualization via `Get-WaterReminderHistory` (`Get-WaterHistory` alias available)
-- **Quiet Hours** — No notifications between 22:00-07:00
-- **Background Mode** — Run as a background process with `water -Background`
-- **No external PowerShell modules** — Uses built-in Windows notification APIs with Toast/WinForms/msg.exe fallback; no external PowerShell gallery modules required
-
-### 🎇 Background service guide (if water reminder enabled)
-
-- Start background mode: `water -Background`
-- Stop background mode: `water -Stop`
-- Check status: `water -Status`
-- If `water -Background` starts but notifications do not appear, check `data/water-reminder.log` for notification fallback or weather lookup warnings.
-- The reminder uses Windows native notifications; on older Windows editions it may fall back to `msg.exe` if Toast is unavailable.
-
-### �📁 Everyday QoL
+### 📁 Everyday QoL
 
 - **Quick Aliases** — `ll`, `..`, `~`, `which` for faster navigation
 - **Modular Structure** — Self-contained `ShellPrompt/` module, single entry point
@@ -112,43 +101,40 @@ Below is a sample terminal preview showing the prompt and remote tmux session me
 ## 📂 Structure
 
 ```
+
 PowerShell/
 │
 ├── Microsoft.PowerShell_profile.ps1   # 🎯 Minimal entry — imports the module
-├── quotes.txt                         # 💬 Random startup quotes
 ├── data/
-│   ├── quotes.txt                     # 💬 Random startup quotes
-│   └── water-history.json             # 💧 Daily water intake records (if water reminder enabled)
+│   └── quotes.txt                     # 💬 Random startup quotes
 ├── README.md / README_zh.md
-└── ShellPrompt/                      # 📦 Self-contained module
+└── ShellPrompt/                       # 📦 Self-contained module
     ├── ShellPrompt.psd1              # 📋 Module manifest
     ├── ShellPrompt.psm1               # 🚪 Entry point (config → Private → Public → export)
     ├── Private/
     │   ├── Initialize-Config.ps1      # ⚙️  Global config ($UserScoop_CONF)
-    │   ├── Invoke-ConsoleMenu.ps1       # 🖼️  Generic UI menu (no tmux knowledge)
-    │   ├── Get-TmuxSessions.ps1         # 🔌 SSH → tmux ls parser
-    │   ├── Invoke-SessionSelector.ps1   # 🔀 Session picker submenu
-    │   ├── Invoke-WaterReminder.ps1     # 💧 Core reminder logic (weather, intervals, logging)
-    │   └── Send-WaterNotification.ps1   # 🔔 Windows toast notification sender
+    │   ├── Invoke-ConsoleMenu.ps1      # 🖼️  Generic UI menu (no tmux knowledge)
+    │   ├── Get-TmuxSessions.ps1        # 🔌 SSH → tmux ls parser
+    │   └── Invoke-SessionSelector.ps1  # 🔀 Session picker submenu
     └── Public/
         ├── Initialize-Environment.ps1  # 🛠️  Starship / Fnm / PSReadLine + logo
-        ├── Show-UserScoopLogo.ps1       # 🎨 Startup logo and quotes
-        ├── Invoke-Reload.ps1            # 🔄 reload command
-        ├── Set-ProfileAliases.ps1        # 🔗 ll, .., ~, which
-        ├── Start-TmuxSession.ps1        # 🚀 Tmux session manager (exported)
-        └── Start-WaterReminder.ps1      # 💧 Water reminder entry (exported)
+        ├── Show-UserScoopLogo.ps1      # 🎨 Startup logo and quotes
+        ├── Invoke-Reload.ps1           # 🔄 reload command
+        ├── Set-ProfileAliases.ps1      # 🔗 ll, .., ~, which
+        └── Start-TmuxSession.ps1       # 🚀 Tmux session manager (exported)
+
 ```
 
 ### Module Architecture
 
 `ShellPrompt.psm1` loads files in strict order:
 
-1. **Private/Initialize-Config.ps1** — sets up `$global:UserScoop_CONF` (colors, keys, SSH/Tmux options, quotes path, water reminder config)
-2. **Private/** — internal helpers (Invoke-ConsoleMenu, Get-TmuxSessions, Invoke-SessionSelector, Invoke-WaterReminder, Send-WaterNotification)
-3. **Public/** — user-facing commands (Initialize-Environment, Show-UserScoopLogo, Start-TmuxSession, Start-WaterReminder, Get-WaterReminderHistory, reload)
+1. **Private/Initialize-Config.ps1** — sets up `$global:UserScoop_CONF` (colors, keys, SSH/Tmux options, quotes path)
+2. **Private/** — internal helpers (Invoke-ConsoleMenu, Get-TmuxSessions, Invoke-SessionSelector)
+3. **Public/** — user-facing commands (Initialize-Environment, Show-UserScoopLogo, Start-TmuxSession, reload)
 4. **Export-ModuleMember** — only Public/*.ps1 functions are exported; Private is invisible to consumers
 
-This enforces the MVC boundary: UI logic (`Invoke-ConsoleMenu`) knows nothing about tmux or SSH, and notification delivery (`Send-WaterNotification`) is decoupled from reminder scheduling.
+This enforces the MVC boundary: UI logic (`Invoke-ConsoleMenu`) knows nothing about tmux or SSH, keeping concerns separated.
 
 ---
 
@@ -164,7 +150,6 @@ Ensure the following tools are installed on your system:
 | [Fnm](https://github.com/Schniz/fnm) | Fast Node version manager | [Guide](https://github.com/Schniz/fnm#installation) |
 | [OpenSSH](https://docs.microsoft.com/windows-server/administration/openssh/openssh_install_firstuse) | SSH client for remote tmux | Built into Windows 10/11 or install via OpenSSH |
 | [tmux](https://github.com/tmux/tmux) | Remote session persistence | [Installation](https://github.com/tmux/tmux/wiki/Installing) |
-| Windows notification support | Native Windows toast/WinForms/msg.exe fallback | Built into modern Windows, or use msg.exe on older editions |
 
 ### 2️⃣ Install
 
@@ -196,12 +181,6 @@ Edit `ShellPrompt/Private/Initialize-Config.ps1` to change colors, key codes, SS
 | Command | What it does |
 |---------|-------------|
 | `sss <host>` | 🖥️ Open tmux manager → connect to remote host |
-| `water` | 💧 Start water reminder (interactive foreground mode) |
-| `water -Background` | 💧 Start water reminder as background process |
-| `water -Status` | 💧 Show today's water intake progress |
-| `water -Stop` | 💧 Stop the background water reminder process |
-| `Get-WaterReminderHistory` | 💧 View recent water intake history |
-| `Get-WaterHistory` | 💧 Alias for `Get-WaterReminderHistory` |
 | `reload` | 🔄 Reload your PowerShell profile |
 | `ll` | 📋 List files with details |
 | `..` | ⬆️ Jump to parent directory |
@@ -220,4 +199,4 @@ MIT © arbaleast
 
 ---
 
-> 💡 **Tip:** Star this repo if you find it useful! ⭐
+> __Tip:__ Star this repo if you find it useful! ⭐

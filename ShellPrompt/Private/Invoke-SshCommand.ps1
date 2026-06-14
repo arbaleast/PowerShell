@@ -9,7 +9,9 @@
 #   - [2026-05-23] 新增 -PassThru 参数，返回 SSH 进程退出码供调用方校验
 #   - [2026-05-25] 新增 -SkipHostKeyCheck 参数，默认 false 更安全
 #   - [2026-06-04] 交互式 SSH 返回后自动重置终端状态（鼠标追踪、备选屏幕缓冲区等）
+#   - [2026-06-04] 修复 tmux 中 Unicode 方块字符乱码问题：自动设置 TERM=xterm-256color
 # ============================================================
+
 
 # ============================================================
 # Reset-TerminalMode - 重置终端状态
@@ -17,22 +19,16 @@
 # 断开后需要重置，否则本地终端显示异常
 # ============================================================
 function Reset-TerminalMode {
-    # 1. 禁用所有鼠标追踪模式（确保完整清除）
-    [Console]::Write("`e[?1000l")   # 禁用按钮事件鼠标追踪
-    [Console]::Write("`e[?1002l")   # 禁用拖拽事件鼠标追踪
-    [Console]::Write("`e[?1003l")   # 禁用所有鼠标追踪（部分终端）
-    [Console]::Write("`e[?1006l")   # 禁用扩展鼠标模式（SGR）
-    
-    # 2. ConPTY 自动处理 alt buffer 切换，无需手动退出
-    
-    # 3. 显示光标（可能被远程会话隐藏）
-    [Console]::Write("`e[?25h")
-    
-    # 4. 重置字符属性（颜色、粗体等）
-    [Console]::Write("`e[m")
-    
-    # 5. 不再使用 \e[!p（软复位），因为它会导致清屏，破坏终端内容
-    # 仅保留上面的 1-4 重置操作已足够清理 SSH/tmux 会话遗留的状态
+    # 优化: 6 次 [Console]::Write 合并为 1 次 P/Invoke 调用，减少 syscall
+    # 同时为避免 P/Invoke 输出缓冲导致乱序，必须先组合字符串再单次写入
+    [Console]::Write(
+        "`e[?1000l" + # 禁用按钮事件鼠标追踪
+        "`e[?1002l" + # 禁用拖拽事件鼠标追踪
+        "`e[?1003l" + # 禁用所有鼠标追踪（部分终端）
+        "`e[?1006l" + # 禁用扩展鼠标模式（SGR）
+        "`e[?25h" + # 显示光标
+        "`e[m"           # 重置字符属性（颜色、粗体等）
+    )
 }
 
 # 将用户输入的值进行 POSIX shell 单引号转义
@@ -143,21 +139,49 @@ function Invoke-SshCommand {
         return $output
     } else {
         # 非捕获模式：直接运行，输出显示在终端
-        # 仅在交互式 SSH 时重置终端状态（-Interactive 分配 PTY，可能切换备选缓冲区）
-        if ($PassThru) {
-            $process = Start-Process -FilePath "ssh.exe" -ArgumentList $sshArgs.ToArray() -NoNewWindow -Wait -PassThru
+        
+        # 确保 UTF-8 编码（修复交互式 SSH 中 ASCII 艺术/MOTD 乱码问题）
+        # Start-Process -NoNewWindow 不会继承控制台编码，需要显式设置
+        $originalEncoding = [System.Console]::OutputEncoding
+        $originalInputEncoding = [System.Console]::InputEncoding
+        
+        # 保存原始 TERM（如果存在），SSH 完成后恢复
+        $originalTerm = $env:TERM
+        
+        try {
+            [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+            [System.Console]::InputEncoding = [System.Text.Encoding]::UTF8
+            
+            # 设置终端类型，确保远程 tmux 正确渲染 Unicode 方块字符
+            # Windows SSH 客户端不发送 TERM，远程 $TERM 为空导致 tmux 渲染失败
+            $env:TERM = "xterm-256color"
+            
+            if ($PassThru) {
+                $process = Start-Process -FilePath "ssh.exe" -ArgumentList $sshArgs.ToArray() -NoNewWindow -Wait -PassThru
+                if ($Interactive) {
+                    Reset-TerminalMode
+                }
+                return [PSCustomObject]@{
+                    Output   = ""
+                    ExitCode = $process.ExitCode
+                }
+            }
+            Start-Process -FilePath "ssh.exe" -ArgumentList $sshArgs.ToArray() -NoNewWindow -Wait
             if ($Interactive) {
+                # SSH 进程结束后重置终端状态
                 Reset-TerminalMode
             }
-            return [PSCustomObject]@{
-                Output   = ""
-                ExitCode = $process.ExitCode
+        } finally {
+            # 恢复原始编码
+            [System.Console]::OutputEncoding = $originalEncoding
+            [System.Console]::InputEncoding = $originalInputEncoding
+            
+            # 恢复原始 TERM 环境变量
+            if ($null -ne $originalTerm) {
+                $env:TERM = $originalTerm
+            } else {
+                $env:TERM = $null
             }
-        }
-        Start-Process -FilePath "ssh.exe" -ArgumentList $sshArgs.ToArray() -NoNewWindow -Wait
-        if ($Interactive) {
-            # SSH 进程结束后重置终端状态
-            Reset-TerminalMode
         }
     }
 }

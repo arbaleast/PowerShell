@@ -7,12 +7,12 @@
 $global:UserScoop_ROOT = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 
 $global:UserScoop_CONF = @{
-    Quotes        = "$global:UserScoop_ROOT\data\quotes.txt"
+    Quotes  = "$global:UserScoop_ROOT\data\quotes.txt"
     
     # 日志路径（由 TUILogger 使用）
-    LogPath       = "$env:TEMP\ShellPrompt\shellprompt.log"
+    LogPath = "$env:TEMP\ShellPrompt\shellprompt.log"
 
-    Colors        = @{
+    Colors  = @{
         # User preferred palette - soft greens
         FreshGreen = "`e[38;2;137;209;133m"
         SageGreen  = "`e[38;2;159;177;159m"
@@ -29,27 +29,16 @@ $global:UserScoop_CONF = @{
         Dim        = "`e[2m"
     }
 
-    Keys          = @{
+    Keys    = @{
         Up    = 38
         Down  = 40
         Enter = 13
         Esc   = 27
     }
 
-    SSH           = @{
+    SSH     = @{
         ConnectTimeout = 5
         ForceTTy       = $true
-    }
-
-    WaterReminder = @{
-        Enabled         = $true
-        IntervalMin     = 60           # 基础间隔(分钟)
-        DayGoalMl       = 2000         # 每日目标(ml)
-        QuietHoursStart = 22           # 夜间休眠开始(22:00)
-        QuietHoursEnd   = 7            # 夜间休眠结束(07:00)
-        WeatherEnabled  = $true        # 是否启用天气感知
-        HistoryPath     = "$global:UserScoop_ROOT\data\water-history.json"
-        LogPath         = "$global:UserScoop_ROOT\data\water-reminder.log"
     }
 }
 
@@ -95,7 +84,7 @@ function Merge-UserConfig {
 function Merge-Hashtable {
     <#
     .SYNOPSIS
-    深度合并两个 hashtable
+    深度合并两个 hashtable（数据量<20键，双循环即可无需HashSet构造开销）
     #>
     param(
         [Parameter(Mandatory = $true)]
@@ -116,7 +105,7 @@ function Merge-Hashtable {
         }
     }
     
-    # 合并覆盖配置
+    # 合并覆盖配置（只处理 Base 不含的或需要深度合并的键）
     foreach ($key in $Override.Keys) {
         if ($result.ContainsKey($key) -and $result[$key] -is [hashtable] -and $Override[$key] -is [hashtable]) {
             $result[$key] = Merge-Hashtable -Base $result[$key] -Override $Override[$key]
@@ -196,22 +185,11 @@ function ConvertFromJsonCompat {
 # SSH/TMUX 上次使用的主机名（用于菜单置顶）
 $Global:LastSshHost = $null
 
-# Ensure data and log directories exist and provide a default empty history file
+# Ensure data directory exists
 try {
-    $wr = $global:UserScoop_CONF.WaterReminder
-    if ($wr) {
-        $historyDir = Split-Path $wr.HistoryPath -Parent
-        if (-not (Test-Path $historyDir)) { New-Item -ItemType Directory -Path $historyDir -Force | Out-Null }
-
-        $logDir = Split-Path $wr.LogPath -Parent
-        if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
-
-        if (-not (Test-Path $wr.HistoryPath)) {
-            '{}' | Out-File -FilePath $wr.HistoryPath -Encoding UTF8 -Force
-        }
-    }
+    $dataDir = "$global:UserScoop_ROOT\data"
+    if (-not (Test-Path $dataDir)) { New-Item -ItemType Directory -Path $dataDir -Force | Out-Null }
 } catch {
-    # 不要阻塞模块加载：只记录到主机日志
     Write-Verbose "初始化数据目录失败: $($_.Exception.Message)"
 }
 

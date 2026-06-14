@@ -1,12 +1,23 @@
 # Get-SshConfigHosts.ps1
+# 优化: 进程级 mtime 缓存，避免每次 Tab 补全都重新读取 ~/.ssh/config
+
+# 脚本级缓存：缓存解析结果与源文件最后修改时间
+$script:_SshHostsCache = $null
+$script:_SshHostsCacheMtime = [DateTime]::MinValue
 
 function Get-SshConfigHosts {
     try {
         $sshConfig = Join-Path $HOME ".ssh\config"
-        if (-not (Test-Path $sshConfig -ErrorAction Stop)) { 
-            return @() 
+        if (-not (Test-Path $sshConfig -ErrorAction Stop)) {
+            return @()
         }
-        
+
+        # 算法优化: 仅当文件 mtime 变化时重新解析
+        $currentMtime = (Get-Item $sshConfig -ErrorAction Stop).LastWriteTimeUtc
+        if ($null -ne $script:_SshHostsCache -and $script:_SshHostsCacheMtime -eq $currentMtime) {
+            return $script:_SshHostsCache
+        }
+
         $hosts = @()
         foreach ($line in (Get-Content $sshConfig -Encoding UTF8 -ErrorAction Stop)) {
             if ($line -match '^Host\s+(.+)$') {
@@ -18,8 +29,11 @@ function Get-SshConfigHosts {
                 }
             }
         }
-        
-        return $hosts | Select-Object -Unique
+
+        # 写入缓存
+        $script:_SshHostsCache = @($hosts | Select-Object -Unique)
+        $script:_SshHostsCacheMtime = $currentMtime
+        return $script:_SshHostsCache
     } catch {
         # SSH config 读取失败时返回空列表，不阻塞模块加载
         if ($Global:TUI_Logger) {

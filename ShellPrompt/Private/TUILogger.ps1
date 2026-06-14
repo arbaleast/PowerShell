@@ -135,9 +135,10 @@ class TUILogger {
     }
 
     [void] RotateIfNeeded() {
-        if (-not $this.LogFilePath -or -not (Test-Path $this.LogFilePath)) { return }
+        if (-not $this.LogFilePath) { return }
 
         try {
+            # 合并 Test-Path + Get-Item 为单次文件系统调用（-ErrorAction SilentlyContinue 替代前置 Test-Path）
             $fileInfo = Get-Item $this.LogFilePath -ErrorAction SilentlyContinue
             if ($fileInfo -and $fileInfo.Length -gt ($this.MaxFileSizeMb * 1MB)) {
                 $this.FileWriter.Close()
@@ -180,6 +181,18 @@ class TUILogger {
 
     [void] Warning([string]$message) {
         $this.Log([TUILogLevel]::Warning, $message, $null, $this.GetCaller())
+    }
+
+    [void] Warning([string]$message, [hashtable]$fields) {
+        $this.Log([TUILogLevel]::Warning, $message, $fields, $this.GetCaller())
+    }
+
+    [void] Debug([string]$message, [hashtable]$fields) {
+        $this.Log([TUILogLevel]::Debug, $message, $fields, $this.GetCaller())
+    }
+
+    [void] Info([string]$message, [hashtable]$fields) {
+        $this.Log([TUILogLevel]::Info, $message, $fields, $this.GetCaller())
     }
 
     [void] Error([string]$message) {

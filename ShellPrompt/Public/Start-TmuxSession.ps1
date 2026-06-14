@@ -5,7 +5,16 @@
 # 关键: 使用 Start-Process -NoNewWindow -Wait ssh.exe 解决 PTY 问题
 # ============================================================
 
+# tmux 随机会话名前缀（提升到模块作用域，避免每次 Start-TmuxSession 调用重建）
+$script:TmuxSessionPrefix = "tmux-"
+
+# 生成随机会话名（提升到模块作用域，避免内嵌函数重复创建与作用域闭包开销）
+function New-RandomSessionName {
+    "$script:TmuxSessionPrefix$(Get-Random -Minimum 100000 -Maximum 999999)"
+}
+
 function Start-TmuxSession {
+
     [CmdletBinding()]
     param(
         [Parameter(Position = 0)]
@@ -62,17 +71,11 @@ function Start-TmuxSession {
     $Global:LastSshHost = $HostName
 
     # ========================================
-    # 基础配置常量
+    # 基础配置常量（New-RandomSessionName 已提升到模块作用域）
     # ========================================
-    # tmux 随机会话名前缀
-    $sessionPrefix = "tmux-"
-
-    # 定义生成随机会话名的内联函数（每次调用生成不同名称，避免循环中名称冲突）
-    function New-RandomSessionName {
-        "$sessionPrefix$(Get-Random -Minimum 100000 -Maximum 999999)"
-    }
 
     Write-Host "`n [SSH] 目标主机: $HostName" -ForegroundColor Cyan
+
 
     # ========================================
     # Phase 2: 检测远程 tmux 是否可用

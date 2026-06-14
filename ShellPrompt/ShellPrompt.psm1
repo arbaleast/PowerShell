@@ -10,23 +10,14 @@ if (-not (Get-Variable -Name 'UserScoop_CONF' -Scope Global -ErrorAction Silentl
 # Debug mode flag
 $script:IsDebugMode = ($env:DEBUG -eq "1" -or $env:DEBUG -eq "true" -or $env:DEBUG_TRACE -eq "1")
 
-# Load private functions
-Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" | Where-Object {
-    $_.Name -notin @('Initialize-Config.ps1')
-} | ForEach-Object {
+# 一次 Get-ChildItem 遍历两个目录，减少文件系统 I/O
+Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1", "$PSScriptRoot\Public\*.ps1" | ForEach-Object {
+    $name = $_.Name
+    if ($name -eq 'Initialize-Config.ps1') { return }
     try {
         . $_.FullName
     } catch {
-        Write-Warning "[ShellPrompt] Failed to load $($_.Name): $($_.Exception.Message)"
-    }
-}
-
-# Load public functions
-Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" | ForEach-Object {
-    try {
-        . $_.FullName
-    } catch {
-        Write-Warning "[ShellPrompt] Failed to load $($_.Name): $($_.Exception.Message)"
+        Write-Warning "[ShellPrompt] Failed to load ${name}: $($_.Exception.Message)"
     }
 }
 
