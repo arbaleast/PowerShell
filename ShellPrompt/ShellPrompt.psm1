@@ -1,23 +1,17 @@
-﻿# ============================================================
-# ShellPrompt.psm1 - Module Entry Point
-# ============================================================
+﻿# ShellPrompt.psm1 - Module Entry Point
 
 # Load configuration first
 if (-not (Get-Variable -Name 'UserScoop_CONF' -Scope Global -ErrorAction SilentlyContinue)) {
     . "$PSScriptRoot\Private\Initialize-Config.ps1"
 }
 
-# Debug mode flag
-$script:IsDebugMode = ($env:DEBUG -eq "1" -or $env:DEBUG -eq "true" -or $env:DEBUG_TRACE -eq "1")
-
-# 一次 Get-ChildItem 遍历两个目录，减少文件系统 I/O
+# Load all module scripts
 Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1", "$PSScriptRoot\Public\*.ps1" | ForEach-Object {
-    $name = $_.Name
-    if ($name -eq 'Initialize-Config.ps1') { return }
+    if ($_.Name -eq 'Initialize-Config.ps1') { return }
     try {
         . $_.FullName
     } catch {
-        Write-Warning "[ShellPrompt] Failed to load ${name}: $($_.Exception.Message)"
+        Write-Warning "[ShellPrompt] Failed to load $($_.Name): $($_.Exception.Message)"
     }
 }
 
@@ -43,13 +37,9 @@ if ($sshHosts.Count -gt 0) {
     }
 }
 
-# Debug mode initialization
-if ($script:IsDebugMode) {
-    try {
-        Initialize-TUILogger | Out-Null
-        Initialize-TUIPerformance | Out-Null
-        Write-Host "[ShellPrompt] DEBUG mode activated" -ForegroundColor Cyan
-    } catch {
-        Write-Warning "[ShellPrompt] DEBUG init failed: $($_.Exception.Message)"
-    }
-}
+# Explicitly export the public API.
+# PowerShell 5.1 does NOT auto-export functions from script modules — FunctionsToExport
+# in the .psd1 is just a recommendation; the module must opt in via Export-ModuleMember,
+# otherwise ExportedFunctions is empty and `Get-Command -Module ShellPrompt -Name <fn>`
+# returns $null (which broke the `sss` / Start-TmuxSession wrapper).
+Export-ModuleMember -Function 'Show-UserScoopLogo', 'Start-TmuxSession', 'reload'

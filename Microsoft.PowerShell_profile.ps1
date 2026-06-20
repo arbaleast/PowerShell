@@ -7,7 +7,7 @@ $script:ActualRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 # 阶段 1：仅加载配置和欢迎语（轻量级）
 # ============================================================
 . "$script:ActualRoot\ShellPrompt\Private\Initialize-Config.ps1"
-. "$script:ActualRoot\ShellPrompt\Public\Initialize-Environment.ps1"
+. "$script:ActualRoot\ShellPrompt\Public\Show-UserScoopLogo.ps1"
 Show-UserScoopLogo
 
 # ============================================================
@@ -22,14 +22,32 @@ Set-Alias which where.exe -ErrorAction SilentlyContinue
 function Ensure-ShellPrompt {
     if (-not (Get-Module ShellPrompt)) {
         $ModulePath = Join-Path $script:ActualRoot "ShellPrompt\ShellPrompt.psd1"
-        Import-Module $ModulePath -ErrorAction SilentlyContinue
+        try {
+            Import-Module $ModulePath -ErrorAction Stop -Verbose:$false
+        } catch {
+            # 暴露真实导入错误，避免上层 wrapper 误判为“模块未正确导入”
+            Write-Error "[ShellPrompt] 模块导入失败 ($ModulePath): $($_.Exception.Message)"
+            return
+        }
     }
 }
 
-function sss {
+# 公开命令名 wrapper — 懒加载未触发时也能直接调用 Start-TmuxSession
+# 关键:内部通过 Get-Command -Module 获取模块命令对象,避免与自身重名导致无限递归
+function Start-TmuxSession {
+    [CmdletBinding()]
+    param([Parameter(ValueFromRemainingArguments = $true)] [object[]] $Arguments)
     Ensure-ShellPrompt
-    Start-TmuxSession @args
+    $cmd = Get-Command -Module ShellPrompt -Name Start-TmuxSession -ErrorAction SilentlyContinue
+    if (-not $cmd) {
+        Write-Error "ShellPrompt 模块未正确导入,无法调用 Start-TmuxSession"
+        return
+    }
+    & $cmd @Arguments
 }
+
+# 短别名 — 历史兼容
+Set-Alias -Name sss -Value Start-TmuxSession -Scope Global
 
 # ============================================================
 # 阶段 2：延迟初始化（首次提示前执行）
