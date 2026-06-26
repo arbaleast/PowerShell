@@ -65,8 +65,25 @@ function Invoke-DeferredInit {
     Get-Command -Name starship, fnm -ErrorAction SilentlyContinue | ForEach-Object { $commands[$_.Name] = $_ }
 
     # Starship — 失败也不能影响 prompt 主链
+    # 5s 超时保护:防止 starship 因扫描大型 .git / 网络盘 / 配置错误而挂死整个 prompt 链
     if ($commands['starship']) {
-        try { Invoke-Expression ((&starship init powershell) -join "`n") } catch { }
+        $starshipJob = Start-Job -ScriptBlock { (&starship init powershell) -join "`n" } -ErrorAction SilentlyContinue
+        if ($starshipJob) {
+            $done = $starshipJob | Wait-Job -Timeout 5
+            if ($done) {
+                try {
+                    $initStr = Receive-Job -Job $starshipJob -Keep
+                    if ($initStr) { Invoke-Expression $initStr }
+                } catch { }
+            } else {
+                # 超时 — 杀进程,跳过 starship,使用默认 prompt
+                Stop-Job $starshipJob -ErrorAction SilentlyContinue
+            }
+            Remove-Job $starshipJob -Force -ErrorAction SilentlyContinue
+        } else {
+            # Start-Job 不可用时降级直接调用
+            try { Invoke-Expression ((&starship init powershell) -join "`n") } catch { }
+        }
     }
 
     # Fnm — 失败也不能影响 prompt 主链
@@ -101,8 +118,14 @@ function global:prompt {
     Invoke-DeferredInit
     # 首次调用时（在 Invoke-DeferredInit 之后）抓取被 Starship 覆盖的 prompt
     if ($null -eq $script:OriginalPrompt) {
-        $script:OriginalPrompt = (Get-Item Function:prompt -ErrorAction SilentlyContinue).ScriptBlock
-        if (-not $script:OriginalPrompt) { $script:OriginalPrompt = { "PS $PWD> " } }
+        $current = Get-Item Function:prompt -ErrorAction SilentlyContinue
+        $selfScript = $MyInvocation.MyCommand.ScriptBlock
+        # 关键：拒绝捕获自身 — 防止 starship 未生效时造成无限递归
+        if ($current -and $current.ScriptBlock -ne $selfScript) {
+            $script:OriginalPrompt = $current.ScriptBlock
+        } else {
+            $script:OriginalPrompt = { "PS $PWD> " }
+        }
     }
     # 调用原始 prompt — 兜底防止 prompt 链断裂
     try {
