@@ -90,14 +90,20 @@ function Invoke-DeferredInit {
 }
 
 # 通过包装 prompt 函数来触发延迟初始化
-# 重要：Get-Item Function:prompt 返回的是 FunctionInfo 对象（不是 ScriptBlock）
-# 显式取 .ScriptBlock 避免类型歧义
-$script:OriginalPrompt = (Get-Item Function:prompt -ErrorAction SilentlyContinue).ScriptBlock
-if (-not $script:OriginalPrompt) { $script:OriginalPrompt = { "PS $PWD> " } }
+# 重要：$script:OriginalPrompt 必须在 Invoke-DeferredInit 执行后抓取
+# 因为 starship init 会覆盖 Function:prompt，提前抓取拿到的是 PowerShell
+# 默认 prompt，主题不生效。所以这里先置空，在 global:prompt 内首次
+# 调用时（Invoke-DeferredInit 之后）才取 Starship 覆盖后的真 prompt。
+$script:OriginalPrompt = $null
 
 function global:prompt {
     # 首次调用 prompt 时触发延迟初始化
     Invoke-DeferredInit
+    # 首次调用时（在 Invoke-DeferredInit 之后）抓取被 Starship 覆盖的 prompt
+    if ($null -eq $script:OriginalPrompt) {
+        $script:OriginalPrompt = (Get-Item Function:prompt -ErrorAction SilentlyContinue).ScriptBlock
+        if (-not $script:OriginalPrompt) { $script:OriginalPrompt = { "PS $PWD> " } }
+    }
     # 调用原始 prompt — 兜底防止 prompt 链断裂
     try {
         return & $script:OriginalPrompt
