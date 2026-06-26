@@ -65,25 +65,21 @@ function Invoke-DeferredInit {
     Get-Command -Name starship, fnm -ErrorAction SilentlyContinue | ForEach-Object { $commands[$_.Name] = $_ }
 
     # Starship — 失败也不能影响 prompt 主链
-    # 5s 超时保护:防止 starship 因扫描大型 .git / 网络盘 / 配置错误而挂死整个 prompt 链
+    # 关键修复:不能使用 Invoke-Expression 执行 init 字符串。
+    # 原因:starship init 输出的是 $null = New-Module starship { ... function global:prompt ... Export-ModuleMember ... }
+    # 用 Invoke-Expression 执行时,New-Module 创建的动态模块只在临时 ScriptBlock 作用域中存活,
+    # 表达式执行完毕后模块随作用域被 GC,里面的 function global:prompt 定义也跟着丢失,主题不显示。
+    # 必须 dot-source 一个临时脚本文件,让 New-Module 注册到全局模块表中持久存在。
     if ($commands['starship']) {
-        $starshipJob = Start-Job -ScriptBlock { (&starship init powershell) -join "`n" } -ErrorAction SilentlyContinue
-        if ($starshipJob) {
-            $done = $starshipJob | Wait-Job -Timeout 5
-            if ($done) {
-                try {
-                    $initStr = Receive-Job -Job $starshipJob -Keep
-                    if ($initStr) { Invoke-Expression $initStr }
-                } catch { }
-            } else {
-                # 超时 — 杀进程,跳过 starship,使用默认 prompt
-                Stop-Job $starshipJob -ErrorAction SilentlyContinue
+        try {
+            $initStr = (&starship init powershell --print-full-init) -join "`n"
+            if ($initStr) {
+                $tmp = [System.IO.Path]::GetTempFileName() + ".ps1"
+                [System.IO.File]::WriteAllText($tmp, $initStr, [System.Text.Encoding]::UTF8)
+                try { . $tmp } catch { }
+                Remove-Item $tmp -Force -ErrorAction SilentlyContinue
             }
-            Remove-Job $starshipJob -Force -ErrorAction SilentlyContinue
-        } else {
-            # Start-Job 不可用时降级直接调用
-            try { Invoke-Expression ((&starship init powershell) -join "`n") } catch { }
-        }
+        } catch { }
     }
 
     # Fnm — 失败也不能影响 prompt 主链
