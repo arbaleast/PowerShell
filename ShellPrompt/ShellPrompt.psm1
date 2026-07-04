@@ -1,7 +1,7 @@
-﻿# ShellPrompt.psm1 - Module Entry Point
+# ShellPrompt.psm1 - Module Entry Point
 
-# Load configuration first
-if (-not (Get-Variable -Name 'UserScoop_CONF' -Scope Global -ErrorAction SilentlyContinue)) {
+# Load configuration first; $script:ShellPromptRoot 守束避免重复 dot-source
+if (-not (Get-Variable -Name 'ShellPromptRoot' -Scope Script -ErrorAction SilentlyContinue)) {
     . "$PSScriptRoot\Private\Initialize-Config.ps1"
 }
 
@@ -42,4 +42,4 @@ if ($sshHosts.Count -gt 0) {
 # in the .psd1 is just a recommendation; the module must opt in via Export-ModuleMember,
 # otherwise ExportedFunctions is empty and `Get-Command -Module ShellPrompt -Name <fn>`
 # returns $null (which broke the `sss` / Start-TmuxSession wrapper).
-Export-ModuleMember -Function 'Show-UserScoopLogo', 'Start-TmuxSession', 'reload'
+Export-ModuleMember -Function 'Show-UserScoopLogo', 'Start-TmuxSession', 'Copy-SshPublicKey', 'reload'

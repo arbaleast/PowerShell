@@ -1,16 +1,9 @@
-﻿# ============================================================
 # Invoke-ConsoleMenu.ps1 - 通用终端交互式菜单 UI 组件
-# 硬核黑客风格 - 结构化信息, 路径/分支标签
-# 全部使用 [Console]::Write + ANSI 转义，禁止混合 Write-Host
-# 避免 Write-Host 与 Console API 光标追踪不同步导致的偏移
-# ============================================================
+# 全部使用 [Console]::Write + ANSI 转义,禁用 Write-Host 避免光标追踪不同步;
+# 颜色统一走 Get-CachedConfig 预热缓存;循环中只更新变化的行。
 
-# 重写指定行（ANSI 定位 + \e[2K 清整行 + 写内容）
 function Write-MenuLine {
     param([int]$Line, [string]$Text)
-    # $Line 是 1-based ANSI 行号
-    # \e[${Line};1H = 定位到行 $Line, 列 1
-    # \e[2K         = 清空整行
     [Console]::Write("`e[${Line};1H`e[2K${Text}")
 }
 
@@ -24,104 +17,81 @@ function Invoke-ConsoleMenu {
         [array]$Options,
 
         [Parameter(Mandatory = $false)]
-        [string]$ColorPrimary = $global:UserScoop_CONF.Colors.FreshGreen,
+        [string]$ColorPrimary,
 
         [Parameter(Mandatory = $false)]
-        [string]$ColorAccent = $global:UserScoop_CONF.Colors.SageGreen,
+        [string]$ColorAccent,
 
         [Parameter(Mandatory = $false)]
-        [string]$ColorMuted = $global:UserScoop_CONF.Colors.MidGray,
+        [string]$ColorMuted,
 
         [Parameter(Mandatory = $false)]
-        [string]$ColorHighlight = $global:UserScoop_CONF.Colors.MintGreen,
-
-        [Parameter(Mandatory = $false)]
-        [hashtable]$Keys = $global:UserScoop_CONF.Keys,
+        [hashtable]$Keys,
 
         [Parameter(Mandatory = $false)]
         [string]$ExitLabel = "EXIT"
     )
 
-    # 仅在调试模式下写入调试日志，避免无条件文件 I/O
-    if ($script:IsDebugMode) {
-        "DEBUG: Invoke-ConsoleMenu called, Title='$Title', Options.Count=$($Options.Count)" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Encoding utf8
+    # 默认值解析（走预热缓存快路径，0 命中回退到硬编码）
+    if (-not $ColorPrimary) { $ColorPrimary = Get-CachedConfig -Section 'Colors' -Key 'FreshGreen' -Default "`e[38;2;137;209;133m" }
+    if (-not $ColorAccent) { $ColorAccent = Get-CachedConfig -Section 'Colors' -Key 'SageGreen'  -Default "`e[38;2;159;177;159m" }
+    if (-not $ColorMuted) { $ColorMuted = Get-CachedConfig -Section 'Colors' -Key 'MidGray'    -Default "`e[38;2;100;100;100m" }
+    if (-not $Keys) {
+        # 直接走 Get-CachedConfig;它内部会处理缓存未初始化的回退
+        $Keys = @{
+            Up    = Get-CachedConfig -Section 'Keys' -Key 'Up'    -Default 38
+            Down  = Get-CachedConfig -Section 'Keys' -Key 'Down'  -Default 40
+            Enter = Get-CachedConfig -Section 'Keys' -Key 'Enter' -Default 13
+            Esc   = Get-CachedConfig -Section 'Keys' -Key 'Esc'   -Default 27
+        }
     }
 
     $idx = 0
     $count = $Options.Count
     $exitIdx = $count
     $total = $count + 1
-    $rst = "`e[0m"
+    $rst = Get-CachedConfig -Section 'Colors' -Key 'Rst' -Default "`e[0m"
 
     $items = $Options | ForEach-Object {
-        if ($_ -is [string]) {
-            @{ Label = $_; Desc = "" }
-        } else {
-            # 透传 PSCustomObject 的所有属性（包括 RawName 等调用方自定义字段）
-            $_
-        }
+        if ($_ -is [string]) { @{ Label = $_; Desc = "" } } else { $_ }
     }
 
-    # 所有行列号使用 1-based ANSI 行号
-    # 行1: 空行
-    # 行2: header line 1  (+--< ... >--)
-    # 行3: header line 2  (|)
-    # 行4: header line 3  (|  +)
-    # 行5..(5+count-1): N 个选项行
-    # 行(5+count): EXIT行
-    # 行(5+count+1): 分隔线 (|)
-    # 行(5+count+2): 分隔线 (|  +)
-    # 行(5+count+3): 描述行
-    # 行(5+count+4): footer (|)
-    # 行(5+count+5): footer (+---)
-    # 行(5+count+6): 空行
-    # 行(5+count+7): 导航提示行
-    # 行(5+count+8): 空行
+    # 布局:
+    #   1: 空行 / 2-4: header (3 行)
+    #   5..(5+count-1): 选项 / (5+count): EXIT
+    #   描述行 = EXIT行 + 3 / 底边行 = 描述行 + 2
     $optionStartRow = 5
     $exitRow = $optionStartRow + $count
     $descRow = $exitRow + 3
 
     $exitKey = ($count + 1).ToString().PadLeft(2, '0')
 
-    # 构建选项行文本缓存
-    $optionLines = New-Object System.Collections.ArrayList ($count)
+    # 真预分配: Generic.List<PSCustomObject> 一次性分配 count 槽位
+    # 比 New-Object System.Collections.ArrayList($count) 省去内部扩容判断
+    $optionLines = [System.Collections.Generic.List[PSCustomObject]]::new($count)
     for ($i = 0; $i -lt $count; $i++) {
         $key = ($i + 1).ToString().PadLeft(2, '0')
-        $selectedLine = "  ${ColorPrimary}|${rst}  ${ColorHighlight}>${rst} ${ColorPrimary}[${key}]${rst} ${ColorPrimary}$($items[$i].Label)${rst}"
-        $unselectedLine = "  ${ColorPrimary}|${rst}  ${ColorMuted} ${rst} ${ColorPrimary}[${key}]${rst} ${ColorMuted}$($items[$i].Label)${rst}"
-        [void]$optionLines.Add([PSCustomObject]@{ Selected = $selectedLine; Unselected = $unselectedLine })
+        $label = $items[$i].Label
+        $selectedLine = "  ${ColorPrimary}|${rst}  ${rst}>${rst} ${ColorPrimary}[${key}]${rst} ${ColorPrimary}${label}${rst}"
+        $unselectedLine = "  ${ColorPrimary}|${rst}  ${ColorMuted} ${rst} ${ColorPrimary}[${key}]${rst} ${ColorMuted}${label}${rst}"
+        $optionLines.Add([PSCustomObject]@{ Selected = $selectedLine; Unselected = $unselectedLine })
     }
     $exitSelected = "  ${ColorPrimary}|${rst}  ${ColorAccent}>${rst} ${ColorAccent}[${exitKey}]${rst} ${ColorAccent}${ExitLabel}${rst}"
     $exitUnselected = "  ${ColorPrimary}|${rst}  ${ColorMuted} ${rst} ${ColorAccent}[${exitKey}]${rst} ${ColorMuted}${ExitLabel}${rst}"
 
-    # ============================================================
-    # 首次渲染：全部使用 [Console]::Write + ANSI 转义
-    # 不用 Write-Host，避免光标追踪不一致
-    # ============================================================
     [Console]::Clear()
-
-    # 使用快速引用检查替代 Test-Path（TUIPerformanceState 已实现单例）
-    if ($null -ne $Global:TUI_PerfState) {
-        $Global:TUI_PerfState.ReportFrame()
-    }
 
     $hostname = if ($env:COMPUTERNAME) { $env:COMPUTERNAME } else { "local" }
     $userName = if ($env:USERNAME) { $env:USERNAME } else { "user" }
-    # 获取当前目录名（兼容 Windows \ 和 Unix / 路径）
     $cwd = Split-Path $PWD.Path -Leaf
     if (-not $cwd) { $cwd = $PWD.Path }
     $hLine = "-" * 40
 
-    # 行1: 空行
     Write-MenuLine -Line 1 -Text ""
-    # 行2: header line 1
     Write-MenuLine -Line 2 -Text "  ${ColorPrimary}+--< ${ColorMuted}${userName}@${hostname}${ColorPrimary} >--[ ${ColorAccent}${cwd}${ColorPrimary} ]--[ ${ColorPrimary}${Title}${ColorPrimary} ]${rst}"
-    # 行3: header line 2
     Write-MenuLine -Line 3 -Text "  ${ColorPrimary}|${rst}"
-    # 行4: header line 3
     Write-MenuLine -Line 4 -Text "  ${ColorPrimary}|${rst}  ${ColorPrimary}+${rst}"
 
-    # 行5..(5+count-1): 选项行
     for ($i = 0; $i -lt $count; $i++) {
         if ($i -eq $idx) {
             Write-MenuLine -Line ($optionStartRow + $i) -Text $optionLines[$i].Selected
@@ -130,82 +100,59 @@ function Invoke-ConsoleMenu {
         }
     }
 
-    # 行(5+count): EXIT行
     Write-MenuLine -Line $exitRow -Text $exitUnselected
-
-    # 行(5+count+1): 分隔线
     Write-MenuLine -Line ($exitRow + 1) -Text "  ${ColorPrimary}|${rst}"
-    # 行(5+count+2): 分隔线
     Write-MenuLine -Line ($exitRow + 2) -Text "  ${ColorPrimary}|${rst}  ${ColorPrimary}+${rst}"
-    # 行(5+count+3): 描述行
     Write-MenuLine -Line $descRow -Text "  ${ColorPrimary}|${rst}  ${ColorMuted}-- $($items[$idx].Desc)${rst}"
-    # 行(5+count+4): footer
     Write-MenuLine -Line ($descRow + 1) -Text "  ${ColorPrimary}|${rst}"
-    # 行(5+count+5): footer
     Write-MenuLine -Line ($descRow + 2) -Text "  ${ColorPrimary}+${hLine}--${rst}"
-    # 行(5+count+6): 空行
     Write-MenuLine -Line ($descRow + 3) -Text ""
-    # 行(5+count+7): 导航提示行
     Write-MenuLine -Line ($descRow + 4) -Text "  ${ColorMuted}up/down navigate + Enter confirm + Q quit${rst}"
-    # 行(5+count+8): 空行
     Write-MenuLine -Line ($descRow + 5) -Text ""
 
-    # 导航循环
+    # 预构建静态描述文本(只有 EXIT 选中时显示)
+    $descExit = "  ${ColorPrimary}|${rst}  ${ColorMuted}-- return to local terminal${rst}"
+
     while ($true) {
         $oldIdx = $idx
 
         try {
             $key = $Host.UI.RawUI.ReadKey("NoEcho, IncludeKeyDown")
         } catch {
-            if ($script:IsDebugMode) {
-                "DEBUG: ReadKey exception: $($_.Exception.Message)" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Append -Encoding utf8
-            }
             [Console]::Clear()
             return $null
         }
         $vK = $key.VirtualKeyCode
-
-        # 使用快速引用检查替代 Test-Path
-        if ($null -ne $Global:TUI_PerfState) {
-            $Global:TUI_PerfState.ReportKeyPress()
-        }
 
         if ($vK -eq $Keys.Up) {
             $idx = ($idx - 1 + $total) % $total
         } elseif ($vK -eq $Keys.Down) {
             $idx = ($idx + 1) % $total
         } elseif ($vK -eq $Keys.Enter) {
-            if ($script:IsDebugMode) {
-                "DEBUG: Enter pressed, idx=$idx, exitIdx=$exitIdx" | Out-File -FilePath "$env:TEMP\menu-debug.txt" -Append -Encoding utf8
-            }
-            if ($idx -eq $exitIdx) {
-                return $null
-            }
+            if ($idx -eq $exitIdx) { return $null }
             return $items[$idx]
         } elseif ($key.Character -eq 'q' -or $key.Character -eq 'Q') {
             return $null
         }
 
-        # 只重绘变化的行
         if ($oldIdx -ne $idx) {
-            # 恢复旧行为未选中状态
             if ($oldIdx -eq $exitIdx) {
                 Write-MenuLine -Line $exitRow -Text $exitUnselected
             } else {
                 Write-MenuLine -Line ($optionStartRow + $oldIdx) -Text $optionLines[$oldIdx].Unselected
             }
 
-            # 设置新行为选中状态
             if ($idx -eq $exitIdx) {
                 Write-MenuLine -Line $exitRow -Text $exitSelected
             } else {
                 Write-MenuLine -Line ($optionStartRow + $idx) -Text $optionLines[$idx].Selected
             }
 
-            # 更新描述行
-            $descText = "  ${ColorPrimary}|${rst}  ${ColorMuted}-- return to local terminal${rst}"
+            # 直接命中预构描述或构建新描述
             if ($idx -lt $count -and $items[$idx].Desc) {
                 $descText = "  ${ColorPrimary}|${rst}  ${ColorMuted}-- $($items[$idx].Desc)${rst}"
+            } else {
+                $descText = $descExit
             }
             Write-MenuLine -Line $descRow -Text $descText
         }

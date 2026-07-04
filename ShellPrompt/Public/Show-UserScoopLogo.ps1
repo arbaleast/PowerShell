@@ -1,7 +1,6 @@
 # Show-UserScoopLogo.ps1 - 欢迎语及启动语录展示
-# 优化: 引入 $script:_QuotesCache (mtime + 内容快照) 避免每次 profile 加载读盘;
-#       4 段三层回退颜色 -> Get-CachedConfig 一次调用;
-#       静态布局部分提前拼接避免每次展开 @()。
+# 语录缓存: $script:_QuotesCache (mtime + 内容快照) 避免每次 profile 加载读盘;
+# 颜色统一走 Get-CachedConfig 预热缓存;静态布局部分提前拼接。
 
 function Show-UserScoopLogo {
     [CmdletBinding()]
@@ -32,10 +31,10 @@ function Show-UserScoopLogo {
     $rst = Get-CachedConfig -Section 'Colors' -Key 'Rst' -Default "`e[0m"
     $quote = "SYSTEM READY"
 
-    if (Test-Path $QuotesPath) {
+    # 一次 Get-Item 替代 Test-Path + Get-Item
+    if ($fileInfo = Get-Item $QuotesPath -ErrorAction SilentlyContinue) {
         # mtime + 内容快照缓存: 文件未变化时复用上次的随机抽取结果
         # 避免每次 profile 加载 (或 reload) 都读取并 -split 整个 quotes 文件
-        $fileInfo = Get-Item $QuotesPath
         $mtime = $fileInfo.LastWriteTimeUtc.Ticks
         $cacheHit = $false
         if ($script:_QuotesCache -and $script:_QuotesCache.Path -eq $QuotesPath -and $script:_QuotesCache.MTime -eq $mtime) {

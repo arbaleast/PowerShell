@@ -49,6 +49,22 @@ function Start-TmuxSession {
 # 短别名 — 历史兼容
 Set-Alias -Name sss -Value Start-TmuxSession -Scope Global
 
+# ssh-copy-id wrapper — 懒加载未触发时也能直接调用,避免模块作用域别名在
+# 调用方 shell 不可见的问题（Set-ProfileAliases.ps1 注册的是模块作用域别名,
+# 只在模块内可见,Set-Alias -Scope Global 才是真正的全局别名）
+function Copy-SshPublicKey {
+    [CmdletBinding()]
+    param([Parameter(ValueFromRemainingArguments = $true)] [object[]] $Arguments)
+    Ensure-ShellPrompt
+    $cmd = Get-Command -Module ShellPrompt -Name Copy-SshPublicKey -ErrorAction SilentlyContinue
+    if (-not $cmd) {
+        Write-Error "ShellPrompt 模块未正确导入,无法调用 Copy-SshPublicKey"
+        return
+    }
+    & $cmd @Arguments
+}
+Set-Alias -Name ssh-copy-id -Value Copy-SshPublicKey -Scope Global -Force
+
 # ============================================================
 # 阶段 2：延迟初始化（首次提示前执行）
 # — Starship / Fnm / PSReadLine 这些工具初始化需要 100~400ms
@@ -61,6 +77,8 @@ function Invoke-DeferredInit {
     $script:DeferredInitDone = $true
 
     # 一次 Get-Command 查找所有工具（减少进程查找开销）
+    # 关键:Windows 下 scoop shim 的 .exe 扩展名必须包含在键名中,
+    # 否则 hashtable 查不到(Application 命令的 Name 字段是 starship.exe 而非 starship)
     $commands = @{}
     Get-Command -Name starship, fnm -ErrorAction SilentlyContinue | ForEach-Object { $commands[$_.Name] = $_ }
 
@@ -70,21 +88,21 @@ function Invoke-DeferredInit {
     # 用 Invoke-Expression 执行时,New-Module 创建的动态模块只在临时 ScriptBlock 作用域中存活,
     # 表达式执行完毕后模块随作用域被 GC,里面的 function global:prompt 定义也跟着丢失,主题不显示。
     # 必须 dot-source 一个临时脚本文件,让 New-Module 注册到全局模块表中持久存在。
-    if ($commands['starship']) {
+    if ($commands['starship.exe']) {
         try {
-            $initStr = (&starship init powershell --print-full-init) -join "`n"
+            $initStr = (& starship init powershell --print-full-init) -join "`n"
             if ($initStr) {
                 $tmp = [System.IO.Path]::GetTempFileName() + ".ps1"
                 [System.IO.File]::WriteAllText($tmp, $initStr, [System.Text.Encoding]::UTF8)
-                try { . $tmp } catch { }
+                . $tmp
                 Remove-Item $tmp -Force -ErrorAction SilentlyContinue
             }
         } catch { }
     }
 
     # Fnm — 失败也不能影响 prompt 主链
-    if ($commands['fnm']) {
-        try { Invoke-Expression ((&fnm env --use-on-cd --shell powershell) -join "`n") } catch { }
+    if ($commands['fnm.exe']) {
+        try { Invoke-Expression ((& fnm env --use-on-cd --shell powershell) -join "`n") } catch { }
     }
 
     # PSReadLine — 每个 set 命令独立 try-catch
@@ -102,30 +120,30 @@ function Invoke-DeferredInit {
     }
 }
 
-# 通过包装 prompt 函数来触发延迟初始化
-# 重要：$script:OriginalPrompt 必须在 Invoke-DeferredInit 执行后抓取
-# 因为 starship init 会覆盖 Function:prompt，提前抓取拿到的是 PowerShell
-# 默认 prompt，主题不生效。所以这里先置空，在 global:prompt 内首次
-# 调用时（Invoke-DeferredInit 之后）才取 Starship 覆盖后的真 prompt。
-$script:OriginalPrompt = $null
+# 关键重构:profile 加载时直接执行延迟初始化(不通过 prompt 函数)
+# 原因:仓库内 profile 走 dot-source 被薄壳加载时,如果延迟初始化只放在
+# function global:prompt 包装器内,存在两个严重问题:
+# 1. profile 跑完就退出 script scope,包装器内的 $script:OriginalPrompt
+#    在薄壳 caller scope 里永远为 null,走到 else 分支捕获默认 prompt。
+# 2. 真正调 prompt 时,Invoke-DeferredInit 也不一定被触发(若用户用
+#    pwsh -Command 等不会触发 prompt 的方式),starship 永远不初始化。
+# 修复:在 profile 末尾直接调用 Invoke-DeferredInit,starship 会覆盖
+# Function:prompt;然后在 profile 自身 scope 内抓取覆盖后的真 prompt,
+# 存为 $global:OriginalPrompt 供薄壳 scope 直接访问。
+Invoke-DeferredInit
 
+# 抓取 starship 覆盖后的真 prompt(此时 Function:prompt 已经是 starship 的)
+$currentPrompt = Get-Item Function:prompt -ErrorAction SilentlyContinue
+if ($currentPrompt) {
+    $global:OriginalPrompt = $currentPrompt.ScriptBlock
+} else {
+    $global:OriginalPrompt = { "PS $PWD> " }
+}
+
+# 简单包装器:直接调用真 prompt,不再做延迟初始化(已经在 profile 加载时完成)
 function global:prompt {
-    # 首次调用 prompt 时触发延迟初始化
-    Invoke-DeferredInit
-    # 首次调用时（在 Invoke-DeferredInit 之后）抓取被 Starship 覆盖的 prompt
-    if ($null -eq $script:OriginalPrompt) {
-        $current = Get-Item Function:prompt -ErrorAction SilentlyContinue
-        $selfScript = $MyInvocation.MyCommand.ScriptBlock
-        # 关键：拒绝捕获自身 — 防止 starship 未生效时造成无限递归
-        if ($current -and $current.ScriptBlock -ne $selfScript) {
-            $script:OriginalPrompt = $current.ScriptBlock
-        } else {
-            $script:OriginalPrompt = { "PS $PWD> " }
-        }
-    }
-    # 调用原始 prompt — 兜底防止 prompt 链断裂
     try {
-        return & $script:OriginalPrompt
+        return & $global:OriginalPrompt
     } catch {
         return "PS> "
     }

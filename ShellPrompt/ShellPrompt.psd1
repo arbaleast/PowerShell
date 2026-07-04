@@ -9,9 +9,9 @@
     PowerShellVersion = '5.1'
 
     FunctionsToExport = @(
-        'Initialize-Environment'
         'Show-UserScoopLogo'
         'Start-TmuxSession'
+        'Copy-SshPublicKey'
         'reload'
     )
 

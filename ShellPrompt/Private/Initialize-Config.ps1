@@ -1,201 +1,91 @@
-# ============================================================
-# Initialize-Config.ps1 - 模块配置初始化
-# 定义全局配置（仅在此处修改默认值）
-# 支持用户配置覆盖：~/.ShellPrompt/config.ps1
-# ============================================================
+# Initialize-Config.ps1 - 模块配置初始化 & 配置访问助手
+# 单一配置源: $script:Config 按域划分(Colors/Keys/Paths/SSH),
+# 读取统一走 Get-CachedConfig;热路径键值预热到 $script:_ColorCache
+# 以减少菜单/Logo 渲染中的 4 段三层回退。
 
-$global:UserScoop_ROOT = (Get-Item $PSScriptRoot).Parent.Parent.FullName
+# 1. 模块根路径（脚本级，不暴露为全局变量）
+$script:ShellPromptRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 
-$global:UserScoop_CONF = @{
-    Quotes  = "$global:UserScoop_ROOT\data\quotes.txt"
-
-    # 日志路径（由 TUILogger 使用）
-    LogPath = "$env:TEMP\ShellPrompt\shellprompt.log"
-
-    Colors  = @{
-        # User preferred palette - soft greens
+# 2. 单一来源：模块级配置对象（按域划分：Colors / Keys / SSH / Paths）
+$script:Config = [ordered]@{
+    Paths  = [ordered]@{
+        Quotes  = Join-Path $script:ShellPromptRoot 'data\quotes.txt'
+        LogPath = Join-Path $env:TEMP 'ShellPrompt\shellprompt.log'
+    }
+    Colors = [ordered]@{
         FreshGreen = "`e[38;2;137;209;133m"
         SageGreen  = "`e[38;2;159;177;159m"
-
-        # Neutrals
         DarkGray   = "`e[38;2;50;50;50m"
         MidGray    = "`e[38;2;100;100;100m"
         LightGray  = "`e[38;2;180;180;180m"
         White      = "`e[38;2;255;255;255m"
-
-        # Effects
         Rst        = "`e[0m"
         Bold       = "`e[1m"
         Dim        = "`e[2m"
     }
-
-    Keys    = @{
+    Keys   = [ordered]@{
         Up    = 38
         Down  = 40
         Enter = 13
         Esc   = 27
     }
-
-    SSH     = @{
+    SSH    = [ordered]@{
         ConnectTimeout = 5
         ForceTTy       = $true
     }
 }
 
-# -----------------------------
-# 用户配置覆盖
-# -----------------------------
-function Merge-UserConfig {
-    <#
-    .SYNOPSIS
-    合并用户配置到全局配置
-
-    .DESCRIPTION
-    从 ~/.ShellPrompt/config.ps1 加载用户配置
-    用户配置使用 $global:UserScoop_CONF 变量来覆盖默认值
-    支持 hashtable 深度合并
-    #>
-    param(
-        [Parameter(Mandatory = $true)]
-        [hashtable]$DefaultConfig,
-
-        [Parameter(Mandatory = $false)]
-        [string]$UserConfigPath = (Join-Path $HOME ".ShellPrompt\config.ps1")
-    )
-
-    # O1 优化：Test-Path + Get-Item 合并为单次 Get-Item -ErrorAction SilentlyContinue
-    $item = Get-Item -LiteralPath $UserConfigPath -ErrorAction SilentlyContinue
-    if (-not $item) { return $DefaultConfig }
-
-    try {
-        # 使用脚本块执行用户配置，获取返回值
-        # 用户配置脚本应该返回要合并的 hashtable
-        $userConfig = & $UserConfigPath
-        if ($userConfig -is [hashtable]) {
-            return Merge-Hashtable -Base $DefaultConfig -Override $userConfig
-        }
-    } catch {
-        Write-Host "[Initialize-Config] 用户配置加载失败: $($_.Exception.Message)" -ForegroundColor Yellow
-    }
-
-    return $DefaultConfig
-}
-
-function Merge-Hashtable {
-    <#
-    .SYNOPSIS
-    深度合并两个 hashtable（数据量<20键，双循环即可无需HashSet构造开销）
-    #>
-    param(
-        [Parameter(Mandatory = $true)]
-        [hashtable]$Base,
-
-        [Parameter(Mandatory = $true)]
-        [hashtable]$Override
-    )
-
-    $result = @{}
-
-    # 复制基础配置
-    foreach ($key in $Base.Keys) {
-        if ($Base[$key] -is [hashtable] -and $Override.ContainsKey($key) -and $Override[$key] -is [hashtable]) {
-            $result[$key] = Merge-Hashtable -Base $Base[$key] -Override $Override[$key]
-        } else {
-            $result[$key] = $Base[$key]
-        }
-    }
-
-    # 合并覆盖配置（只处理 Base 不含的或需要深度合并的键）
-    foreach ($key in $Override.Keys) {
-        if ($result.ContainsKey($key) -and $result[$key] -is [hashtable] -and $Override[$key] -is [hashtable]) {
-            $result[$key] = Merge-Hashtable -Base $result[$key] -Override $Override[$key]
-        } else {
-            $result[$key] = $Override[$key]
-        }
-    }
-
-    return $result
-}
-
-# 尝试加载用户配置覆盖（如果存在）
-# O1 优化：Test-Path + Get-Item 合并为单次调用
-$userConfigItem = Get-Item -LiteralPath (Join-Path $HOME ".ShellPrompt\config.ps1") -ErrorAction SilentlyContinue
-if ($userConfigItem) {
-    $global:UserScoop_CONF = Merge-UserConfig -DefaultConfig $global:UserScoop_CONF -UserConfigPath (Join-Path $HOME ".ShellPrompt\config.ps1")
-}
-
-# -----------------------------
-# 兼容性辅助函数
-# -----------------------------
-function Get-PowerShellExe {
-    <#
-    返回可用的 PowerShell 可执行文件路径或名称，优先顺序：pwsh, pwsh.exe, powershell.exe
-    用于在不同 PowerShell 版本/发行版间兼容地启动新进程。
-    #>
-    try {
-        $candidates = @('pwsh', 'pwsh.exe', 'powershell.exe')
-        foreach ($name in $candidates) {
-            $cmd = Get-Command $name -ErrorAction SilentlyContinue
-            if ($cmd) {
-                if ($cmd.Path) { return $cmd.Path }
-                if ($cmd.Source) { return $cmd.Source }
-                return $name
-            }
-        }
-    } catch {
-        # 忽略错误，回退到 powershell.exe
-    }
-    return 'powershell.exe'
-}
-
-function ConvertFromJsonCompat {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Json
-    )
-
-    # 把内部嵌套的 _ConvertRecursive 改写为同函数内联，避免每次调用都重新
-    # 解析/绑定嵌套 ScriptBlock（原来 ~10-20ms/call 的开销），同时用 += 数组
-    # 替代 ArrayList.Add，消除逐次扩容
-    function _ConvertValue {
-        param($value)
-
-        if ($null -eq $value) { return $null }
-        if ($value -is [string] -or $value.GetType().IsPrimitive) { return $value }
-
-        if ($value -is [System.Management.Automation.PSObject]) {
-            $ht = @{}
-            foreach ($p in $value.psobject.Properties) {
-                $ht[$p.Name] = _ConvertValue $p.Value
-            }
-            return $ht
-        }
-
-        if ($value -is [System.Collections.IEnumerable]) {
-            $arr = @()
-            foreach ($i in $value) { $arr += , (_ConvertValue $i) }
-            return $arr
-        }
-
-        return $value
-    }
-
-    if (-not $Json) { return @{} }
-
-    $obj = $Json | ConvertFrom-Json
-    return _ConvertValue $obj
-}
-
-# -----------------------------
-# 全局状态变量初始化
-# -----------------------------
-# SSH/TMUX 上次使用的主机名（用于菜单置顶）
+# 3. 上次使用的 SSH 主机（用于菜单置顶，保持全局以便 profile/外部脚本可见）
 $Global:LastSshHost = $null
 
-# Ensure data directory exists
+# 4. 确保数据目录存在
 try {
-    $dataDir = "$global:UserScoop_ROOT\data"
-    if (-not (Test-Path $dataDir)) { New-Item -ItemType Directory -Path $dataDir -Force | Out-Null }
+    $dataDir = Join-Path $script:ShellPromptRoot 'data'
+    if (-not (Test-Path $dataDir)) {
+        New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+    }
 } catch {
     Write-Verbose "初始化数据目录失败: $($_.Exception.Message)"
+}
+
+# 5. 预热热路径值到 $script 作用域,菜单/Logo 渲染时直接命中快路径,
+#    避免在每次菜单绘制时重复执行回退查询 (Invoke-ConsoleMenu 每次红绘约 5-10 次)。
+#    注: 仅缓存"非空字符串"键值;若用户配置在运行时被修改,请清除此缓存。
+$script:_ColorCache = @{
+    'Colors|FreshGreen' = $script:Config.Colors.FreshGreen
+    'Colors|SageGreen'  = $script:Config.Colors.SageGreen
+    'Colors|MidGray'    = $script:Config.Colors.MidGray
+    'Colors|Rst'        = $script:Config.Colors.Rst
+    'Keys|Up'           = $script:Config.Keys.Up
+    'Keys|Down'         = $script:Config.Keys.Down
+    'Keys|Enter'        = $script:Config.Keys.Enter
+    'Keys|Esc'          = $script:Config.Keys.Esc
+    'Paths|Quotes'      = $script:Config.Paths.Quotes
+}
+
+# 6. 统一配置读取入口: 优先命中 $script:_ColorCache 预热键,
+#    冷路径直接回退到 $script:Config。
+function Get-CachedConfig {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('Paths', 'Colors', 'Keys', 'SSH')]
+        [string]$Section,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Key,
+
+        [Parameter(Mandatory = $false)]
+        [object]$Default
+    )
+    $cacheKey = "${Section}|${Key}"
+    if ($script:_ColorCache.ContainsKey($cacheKey)) {
+        $cached = $script:_ColorCache[$cacheKey]
+        if ($null -ne $cached -and "$cached" -ne '') { return $cached }
+    }
+    # 冷路径: 直接走 $script:Config,未命中则返回传入的 $Default
+    if ($script:Config -and $script:Config[$Section] -and $null -ne $script:Config[$Section][$Key]) {
+        return $script:Config[$Section][$Key]
+    }
+    return $Default
 }
