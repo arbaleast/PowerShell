@@ -3,12 +3,15 @@
 # 颜色统一走 Get-CachedConfig 预热缓存;循环中只更新变化的行。
 
 function Write-MenuLine {
+    [CmdletBinding()]
+    [OutputType([void])]
     param([int]$Line, [string]$Text)
     [Console]::Write("`e[${Line};1H`e[2K${Text}")
 }
 
 function Invoke-ConsoleMenu {
     [CmdletBinding()]
+    [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory = $true, Position = 0)]
         [string]$Title,

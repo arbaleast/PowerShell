@@ -30,6 +30,7 @@
 # 默认自动按 ed25519 > ecdsa > rsa > dsa 顺序查找 ~/.ssh 下的公钥
 function Copy-SshPublicKey {
     [CmdletBinding()]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory = $true, Position = 0)]
         [string]$RemoteHost,
@@ -58,7 +59,7 @@ function Copy-SshPublicKey {
     Write-Host "[ssh-copy-id] 使用公钥: $IdentityFile" -ForegroundColor DarkGray
 
     # 重要: 公钥内容中的单引号必须转义，否则远程 sh -c 会断引号导致命令注入
-    $escapedKey = $key.Trim() -replace "'", "'\''"
+    $escapedKey = ConvertTo-SshEscapedString -Value $key.Trim()
 
     $sshArgs = @(
         '-p', $Port,

@@ -9,6 +9,9 @@
     Invoke-Reload
 #>
 function Invoke-Reload {
+    [CmdletBinding()]
+    [OutputType([void])]
+    param()
     if (Test-Path $PROFILE) {
         Remove-Module ShellPrompt -Force -ErrorAction SilentlyContinue
         . $PROFILE

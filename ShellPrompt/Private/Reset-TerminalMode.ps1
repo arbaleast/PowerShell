@@ -7,6 +7,7 @@
 
 function Reset-TerminalMode {
     [CmdletBinding()]
+    [OutputType([void])]
     param()
 
     # --- A. 远程协议层 (原 Invoke-SshCommand 版) ---

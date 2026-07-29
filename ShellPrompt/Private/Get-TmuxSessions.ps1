@@ -12,6 +12,7 @@ function Get-TmuxAvailability {
     同时返回 tmux 版本号(若可用),后续解析无需再次 SSH。
     #>
     [CmdletBinding()]
+    [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory = $true)]
         [string]$HostName,
@@ -124,6 +125,7 @@ function Get-TmuxSessions {
     获取远程 tmux 会话列表(已包含在 Get-TmuxAvailability 探测结果里,免第二次 SSH)
     #>
     [CmdletBinding()]
+    [OutputType([hashtable])]
     param(
         [Parameter(Mandatory = $true)]
         [string]$HostName,

@@ -32,11 +32,9 @@ $script:Config = [ordered]@{
     SSH    = [ordered]@{
         ConnectTimeout = 5
         ForceTTy       = $true
+        LastHost       = $null   # 上次使用的 SSH 主机（模块作用域，用于菜单置顶）
     }
 }
-
-# 3. 上次使用的 SSH 主机（用于菜单置顶，保持全局以便 profile/外部脚本可见）
-$Global:LastSshHost = $null
 
 # 4. 确保数据目录存在
 try {
@@ -67,6 +65,7 @@ $script:ColorCache = @{
 #    冷路径直接回退到 $script:Config。
 function Get-CachedConfig {
     [CmdletBinding()]
+    [OutputType([object])]
     param(
         [Parameter(Mandatory = $true)]
         [ValidateSet('Paths', 'Colors', 'Keys', 'SSH')]

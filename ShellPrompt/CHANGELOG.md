@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **函数拆分**: `Invoke-SshCommand` 拆分为 [`Get-SshArgs`](ShellPrompt/Private/Get-SshArgs.ps1)、[`Invoke-SshCaptureOutput`](ShellPrompt/Private/Invoke-SshCaptureOutput.ps1) 和主干函数
+- **子命令抽取**: `Start-TmuxSession` 拆分为 [`Connect-TmuxSession`](ShellPrompt/Private/Connect-TmuxSession.ps1)、[`New-TmuxSession`](ShellPrompt/Private/New-TmuxSession.ps1)、[`Remove-TmuxSession`](ShellPrompt/Private/Remove-TmuxSession.ps1) 三个子函数
+- **工具函数抽取**: 新增 [`Save-OriginalTerminalState`](ShellPrompt/Private/Save-OriginalTerminalState.ps1)、[`ConvertTo-SshEscapedString`](ShellPrompt/Private/ConvertTo-SshEscapedString.ps1)、[`Test-SshHostName`](ShellPrompt/Private/Test-SshHostName.ps1)
+- **PSScriptAnalyzer 配置**: 新增 [`Settings.ScriptAnalyzer.psd1`](ShellPrompt/Settings.ScriptAnalyzer.psd1)，含 8 条活跃规则 + 1 条排除规则
+
+### Changed
+
+- **消除全局变量 `$Global:LastSshHost`**: 迁移至 `$script:Config.SSH.LastHost`，通过配置系统持久化管理
+- **消除重复 dot-source**: `Invoke-SshCommand.ps1` 和 `Start-SshInteractive.ps1` 中移除 `Reset-TerminalMode.ps1` 重复引用
+- **统一错误处理**: `Start-TmuxSession` 中 `Write-Host` 警告消息改为 `Write-Warning`（符合非终止性错误约定）
+- **补充 `[OutputType()]` 注解**: 覆盖模块内全部 24 个函数，标注输出类型（`[void]`、`[string]`、`[object]`、`[PSCustomObject]`、`[hashtable]`、`[string[]]`、`[bool]`）
+- **Pester 测试扩展**: 新增 8 个测试（ConvertTo-SshEscapedString 3 例 + Test-SshHostName 4 例 + 新增私有函数导出检查 9 项）
+- **模块版本提升**: `ModuleVersion` 从 `1.1.0` 更新为 `1.2.0`
+
+### Fixed
+
 - **Pester v5 测试骨架**: 新增 [`ShellPrompt/Tests/ShellPrompt.Tests.ps1`](ShellPrompt/Tests/ShellPrompt.Tests.ps1)，
   包含模块导入、命令导出、Verb-Noun 合规性和配置访问测试
 - **多终端复用器支持**: 新增 [`Get-MultiplexerSessions`](ShellPrompt/Private/Get-TmuxSessions.ps1:49) 和 [`Test-MultiplexerAvailable`](ShellPrompt/Private/Get-TmuxSessions.ps1:120) 函数，支持检测 tmux、screen、byobu

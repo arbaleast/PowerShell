@@ -30,6 +30,7 @@
 
 function Show-UserScoopLogo {
     [CmdletBinding()]
+    [OutputType([void])]
     param(
         [Parameter(Mandatory = $false)]
         [string]$QuotesPath,

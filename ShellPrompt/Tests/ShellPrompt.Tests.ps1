@@ -58,7 +58,10 @@ Describe 'Command Export' {
         $privateNames = @(
             'Get-CachedConfig', 'Get-SshConfigHosts', 'Get-TmuxAvailability',
             'Get-TmuxSessions', 'Invoke-ConsoleMenu', 'Invoke-SshCommand',
-            'New-RandomSessionName', 'Reset-TerminalMode', 'Start-SshInteractive'
+            'Invoke-SshCaptureOutput', 'New-RandomSessionName', 'Reset-TerminalMode',
+            'Start-SshInteractive', 'Get-SshArgs', 'Connect-TmuxSession',
+            'New-TmuxSession', 'Remove-TmuxSession', 'ConvertTo-SshEscapedString',
+            'Test-SshHostName', 'Save-OriginalTerminalState'
         )
         $exported = @(Get-Command -Module ShellPrompt | Select-Object -ExpandProperty Name)
         foreach ($name in $privateNames) {
@@ -90,5 +93,42 @@ Describe 'Config Access' {
         $config.Contains('Keys') | Should Be $true
         $config.Contains('Paths') | Should Be $true
         $config.Contains('SSH') | Should Be $true
+    }
+}
+
+Describe 'ConvertTo-SshEscapedString' {
+
+    It '应正确处理普通字符' {
+        $result = & (Get-Module ShellPrompt) { ConvertTo-SshEscapedString -Value 'hello' }
+        $result | Should Be 'hello'
+    }
+
+    It '应转义单引号' {
+        $result = & (Get-Module ShellPrompt) { ConvertTo-SshEscapedString -Value "it's a test" }
+        $result | Should Be "it'\''s a test"
+    }
+
+    It '应通过管道处理输入' {
+        $result = "don't stop" | & (Get-Module ShellPrompt) { $input | ConvertTo-SshEscapedString }
+        $result | Should Be "don'\''t stop"
+    }
+}
+
+Describe 'Test-SshHostName' {
+
+    It '合法主机名应返回 $true' {
+        & (Get-Module ShellPrompt) { Test-SshHostName -HostName 'example.com' } | Should Be $true
+    }
+
+    It '带短横线的合法主机名应返回 $true' {
+        & (Get-Module ShellPrompt) { Test-SshHostName -HostName 'my-server-01' } | Should Be $true
+    }
+
+    It '含空格的主机名应返回 $false' {
+        & (Get-Module ShellPrompt) { Test-SshHostName -HostName 'bad host' } | Should Be $false
+    }
+
+    It '含管道符的主机名应返回 $false' {
+        & (Get-Module ShellPrompt) { Test-SshHostName -HostName 'host|danger' } | Should Be $false
     }
 }
