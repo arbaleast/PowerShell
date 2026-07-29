@@ -131,6 +131,7 @@ $HOME/.ShellPrompt/config.ps1
 |----|------|--------|------|
 | `ConnectTimeout` | int | `5` | SSH 连接超时（秒） |
 | `ForceTTy` | bool | `$true` | 强制分配 PTY |
+| `LastHost` | string | `$null` | 上次使用的主机，在会话管理器中优先显示 |
 
 ### 用户配置示例
 
@@ -174,26 +175,35 @@ PowerShell/
 ├── data/
 │   └── quotes.txt                     # 随机语录数据
 └── ShellPrompt/                       # 模块根目录
-    ├── ShellPrompt.psd1               # 模块清单
+    ├── ShellPrompt.psd1               # 模块清单 (ModuleVersion 1.2.0)
     ├── ShellPrompt.psm1               # 模块入口脚本
+    ├── Settings.ScriptAnalyzer.psd1   # PSScriptAnalyzer 规则配置
     ├── CHANGELOG.md
     ├── LICENSE                        # MIT 协议
-    ├── Tests/                         # Pester v5 测试
-    │   └── ShellPrompt.Tests.ps1
+    ├── Tests/                         # Pester 测试套件
+    │   └── ShellPrompt.Tests.ps1      # 17 项测试
     ├── Public/                        # 用户面向命令（稳定 API）
     │   ├── Copy-SshPublicKey.ps1
     │   ├── Invoke-Reload.ps1
     │   ├── Show-UserScoopLogo.ps1
     │   └── Start-TmuxSession.ps1
     └── Private/                       # 内部辅助函数（不暴露给用户）
-        ├── Get-SshConfigHosts.ps1
-        ├── Get-SshSocketPath.ps1
-        ├── Get-TmuxSessions.ps1
-        ├── Initialize-Config.ps1
-        ├── Invoke-ConsoleMenu.ps1
-        ├── Invoke-SshCommand.ps1
-        ├── Reset-TerminalMode.ps1
-        └── Start-SshInteractive.ps1
+        ├── Connect-TmuxSession.ps1        # 附着已有 tmux 会话
+        ├── ConvertTo-SshEscapedString.ps1 # SSH 单引号转义
+        ├── Get-SshArgs.ps1                # SSH 参数生成器
+        ├── Get-SshConfigHosts.ps1         # SSH config 主机解析
+        ├── Get-SshSocketPath.ps1          # SSH socket 路径
+        ├── Get-TmuxSessions.ps1           # 远程 tmux 探测与列表
+        ├── Initialize-Config.ps1          # 配置初始化与缓存
+        ├── Invoke-ConsoleMenu.ps1         # 终端交互式菜单 UI
+        ├── Invoke-SshCaptureOutput.ps1    # SSH 异步输出捕获
+        ├── Invoke-SshCommand.ps1          # SSH 命令调度（主线逻辑）
+        ├── New-TmuxSession.ps1            # 创建新 tmux 会话
+        ├── Remove-TmuxSession.ps1         # 删除 tmux 会话
+        ├── Reset-TerminalMode.ps1         # 终端编码/TERM 恢复
+        ├── Save-OriginalTerminalState.ps1 # 终端状态保存
+        ├── Start-SshInteractive.ps1       # 交互式 SSH 启动
+        └── Test-SshHostName.ps1           # 主机名校验
 ```
 
 ### 加载流程
@@ -260,6 +270,29 @@ PowerShell 启动
 > - **ALWAYS** use approved PowerShell verbs (`Get-Verb`). (e.g., `Get-TmuxSession`, `Connect-SshHost`). **NEVER** use unapproved verbs like `test1` or `ssh123`.
 > - **NEVER** use global variables (`$global:`) without explicit architectural justification. **ALWAYS** prefer `$script:` or local scope.
 
+### 函数分解与单一职责
+
+> - **PREFER** small, focused functions over monolithic ones. When a function exceeds ~80 lines or handles multiple concerns, split it:
+>   - `Invoke-SshCommand` → `Get-SshArgs` (arg building) + `Invoke-SshCaptureOutput` (capture I/O) + backbone (dispatch logic)
+>   - `Start-TmuxSession` → `Connect-TmuxSession` / `New-TmuxSession` / `Remove-TmuxSession`
+> - **Shared utilities**: Extract reusable logic into `Private/` utility functions (e.g., `ConvertTo-SshEscapedString`, `Test-SshHostName`, `Save-OriginalTerminalState`).
+> - **Terminal state pattern**: Use `Save-OriginalTerminalState` + `Reset-TerminalMode` in `try {} finally {}` for any SSH command that changes terminal encoding/TERM.
+
+### 输出注解
+
+> - **ALWAYS** add `[OutputType()]` annotation to every function. Use exact types: `[void]`, `[string]`, `[bool]`, `[object]`, `[PSCustomObject]`, `[hashtable]`, `[string[]]`.
+> - **ALWAYS** add `[CmdletBinding()]` to every advanced function.
+
+### 错误处理约定
+
+> | 场景 | 方式 | 示例 |
+> |------|------|------|
+> | 参数校验 | `[ValidateScript()]` + `throw` | 非法主机名字符 |
+> | 运行时致命错误 | `throw` (终止性) | 配置缺失、依赖不可用 |
+> | 可恢复失败 | `Write-Warning` (非终止性) | SSH 超时、tmux 不可用 |
+> | 外部命令缺失 | `Get-Command` 检查 → `Write-Warning` | tmux、ssh 未安装 |
+> | **例外**: UI 渲染 | `Write-Host` 允许 | `Invoke-ConsoleMenu`、`Show-UserScoopLogo` |
+
 ### 配置
 
 > - **NEVER** hard-code user preferences (e.g., Bad: `$Theme="starship"` | Good: `$config.Theme`).
@@ -280,7 +313,7 @@ PowerShell 启动
 
 ### 测试
 
-> - **Testing**: Before submitting changes, verify module loading (`Import-Module ./ShellPrompt`). Run tests via `Invoke-Pester` (Assume Pester v5 syntax). Any changes involving profile loading, SSH, or tmux MUST be flagged for manual testing.
+> - **Testing**: Before submitting changes, verify module loading (`Import-Module ./ShellPrompt`). Run tests via `Invoke-Pester` (Assume Pester v5 syntax). Run PSScriptAnalyzer via `Invoke-ScriptAnalyzer -Settings ./ShellPrompt/Settings.ScriptAnalyzer.psd1`. Any changes involving profile loading, SSH, or tmux MUST be flagged for manual testing.
 
 ### 提交规范
 
