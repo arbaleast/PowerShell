@@ -6,27 +6,23 @@ ____  ____  ____  ____   ___  _____ ___ _     _____
 
 ```
 
-### ⌨️ SSH + tmux Session Manager for PowerShell
+### ⌨️ SSH + tmux 会话管理器 (PowerShell)
 
-> An interactive menu to manage remote tmux sessions via SSH. `sss <host>` to attach, create, or switch sessions.
-> Powered by Starship prompt, Fnm node switching, and PSReadLine for a smoother terminal.
+> 通过交互式菜单管理远程 tmux 会话。`sss <host>` 即可附加、创建或切换会话。
+> 配合 Starship 提示符、Fnm Node 版本切换、PSReadLine 让终端更好用。
 
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue.svg)](https://github.com/PowerShell/PowerShell)
 [![Starship](https://img.shields.io/badge/Starship-Prompt-8356ff.svg)](https://starship.rs)
 [![Tmux](https://img.shields.io/badge/Tmux-Sessions-1BB91F.svg)](https://github.com/tmux/tmux)
 
-[中文版](./README_zh.md) · [Report Bug](https://github.com/arbaleast/PowerShell/issues) · [Request Feature](https://github.com/arbaleast/PowerShell/issues)
+[English Version](./README.md) · [报告问题](https://github.com/arbaleast/PowerShell/issues) · [功能建议](https://github.com/arbaleast/PowerShell/issues)
 
 ---
 
-## 📸 Real interface preview
+## 📸 截图
 
-Below is a sample terminal preview showing the prompt and remote tmux session menu. Actual appearance may vary by shell theme and current host configuration.
-
-### Terminal preview
-
-**Startup quote:**
+**启动语录:**
 
 ```
 
@@ -41,7 +37,7 @@ Below is a sample terminal preview showing the prompt and remote tmux session me
 
 ```
 
-### Tmux Manager (`sss <host>`)
+**Tmux 管理器 (`sss <host>`):**
 
 ```
 
@@ -62,7 +58,7 @@ Below is a sample terminal preview showing the prompt and remote tmux session me
 
 ```
 
-**New session input:**
+**新建会话输入：**
 
 ```
 
@@ -72,131 +68,131 @@ Below is a sample terminal preview showing the prompt and remote tmux session me
 
 ---
 
-## ✨ Features
+## ✨ 功能特点
 
-### 🚀 Performance
+### 🚀 性能
 
-- **Lazy Loading** — tmux module loads only when you first type `sss`
-- **Fast Startup** — Minimal footprint, loads in milliseconds
+- **懒加载** — tmux 模块仅在你首次输入 `sss` 时才加载
+- **快速启动** — 最小化足迹，毫秒级加载
 
-### 🛠️ Developer Tools
+### 🛠️ 开发者工具
 
-- **Starship Prompt** — Cross-shell prompt with git awareness, Node version display
-- **Fnm Integration** — Auto-switch Node versions as you cd between projects
-- **PSReadLine** — History-based autocompletion, better navigation
+- **Starship 提示符** — 跨 Shell 提示符，显示 git 上下文、Node 版本
+- **Fnm 集成** — cd 切换项目时自动切换 Node 版本
+- **PSReadLine** — 基于历史的自动补全，更好的导航体验
 
-### 🔧 Remote Sessions
+### 🔧 远程会话
 
-- **Tmux Manager** — Interactive menu for managing remote tmux sessions
-- **Quick Connect** — `sss <host>` to attach/resume/create sessions instantly
-- **Fallback SSH** — If remote host has no tmux, falls back to plain SSH login
+- **Tmux 管理器** — 交互式菜单管理远程 tmux 会话
+- **快速连接** — `sss <host>` 立即附加/恢复/创建会话
+- **SSH 回退** — 远程主机无 tmux 时，自动回退到普通 SSH 登录
 
-### 📁 Everyday QoL
+### 📁 日常优化
 
-- **Quick Aliases** — `ll`, `..`, `~`, `which` for faster navigation
-- **Modular Structure** — Self-contained `ShellPrompt/` module, single entry point
+- **快捷别名** — `ll`、`..`、`~`、`which` 加速导航
+- **模块化结构** — 自包含 `ShellPrompt/` 模块，单一入口，易于维护
 
 ---
 
-## 📂 Structure
+## 📂 目录结构
 
 ```
 
 PowerShell/
 │
-├── Microsoft.PowerShell_profile.ps1   # 🎯 Minimal entry — imports the module
+├── Microsoft.PowerShell_profile.ps1   # 🎯 极简入口 — 导入模块
 ├── data/
-│   └── quotes.txt                     # 💬 Random startup quotes
+│   └── quotes.txt                     # 💬 随机启动语录
 ├── README.md / README_zh.md
-└── ShellPrompt/                       # 📦 Self-contained module
-    ├── ShellPrompt.psd1              # 📋 Module manifest
-    ├── ShellPrompt.psm1               # 🚪 Entry point (config → Private → Public → export)
+└── ShellPrompt/                       # 📦 自包含模块
+    ├── ShellPrompt.psd1              # 📋 模块清单
+    ├── ShellPrompt.psm1               # 🚪 入口（配置 → Private → Public → 导出）
     ├── Private/
-    │   ├── Initialize-Config.ps1      # ⚙️  Global config ($UserScoop_CONF)
-    │   ├── Invoke-ConsoleMenu.ps1      # 🖼️  Generic UI menu (no tmux knowledge)
-    │   ├── Get-TmuxSessions.ps1        # 🔌 SSH → tmux ls parser
-    │   └── Invoke-SessionSelector.ps1  # 🔀 Session picker submenu
+    │   ├── Initialize-Config.ps1      # ⚙️  全局配置（$UserScoop_CONF）
+    │   ├── Invoke-ConsoleMenu.ps1      # 🖼️  通用 UI 菜单（无 tmux 知识）
+    │   ├── Get-TmuxSessions.ps1        # 🔌 SSH → tmux ls 解析器
+    │   └── Invoke-SessionSelector.ps1  # 🔀 会话选择子菜单
     └── Public/
         ├── Initialize-Environment.ps1  # 🛠️  Starship / Fnm / PSReadLine + logo
-        ├── Show-UserScoopLogo.ps1      # 🎨 Startup logo and quotes
-        ├── Invoke-Reload.ps1           # 🔄 reload command
-        ├── Set-ProfileAliases.ps1      # 🔗 ll, .., ~, which
-        └── Start-TmuxSession.ps1       # 🚀 Tmux session manager (exported)
+        ├── Show-UserScoopLogo.ps1       # 🎨 启动语录渲染
+        ├── Invoke-Reload.ps1            # 🔄 reload 命令
+        ├── Set-ProfileAliases.ps1        # 🔗 ll, .., ~, which
+        └── Start-TmuxSession.ps1        # 🚀 Tmux 会话管理器（导出）
 
 ```
 
-### Module Architecture
+### 模块架构
 
-`ShellPrompt.psm1` loads files in strict order:
+`ShellPrompt.psm1` 按严格顺序加载：
 
-1. **Private/Initialize-Config.ps1** — sets up `$global:UserScoop_CONF` (colors, keys, SSH/Tmux options, quotes path)
-2. **Private/** — internal helpers (Invoke-ConsoleMenu, Get-TmuxSessions, Invoke-SessionSelector)
-3. **Public/** — user-facing commands (Initialize-Environment, Show-UserScoopLogo, Start-TmuxSession, reload)
-4. **Export-ModuleMember** — only Public/*.ps1 functions are exported; Private is invisible to consumers
+1. **Private/Initialize-Config.ps1** — 初始化 `$global:UserScoop_CONF`（颜色、按键、SSH/Tmux 配置、语录路径）
+2. **Private/** — 内部辅助函数（Invoke-ConsoleMenu、Get-TmuxSessions、Invoke-SessionSelector）
+3. **Public/** — 用户可见命令（Initialize-Environment、Show-UserScoopLogo、Start-TmuxSession、reload）
+4. **Export-ModuleMember** — 仅导出 Public/*.ps1 中的函数；Private 对外部不可见
 
-This enforces the MVC boundary: UI logic (`Invoke-ConsoleMenu`) knows nothing about tmux or SSH, keeping concerns separated.
+这确保了 MVC 边界：UI 逻辑（`Invoke-ConsoleMenu`）对 tmux 和 SSH 一无所知，保持关注点分离。
 
 ---
 
-## 🚀 Quick Start
+## 🚀 快速开始
 
-### 1️⃣ Prerequisites
+### 1️⃣ 安装依赖
 
-Ensure the following tools are installed on your system:
+请确保系统已安装以下工具：
 
-| Tool | Purpose | Install |
-|------|---------|---------|
-| [Starship](https://starship.rs/) | Pretty prompt with git context | [Guide](https://starship.rs/guide/#🚀-installation) |
-| [Fnm](https://github.com/Schniz/fnm) | Fast Node version manager | [Guide](https://github.com/Schniz/fnm#installation) |
-| [OpenSSH](https://docs.microsoft.com/windows-server/administration/openssh/openssh_install_firstuse) | SSH client for remote tmux | Built into Windows 10/11 or install via OpenSSH |
-| [tmux](https://github.com/tmux/tmux) | Remote session persistence | [Installation](https://github.com/tmux/tmux/wiki/Installing) |
+| 工具 | 用途 | 安装指南 |
+|------|------|----------|
+| [Starship](https://starship.rs/) | 美观提示符，带 git 上下文 | [安装](https://starship.rs/guide/#🚀-installation) |
+| [Fnm](https://github.com/Schniz/fnm) | 快速 Node 版本管理器 | [安装](https://github.com/Schniz/fnm#installation) |
+| [OpenSSH](https://docs.microsoft.com/windows-server/administration/openssh/openssh_install_firstuse) | 远程 SSH 客户端 | Windows 10/11 内置或安装 OpenSSH |
+| [tmux](https://github.com/tmux/tmux) | 远程会话保持 | [安装](https://github.com/tmux/tmux/wiki/Installing) |
 
-### 2️⃣ Install
+### 2️⃣ 安装
 
 ```powershell
-# Find your profile directory
+# 查看 PowerShell 配置目录
 $PROFILE
 
-# Clone to a permanent location
+# 将仓库克隆到永久目录
 git clone https://github.com/arbaleast/PowerShell.git D:\path\to\PowerShell
 
-# Create a stub that loads the module
+# 在配置目录创建一个桩文件，加载真实模块
 "`$PROFILE_DIR = 'D:\path\to\PowerShell'" | Out-File -Encoding UTF8 "`$PROFILE" -NoClobber
 "`. `$PROFILE_DIR\Microsoft.PowerShell_profile.ps1" | Add-Content "`$PROFILE"
 
-# Restart PowerShell or run:
+# 重启 PowerShell 或执行：
 reload
 ```
 
-> `quotes.txt` lives at the repo root and is found automatically at load time.
+> `quotes.txt` 位于仓库根目录，模块加载时自动找到。
 
-### 3️⃣ Configure (Optional)
+### 3️⃣ 自定义配置（可选）
 
-Edit `ShellPrompt/Private/Initialize-Config.ps1` to change colors, key codes, SSH timeout, or tmux session name.
-
----
-
-## ⚡ Commands
-
-| Command | What it does |
-|---------|-------------|
-| `sss <host>` | 🖥️ Open tmux manager → connect to remote host |
-| `reload` | 🔄 Reload your PowerShell profile |
-| `ll` | 📋 List files with details |
-| `..` | ⬆️ Jump to parent directory |
-| `~` | 🏠 Jump to home directory |
-| `which <cmd>` | 🔍 Find where a command lives |
+编辑 `ShellPrompt/Private/Initialize-Config.ps1` 自定义颜色、按键码、SSH 超时或默认会话名。
 
 ---
 
-## 🎨 Configuration
+## ⚡ 命令一览
 
-Edit `ShellPrompt/Private/Initialize-Config.ps1` to customize:
+| 命令 | 说明 |
+|------|------|
+| `sss <host>` | 🖥️ 打开 tmux 管理器 → 连接远程主机 |
+| `reload` | 🔄 重载 PowerShell 配置 |
+| `ll` | 📋 详细列出文件 |
+| `..` | ⬆️ 跳转到父目录 |
+| `~` | 🏠 跳转到主目录 |
+| `which <cmd>` | 🔍 查找命令所在位置 |
 
-## 📜 License
+---
+
+## 🎨 配置说明
+
+编辑 `ShellPrompt/Private/Initialize-Config.ps1` 自定义设置：
+
+## 📜 开源协议
 
 MIT © arbaleast
 
 ---
 
-> __Tip:__ Star this repo if you find it useful! ⭐
+> __提示：__ 如果觉得有用，别忘了 star ⭐

@@ -66,14 +66,34 @@ function Invoke-ConsoleMenu {
 
     $exitKey = ($count + 1).ToString().PadLeft(2, '0')
 
+    # 构建 SSH config Host → HostName 映射，用于在主机选择菜单中显示实际连接目标。
+    # 使用户能直观看到菜单项 debian 实际解析为 debian.lan，避免将 SSH config 的
+    # HostName 域名解析行为误判为模块问题。仅影响显示文本，不改变返回值。
+    $sshHostNameMap = @{}
+    $sshCfgPath = Join-Path $HOME ".ssh\config"
+    $sshCfgLines = Get-Content $sshCfgPath -Encoding UTF8 -ErrorAction SilentlyContinue
+    if ($sshCfgLines) {
+        $curHost = $null
+        foreach ($ln in $sshCfgLines) {
+            if ($ln -match '^Host\s+(.+)$') {
+                $curHost = ($matches[1] -split '\s+')[0]
+                if ($curHost -match '[*?]') { $curHost = $null }
+            } elseif ($ln -match '^\s+HostName\s+(.+)$' -and $curHost) {
+                $sshHostNameMap[$curHost] = $matches[1].Trim()
+            }
+        }
+    }
+
     # 真预分配: Generic.List<PSCustomObject> 一次性分配 count 槽位
     # 比 New-Object System.Collections.ArrayList($count) 省去内部扩容判断
     $optionLines = [System.Collections.Generic.List[PSCustomObject]]::new($count)
     for ($i = 0; $i -lt $count; $i++) {
         $key = ($i + 1).ToString().PadLeft(2, '0')
         $label = $items[$i].Label
-        $selectedLine = "  ${ColorPrimary}|${rst}  ${rst}>${rst} ${ColorPrimary}[${key}]${rst} ${ColorPrimary}${label}${rst}"
-        $unselectedLine = "  ${ColorPrimary}|${rst}  ${ColorMuted} ${rst} ${ColorPrimary}[${key}]${rst} ${ColorMuted}${label}${rst}"
+        # 若 Host 别名在 SSH config 中定义了 HostName，在菜单项尾部追加 "→ <HostName>" 提示
+        $displayLabel = if ($sshHostNameMap.ContainsKey($label)) { "$label → $($sshHostNameMap[$label])" } else { $label }
+        $selectedLine = "  ${ColorPrimary}|${rst}  ${rst}>${rst} ${ColorPrimary}[${key}]${rst} ${ColorPrimary}${displayLabel}${rst}"
+        $unselectedLine = "  ${ColorPrimary}|${rst}  ${ColorMuted} ${rst} ${ColorPrimary}[${key}]${rst} ${ColorMuted}${displayLabel}${rst}"
         $optionLines.Add([PSCustomObject]@{ Selected = $selectedLine; Unselected = $unselectedLine })
     }
     $exitSelected = "  ${ColorPrimary}|${rst}  ${ColorAccent}>${rst} ${ColorAccent}[${exitKey}]${rst} ${ColorAccent}${ExitLabel}${rst}"

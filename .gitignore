@@ -11,3 +11,6 @@ Thumbs.db
 
 # Temp / plans
 plans/
+
+# Agent cache (auto-generated, do not commit)
+.agent_cache/

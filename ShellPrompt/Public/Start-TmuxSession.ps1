@@ -98,10 +98,9 @@ function Start-TmuxSession {
     )
 
     while ($true) {
-        # 默认走缓存: 仅在进入菜单时探测 1 次 SSH,避免每次用户操作都触发
-        # 短连接消耗 sshd MaxStartups/MaxSessions 配额导致掉线
-        # 用户可主动按"刷新会话列表"强制重拉
-        $sessionData = Get-TmuxSessions -HostName $HostName
+        # 每次菜单循环重新探测远端 tmux 会话状态，确保菜单始终显示最新数据
+        # 用户手动关闭/创建远端会话后，无需手动"刷新"即可立即反映到菜单中
+        $sessionData = Get-TmuxSessions -HostName $HostName -Force
         $sessions = $sessionData.Sessions
 
         $attachedCount = ($sessions | Where-Object { $_.Status -eq "attached" }).Count

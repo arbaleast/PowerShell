@@ -23,8 +23,17 @@ function Get-TmuxAvailability {
         [switch]$Force
     )
 
+    # TTL 缓存: 30 秒内命中直接返回,过期后重新探测。
+    # 兼容旧缓存条目（无 CheckedAt 字段），视为过期重新探测，避免脏数据。
     if (-not $Force -and $script:_TmuxAvailabilityCache.ContainsKey($HostName)) {
-        return $script:_TmuxAvailabilityCache[$HostName]
+        $cached = $script:_TmuxAvailabilityCache[$HostName]
+        $hasCheckedAt = $cached.PSObject.Properties.Name -contains 'CheckedAt'
+        if ($hasCheckedAt) {
+            $cacheAge = [DateTime]::UtcNow - $cached.CheckedAt
+            if ($cacheAge.TotalSeconds -lt 30) {
+                return $cached
+            }
+        }
     }
 
     # 单次 SSH 探测 + 列出所有 session
@@ -70,14 +79,42 @@ function Get-TmuxAvailability {
         $version = $matches[1]
     }
 
-    $info = [PSCustomObject]@{
-        Available = -not [string]::IsNullOrEmpty($version)
-        Version   = $version
-        RawLs     = $tmuxLsOutput
-        ExitCode  = $exitCode
-        Error     = $errorOut
+    # 网络错误分类: 将网络故障与"远程无 tmux"区分开。
+    # 命中以下模式则标记 NetworkError, Available 置 $false,
+    # 且跳过缓存写入,避免 DNS 恢复后因脏缓存持续误判。
+    $networkErrorPatterns = @(
+        'Could not resolve hostname',
+        'Name or service not known',
+        'Connection refused',
+        'No route to host',
+        'Connection timed out',
+        'Operation timed out',
+        'ssh: connect to host .* port .*: '
+    )
+    $isNetworkError = $false
+    if ($errorOut) {
+        foreach ($pattern in $networkErrorPatterns) {
+            if ($errorOut -match $pattern) {
+                $isNetworkError = $true
+                break
+            }
+        }
     }
-    $script:_TmuxAvailabilityCache[$HostName] = $info
+
+    $info = [PSCustomObject]@{
+        Available    = if ($isNetworkError) { $false } else { -not [string]::IsNullOrEmpty($version) }
+        Version      = $version
+        RawLs        = $tmuxLsOutput
+        ExitCode     = $exitCode
+        Error        = $errorOut
+        NetworkError = $isNetworkError
+        CheckedAt    = [DateTime]::UtcNow
+    }
+
+    # 网络错误时跳过缓存写入,避免脏缓存阻塞后续恢复后的探测
+    if (-not $isNetworkError) {
+        $script:_TmuxAvailabilityCache[$HostName] = $info
+    }
     return $info
 }
 

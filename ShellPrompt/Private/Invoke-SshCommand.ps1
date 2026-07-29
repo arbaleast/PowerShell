@@ -72,6 +72,17 @@ function Invoke-SshCommand {
     }
 
     if ($CaptureOutput) {
+        # 探测模式强制非交互认证，避免假阴性：
+        # BatchMode=yes 禁用交互式提示，
+        # PreferredAuthentications=publickey 跳过键盘交互/GSSAPI 等慢路径，
+        # NumberOfPasswordPrompts=0 在任何密码提示时立即失败。
+        [void]$sshArgs.Add("-o")
+        [void]$sshArgs.Add("BatchMode=yes")
+        [void]$sshArgs.Add("-o")
+        [void]$sshArgs.Add("PreferredAuthentications=publickey")
+        [void]$sshArgs.Add("-o")
+        [void]$sshArgs.Add("NumberOfPasswordPrompts=0")
+
         # .NET Process 手动按 CommandLineToArgvW 规则引号包裹每个参数
         # (WinPS 5.1 跑 .NET Framework 4.x,没有 ArgumentList 集合)
         # 三个关键点: Close stdin 后立即 EOF、并行读 stdout/stderr 避免死锁、
