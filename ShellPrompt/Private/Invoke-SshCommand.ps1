@@ -50,15 +50,17 @@ function Invoke-SshCommand {
     # 非捕获路径: 直接运行，输出显示在终端
     Save-OriginalTerminalState
     try {
+        # 使用 @() 确保数组传递，避免 PS 5.1 模块作用域下 ArrayList 被解包为 String
+        $argArray = @($sshArgs)
         if ($PassThru) {
-            $process = Start-Process -FilePath 'ssh.exe' -ArgumentList $sshArgs.ToArray() -NoNewWindow -Wait -PassThru
+            $process = Start-Process -FilePath 'ssh.exe' -ArgumentList $argArray -NoNewWindow -Wait -PassThru
             return [PSCustomObject]@{
                 Output   = ''
                 Error    = ''
                 ExitCode = $process.ExitCode
             }
         }
-        Start-Process -FilePath 'ssh.exe' -ArgumentList $sshArgs.ToArray() -NoNewWindow -Wait
+        Start-Process -FilePath 'ssh.exe' -ArgumentList $argArray -NoNewWindow -Wait
     } finally {
         # 无论 Interactive 与否都需恢复: 非交互式也修改了 OutputEncoding/TERM
         Reset-TerminalMode

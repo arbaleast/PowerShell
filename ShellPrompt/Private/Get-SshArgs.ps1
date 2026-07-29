@@ -83,5 +83,6 @@ function Get-SshArgs {
         [void]$sshArgs.Add('-o'); [void]$sshArgs.Add('NumberOfPasswordPrompts=0')
     }
 
-    return $sshArgs
+    # 用 -NoEnumerate 写入输出流，防止 PS 5.1 捕获时自动解包 ArrayList
+    Write-Output -NoEnumerate $sshArgs
 }

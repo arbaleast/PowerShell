@@ -36,21 +36,22 @@ function Start-SshInteractive {
     }
 
     # 委托 Get-SshArgs 构建基础 SSH 参数（始终以交互模式运行）
-    $args = Get-SshArgs -HostName $HostName -RemoteCommand $RemoteCommand `
-        -Interactive -ConnectTimeout $ConnectTimeout -SkipHostKeyCheck:$SkipHostKeyCheck
+    # 注意: 不能用 $args 作为变量名（PS 自动变量），改用 $sshArgs
+    $sshArgs = @(Get-SshArgs -HostName $HostName -RemoteCommand $RemoteCommand `
+        -Interactive -ConnectTimeout $ConnectTimeout -SkipHostKeyCheck:$SkipHostKeyCheck)
 
     # ControlMaster 专属参数（Get-SshArgs 不处理此部分）
     if ($socket) {
-        [void]$args.Add('-o'); [void]$args.Add('LogLevel=ERROR')
-        [void]$args.Add('-o'); [void]$args.Add('ControlMaster=auto')
-        [void]$args.Add('-o'); [void]$args.Add("ControlPath=$($socket.Path)")
-        [void]$args.Add('-o'); [void]$args.Add("ControlPersist=$($socket.Persist)")
+        [void]$sshArgs.Add('-o'); [void]$sshArgs.Add('LogLevel=ERROR')
+        [void]$sshArgs.Add('-o'); [void]$sshArgs.Add('ControlMaster=auto')
+        [void]$sshArgs.Add('-o'); [void]$sshArgs.Add("ControlPath=$($socket.Path)")
+        [void]$sshArgs.Add('-o'); [void]$sshArgs.Add("ControlPersist=$($socket.Persist)")
     }
 
     # 保存原始终端状态: Reset-TerminalMode 在 finally 块按此回滚
     Save-OriginalTerminalState
     try {
-        $proc = Start-Process -FilePath 'ssh' -ArgumentList $args -NoNewWindow -Wait -PassThru
+        $proc = Start-Process -FilePath 'ssh.exe' -ArgumentList $sshArgs -NoNewWindow -Wait -PassThru
         $exitCode = if ($proc.ExitCode -ne $null) { [int]$proc.ExitCode } else { 0 }
     } finally {
         Reset-TerminalMode
