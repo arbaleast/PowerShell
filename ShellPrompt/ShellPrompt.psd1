@@ -1,6 +1,6 @@
 @{
     RootModule        = 'ShellPrompt.psm1'
-    ModuleVersion     = '1.0.0'
+    ModuleVersion     = '1.1.0'
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
     Author            = 'arbaleast'
     CompanyName       = 'arbaleast'
@@ -12,19 +12,19 @@
         'Show-UserScoopLogo'
         'Start-TmuxSession'
         'Copy-SshPublicKey'
-        'reload'
+        'Invoke-Reload'
     )
 
     CmdletsToExport   = @()
     VariablesToExport = @()
-    # 导出所有已注册的别名（ll、which 等由 Set-ProfileAliases.ps1 注册）
+    # 别名由 Microsoft.PowerShell_profile.ps1 以 -Scope Global 注册
     AliasesToExport   = '*'
 
     PrivateData       = @{
         PSData = @{
             Tags       = @('PowerShell', 'Prompt', 'Tmux', 'SSH', 'Session')
-            ProjectUri = 'https://github.com/arbaleast/ShellPrompt'
-            LicenseUri = 'https://github.com/arbaleast/ShellPrompt/blob/main/LICENSE'
+            ProjectUri = 'https://github.com/arbaleast/PowerShell'
+            LicenseUri = 'https://github.com/arbaleast/PowerShell/blob/main/LICENSE'
         }
     }
 }

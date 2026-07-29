@@ -1,5 +1,31 @@
+<#
+.SYNOPSIS
+    显示 ANSI 欢迎 Banner 及随机语录
+
+.DESCRIPTION
+    在 PowerShell 启动时展示包含主机名、用户名、当前目录、时间戳和随机语录的
+    多彩 ASCII 横幅。语录从 quotes.txt 文件读取并缓存，避免重复读盘。
+
+.PARAMETER QuotesPath
+    语录文件路径，默认来自配置中 Paths.Quotes 的值。
+
+.PARAMETER ColorPrimary
+    主色调 ANSI 转义码，默认来自配置中 Colors.FreshGreen 的值。
+
+.PARAMETER ColorAccent
+    强调色 ANSI 转义码，默认来自配置中 Colors.SageGreen 的值。
+
+.PARAMETER ColorMuted
+    弱化色 ANSI 转义码，默认来自配置中 Colors.MidGray 的值。
+
+.PARAMETER BorderColor
+    边框色 ANSI 转义码，默认来自配置中 Colors.FreshGreen 的值。
+
+.EXAMPLE
+    Show-UserScoopLogo
+#>
 # Show-UserScoopLogo.ps1 - 欢迎语及启动语录展示
-# 语录缓存: $script:_QuotesCache (mtime + 内容快照) 避免每次 profile 加载读盘;
+# 语录缓存: $script:QuotesCache (mtime + 内容快照) 避免每次 profile 加载读盘;
 # 颜色统一走 Get-CachedConfig 预热缓存;静态布局部分提前拼接。
 
 function Show-UserScoopLogo {
@@ -37,13 +63,13 @@ function Show-UserScoopLogo {
         # 避免每次 profile 加载 (或 reload) 都读取并 -split 整个 quotes 文件
         $mtime = $fileInfo.LastWriteTimeUtc.Ticks
         $cacheHit = $false
-        if ($script:_QuotesCache -and $script:_QuotesCache.Path -eq $QuotesPath -and $script:_QuotesCache.MTime -eq $mtime) {
-            $lines = $script:_QuotesCache.Lines
+        if ($script:QuotesCache -and $script:QuotesCache.Path -eq $QuotesPath -and $script:QuotesCache.MTime -eq $mtime) {
+            $lines = $script:QuotesCache.Lines
             $cacheHit = $true
         }
         if (-not $cacheHit) {
             $lines = (Get-Content $QuotesPath -Encoding UTF8 -Raw) -split "(?m)^%\r?\n"
-            $script:_QuotesCache = @{
+            $script:QuotesCache = @{
                 Path  = $QuotesPath
                 MTime = $mtime
                 Lines = $lines

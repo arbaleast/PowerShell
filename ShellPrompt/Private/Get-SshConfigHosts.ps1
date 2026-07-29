@@ -3,8 +3,8 @@
 # 避免每次 Tab 补全都重读 ~/.ssh/config。
 
 # 脚本级缓存：缓存解析结果与源文件最后修改时间
-$script:_SshHostsCache = $null
-$script:_SshHostsCacheMtime = [DateTime]::MinValue
+$script:SshHostsCache = $null
+$script:SshHostsCacheMtime = [DateTime]::MinValue
 
 function Get-SshConfigHosts {
     try {
@@ -17,8 +17,8 @@ function Get-SshConfigHosts {
 
         # 算法优化: 仅当文件 mtime 变化时重新解析
         $currentMtime = $configItem.LastWriteTimeUtc
-        if ($null -ne $script:_SshHostsCache -and $script:_SshHostsCacheMtime -eq $currentMtime) {
-            return $script:_SshHostsCache
+        if ($null -ne $script:SshHostsCache -and $script:SshHostsCacheMtime -eq $currentMtime) {
+            return $script:SshHostsCache
         }
 
         $hosts = @()
@@ -34,9 +34,9 @@ function Get-SshConfigHosts {
         }
 
         # 写入缓存
-        $script:_SshHostsCache = @($hosts | Select-Object -Unique)
-        $script:_SshHostsCacheMtime = $currentMtime
-        return $script:_SshHostsCache
+        $script:SshHostsCache = @($hosts | Select-Object -Unique)
+        $script:SshHostsCacheMtime = $currentMtime
+        return $script:SshHostsCache
     } catch {
         # SSH config 读取失败时返回空列表，不阻塞模块加载
         return @()

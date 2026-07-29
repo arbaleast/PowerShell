@@ -1,3 +1,30 @@
+<#
+.SYNOPSIS
+    将本机 SSH 公钥复制到远程主机 authorized_keys
+
+.DESCRIPTION
+    模拟 Linux `ssh-copy-id` 命令，自动按 ed25519 > ecdsa > rsa > dsa 顺序查找
+    ~/.ssh 下的公钥文件，支持通过 -IdentityFile 指定自定义公钥路径和 -Port 指定端口。
+
+.PARAMETER RemoteHost
+    远程主机地址（必填），格式为 [user@]hostname。
+
+.PARAMETER IdentityFile
+    公钥文件路径。未指定时自动按 ed25519 > ecdsa > rsa > dsa 顺序探测。
+
+.PARAMETER Port
+    SSH 端口号，默认 22。
+
+.EXAMPLE
+    Copy-SshPublicKey -RemoteHost user@example.com
+
+    自动探测公钥并推送到 user@example.com 的 authorized_keys。
+
+.EXAMPLE
+    Copy-SshPublicKey -RemoteHost example.com -IdentityFile ~/.ssh/id_ed25519.pub -Port 2222
+
+    使用指定公钥文件通过 2222 端口推送。
+#>
 # Copy-SshPublicKey.ps1 - 将本机公钥复制到远程主机 authorized_keys
 # 模拟 Linux `ssh-copy-id` 命令,支持指定公钥路径/端口
 # 默认自动按 ed25519 > ecdsa > rsa > dsa 顺序查找 ~/.ssh 下的公钥
@@ -26,8 +53,17 @@ function Copy-SshPublicKey {
         Write-Error "公钥文件不存在: $IdentityFile"; return
     }
 
-    $key = Get-Content $IdentityFile -Raw
+    # 使用 ReadAllText 确保始终以 UTF8 无 BOM 读取，避免 Linux 端乱码
+    $key = [System.IO.File]::ReadAllText($IdentityFile)
     Write-Host "[ssh-copy-id] 使用公钥: $IdentityFile" -ForegroundColor DarkGray
-    $sshArgs = @('-p', $Port, $RemoteHost, "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$key' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && echo DONE")
+
+    # 重要: 公钥内容中的单引号必须转义，否则远程 sh -c 会断引号导致命令注入
+    $escapedKey = $key.Trim() -replace "'", "'\''"
+
+    $sshArgs = @(
+        '-p', $Port,
+        $RemoteHost,
+        "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$escapedKey' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && echo DONE"
+    )
     & ssh @sshArgs
 }

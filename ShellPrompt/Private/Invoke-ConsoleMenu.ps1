@@ -70,7 +70,7 @@ function Invoke-ConsoleMenu {
     # 使用户能直观看到菜单项 debian 实际解析为 debian.lan，避免将 SSH config 的
     # HostName 域名解析行为误判为模块问题。仅影响显示文本，不改变返回值。
     $sshHostNameMap = @{}
-    $sshCfgPath = Join-Path $HOME ".ssh\config"
+    $sshCfgPath = Join-Path $HOME ".ssh", "config"
     $sshCfgLines = Get-Content $sshCfgPath -Encoding UTF8 -ErrorAction SilentlyContinue
     if ($sshCfgLines) {
         $curHost = $null

@@ -1,4 +1,4 @@
-﻿# Start-TmuxSession.ps1 - 远程 tmux 会话管理器
+# Start-TmuxSession.ps1 - 远程 tmux 会话管理器
 # 流程: 主机选择 -> tmux 检测 -> 会话管理 -> SSH 连接
 # 优化: 提升 $actionOptions 跳出 while 循环(每轮迭代不再重建 5 元素数组);
 #       消除"创建新 tmux 会话"分支中的 3 段三层回退颜色 -> Get-CachedConfig;
@@ -8,10 +8,41 @@
 
 $script:TmuxSessionPrefix = "tmux-"
 
+<#
+.SYNOPSIS
+    生成随机 tmux 会话名称
+
+.DESCRIPTION
+    生成以 "tmux-" 为前缀的 6 位随机数字会话名。
+
+.EXAMPLE
+    New-RandomSessionName
+#>
 function New-RandomSessionName {
     "$script:TmuxSessionPrefix$(Get-Random -Minimum 100000 -Maximum 999999)"
 }
 
+<#
+.SYNOPSIS
+    远程 tmux 会话交互式管理器
+
+.DESCRIPTION
+    通过交互式菜单管理远程主机上的 tmux 会话，支持主机选择、tmux 可用性探测、
+    会话附着/创建/删除、直接 SSH 登录等操作。
+
+.PARAMETER HostName
+    远程主机名（来自 ~/.ssh/config）。未指定时弹出交互式主机选择菜单。
+
+.EXAMPLE
+    Start-TmuxSession
+
+    弹出交互式菜单选择主机并管理远程 tmux 会话。
+
+.EXAMPLE
+    Start-TmuxSession -HostName myserver
+
+    直接连接指定主机的 tmux 管理器。
+#>
 function Start-TmuxSession {
 
     [CmdletBinding()]

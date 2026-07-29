@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Pester v5 测试骨架**: 新增 [`ShellPrompt/Tests/ShellPrompt.Tests.ps1`](ShellPrompt/Tests/ShellPrompt.Tests.ps1)，
+  包含模块导入、命令导出、Verb-Noun 合规性和配置访问测试
 - **多终端复用器支持**: 新增 [`Get-MultiplexerSessions`](ShellPrompt/Private/Get-TmuxSessions.ps1:49) 和 [`Test-MultiplexerAvailable`](ShellPrompt/Private/Get-TmuxSessions.ps1:120) 函数，支持检测 tmux、screen、byobu
 - **用户配置覆盖**: 支持 `~/.ShellPrompt/config.ps1` 覆盖默认配置，使用 [`Merge-Hashtable`](ShellPrompt/Private/Initialize-Config.ps1:78) 实现深度合并
 - **TUILogger 增强**: [`Write-TUILog`](ShellPrompt/Private/TUILogger.ps1:246) 新增 `$Source` 参数，支持结构化字段日志
@@ -17,6 +19,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **重命名 `reload` → `Invoke-Reload`**: 函数名现已符合 Verb-Noun 规范（`Get-Verb` 批准动词），
+  函数体采用 K&R 大括号风格，补充了完整的 `.SYNOPSIS` 帮助注释
+- **移除冗余 `Export-ModuleMember`**: [`ShellPrompt.psm1`](ShellPrompt/ShellPrompt.psm1) 中不再包含
+  `Export-ModuleMember` 语句，由 `.psd1` 的 `FunctionsToExport` 完全控制导出
+- **移除冗余 `Set-ProfileAliases.ps1`**: `ssh-copy-id` 别名已由 `Microsoft.PowerShell_profile.ps1` 以
+  `-Scope Global` 注册，模块内不再重复定义
+- **统一脚本级缓存变量命名**: 去掉 `$_` 下划线前缀，全部使用 `$script:` 作用域限定。
+  涉及 [`Get-SshConfigHosts`](ShellPrompt/Private/Get-SshConfigHosts.ps1)、
+  [`Get-TmuxSessions`](ShellPrompt/Private/Get-TmuxSessions.ps1)、
+  [`Initialize-Config`](ShellPrompt/Private/Initialize-Config.ps1) 和
+  [`Show-UserScoopLogo`](ShellPrompt/Public/Show-UserScoopLogo.ps1)
+- **统一大括号风格为 K&R**: `Invoke-Reload`、`Start-TmuxSession`、`Invoke-ConsoleMenu`
+  中的函数定义统一采用左大括号与函数名同行
+- **补充 Public 函数帮助注释**: 为 [`Copy-SshPublicKey`](ShellPrompt/Public/Copy-SshPublicKey.ps1)、
+  [`Invoke-Reload`](ShellPrompt/Public/Invoke-Reload.ps1)、
+  [`Show-UserScoopLogo`](ShellPrompt/Public/Show-UserScoopLogo.ps1) 和
+  [`Start-TmuxSession`](ShellPrompt/Public/Start-TmuxSession.ps1) 补充了标准的
+  `.SYNOPSIS` / `.DESCRIPTION` / `.PARAMETER` / `.EXAMPLE` 帮助头
+- **模块版本提升**: `ModuleVersion` 从 `1.0.0` 更新为 `1.1.0`
 - **TUIPerformanceState 算法优化**: `ReportFrame()` 中 `CalculateFrameTimeStats()` 从 **O(n) foreach 改为 O(1) 增量统计**（维护 `_sum`/`_count`/peak/min，窗口出队按需重建），每帧统计耗时与窗口大小解耦
 - **TUIPerformanceState 缓存**: `GetSummary()` 引入 `_summaryDirty` 标志缓存摘要哈希表，连续渲染场景下避免重复 `Round`/Date 差值计算
 - **TUIPerformanceState 字段去重**: 移除构造函数中重复的 `_cachedSummary`/`_summaryDirty` 赋值（已统一在类成员处声明）

@@ -1,8 +1,8 @@
-﻿# Get-TmuxSessions.ps1 - 通过 SSH 获取远程 tmux 会话列表
+# Get-TmuxSessions.ps1 - 通过 SSH 获取远程 tmux 会话列表
 # 性能优化: 合并"探测 tmux 可用性 + 列出会话"为单次 SSH 调用,启动时间 -50%
 # 缓存: 模块级缓存 tmux 可用性,避免反复探测同一主机
 
-$script:_TmuxAvailabilityCache = @{}
+$script:TmuxAvailabilityCache = @{}
 
 function Get-TmuxAvailability {
     <#
@@ -25,8 +25,8 @@ function Get-TmuxAvailability {
 
     # TTL 缓存: 30 秒内命中直接返回,过期后重新探测。
     # 兼容旧缓存条目（无 CheckedAt 字段），视为过期重新探测，避免脏数据。
-    if (-not $Force -and $script:_TmuxAvailabilityCache.ContainsKey($HostName)) {
-        $cached = $script:_TmuxAvailabilityCache[$HostName]
+    if (-not $Force -and $script:TmuxAvailabilityCache.ContainsKey($HostName)) {
+        $cached = $script:TmuxAvailabilityCache[$HostName]
         $hasCheckedAt = $cached.PSObject.Properties.Name -contains 'CheckedAt'
         if ($hasCheckedAt) {
             $cacheAge = [DateTime]::UtcNow - $cached.CheckedAt
@@ -113,7 +113,7 @@ function Get-TmuxAvailability {
 
     # 网络错误时跳过缓存写入,避免脏缓存阻塞后续恢复后的探测
     if (-not $isNetworkError) {
-        $script:_TmuxAvailabilityCache[$HostName] = $info
+        $script:TmuxAvailabilityCache[$HostName] = $info
     }
     return $info
 }

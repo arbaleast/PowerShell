@@ -37,9 +37,5 @@ if ($sshHosts.Count -gt 0) {
     }
 }
 
-# Explicitly export the public API.
-# PowerShell 5.1 does NOT auto-export functions from script modules — FunctionsToExport
-# in the .psd1 is just a recommendation; the module must opt in via Export-ModuleMember,
-# otherwise ExportedFunctions is empty and `Get-Command -Module ShellPrompt -Name <fn>`
-# returns $null (which broke the `sss` / Start-TmuxSession wrapper).
-Export-ModuleMember -Function 'Show-UserScoopLogo', 'Start-TmuxSession', 'Copy-SshPublicKey', 'reload'
+# 导出声明已完全通过 .psd1 的 FunctionsToExport 控制,
+# 因此不再需要 .psm1 内的 Export-ModuleMember。
