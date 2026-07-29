@@ -110,23 +110,21 @@ function Start-TmuxSession {
     $sessionData = Get-TmuxSessions -HostName $HostName
     $sessions = $sessionData.Sessions
 
-    if ($sessions.Count -eq 0) {
-        Write-Warning "$HostName 上暂无现有 tmux 会话"
-    }
-
-    # 5 个动作的描述在循环中保持稳定,无需每轮重建
-    $actionOptions = @(
-        [PSCustomObject]@{ Label = "附着/恢复 tmux 会话"; Desc = "选择并附着到远程 tmux 会话" }
-        [PSCustomObject]@{ Label = "创建新 tmux 会话"; Desc = "在远程主机上创建新的 tmux 会话" }
-        [PSCustomObject]@{ Label = "删除 tmux 会话"; Desc = "删除远程主机上的 tmux 会话" }
-        [PSCustomObject]@{ Label = "直接 SSH 登录"; Desc = "不使用 tmux，直接 SSH 登录" }
-        [PSCustomObject]@{ Label = "刷新会话列表"; Desc = "重新获取远程 tmux 会话状态" }
-    )
-
     while ($true) {
         # 每次菜单循环重新探测远端 tmux 会话状态，确保菜单始终显示最新数据
         $sessionData = Get-TmuxSessions -HostName $HostName -Force
         $sessions = $sessionData.Sessions
+
+        # 根据会话数动态构建菜单：会话为空时隐藏"附着/恢复"和"删除"选项，
+        # 避免传入空集合导致 PS 5.1 参数绑定失败
+        $actionOptions = [System.Collections.Generic.List[PSCustomObject]]::new()
+        if ($sessions.Count -gt 0) {
+            $actionOptions.Add([PSCustomObject]@{ Label = "附着/恢复 tmux 会话"; Desc = "选择并附着到远程 tmux 会话" })
+            $actionOptions.Add([PSCustomObject]@{ Label = "删除 tmux 会话"; Desc = "删除远程主机上的 tmux 会话" })
+        }
+        $actionOptions.Add([PSCustomObject]@{ Label = "创建新 tmux 会话"; Desc = "在远程主机上创建新的 tmux 会话" })
+        $actionOptions.Add([PSCustomObject]@{ Label = "直接 SSH 登录"; Desc = "不使用 tmux，直接 SSH 登录" })
+        $actionOptions.Add([PSCustomObject]@{ Label = "刷新会话列表"; Desc = "重新获取远程 tmux 会话状态" })
 
         $attachedCount = ($sessions | Where-Object { $_.Status -eq "attached" }).Count
         $detachedCount = ($sessions | Where-Object { $_.Status -eq "detached" }).Count
