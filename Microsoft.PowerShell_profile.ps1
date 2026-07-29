@@ -154,4 +154,8 @@ function global:prompt {
 # 阶段 3：Profile 加载计时
 # ============================================================
 $ProfileTimer.Stop()
-Write-Host "PowerShell Profile Loaded: $($ProfileTimer.ElapsedMilliseconds)ms" -ForegroundColor DarkGray
+# PS 5.1 主机自身会输出 "Loading personal and system profiles took Xms",
+# 因此仅在 PS Core (7+) 下输出自定义计时，避免重复。
+if ($PSVersionTable.PSEdition -eq 'Core') {
+    Write-Host "PowerShell Profile Loaded: $($ProfileTimer.ElapsedMilliseconds)ms" -ForegroundColor DarkGray
+}
