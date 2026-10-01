@@ -46,7 +46,15 @@ param(
     # 修 2026-06-27: 避免 `$()` 子 shell 在某些 sshd 配置(非交互式 PATH 不完整)下
     # 输出被吞,改用 `command -v` 拿绝对路径,再用绝对路径跑 `tmux -V`。
     # 绝对路径是 sshd 唯一能保证找到 tmux 的方式(不受 PATH/login profile 影响)。
-    $probeCmd = 'TMUX_BIN=$(command -v tmux 2>/dev/null || echo /usr/bin/tmux); ' +
+    #
+    # 修 2026-10-01 (v1.3.2 hotfix): 此前 `command -v tmux || echo /usr/bin/tmux` 兜底
+    # 只覆盖 /usr/bin/tmux,在非交互 sshd 下若 tmux 装在 /usr/local/bin / /snap/bin
+    # / /opt/homebrew/bin / /usr/sbin 等其他绝对路径,且不在非交互 $PATH 中,
+    # 会让 `command -v` 失败并兜底到 /usr/bin/tmux(该路径上其实没有 tmux),
+    # 后续 `tmux -V` 静默失败 → $TMUX_V 为空 → $version 解析空 → Available=$false
+    # (false negative: 远端明明有 tmux,但 Start-TmuxSession 报"未安装")。
+    # 修复: command -v 失败时多路径穷举,命中第一个可执行即用。
+    $probeCmd = 'TMUX_BIN=$(command -v tmux 2>/dev/null || for p in /usr/bin/tmux /usr/local/bin/tmux /snap/bin/tmux /opt/homebrew/bin/tmux /usr/sbin/tmux; do [ -x "$p" ] && echo "$p" && break; done); ' +
     'TMUX_V=$("$TMUX_BIN" -V 2>/dev/null); ' +
     'printf "TMUX_VERSION=%s\n" "${TMUX_V:-}"; ' +
     '"$TMUX_BIN" ls 2>/dev/null; ' +

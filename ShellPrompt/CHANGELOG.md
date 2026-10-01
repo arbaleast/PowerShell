@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-10-01
+
+### Fixed
+
+- **远程 tmux 探测的 false negative**: v1.3.1 在 [`Get-TmuxSessions.ps1`](ShellPrompt/Private/Get-TmuxSessions.ps1) 的探针命令为 `TMUX_BIN=$(command -v tmux 2>/dev/null || echo /usr/bin/tmux)`,只覆盖 `/usr/bin/tmux` 一条硬编码兜底路径。当远端 tmux 装在 `/usr/local/bin/tmux` / `/snap/bin/tmux` / `/opt/homebrew/bin/tmux` / `/usr/sbin/tmux` 等其他绝对路径且不在非交互 sshd `$PATH` 中时,`command -v` 失败 → 兜底到 `/usr/bin/tmux`(该路径上其实没有)→ 后续 `tmux -V` 静默失败 → `$version` 解析空 → `Available=$false` → `Start-TmuxSession` 误报 "WARNING: 远程主机 X 未安装 tmux(或探测失败)"。hotfix 将兜底改为多路径穷举(`/usr/bin /usr/local/bin /snap/bin /opt/homebrew/bin /usr/sbin`),命中第一个可执行即用,在用户 `debian` 主机(实测 `/usr/bin/tmux` 可用)烟测通过:`Get-TmuxAvailability -HostName debian -Force` 返回 `Available=True, Version=3.5a, ExitCode=0`。
+
 ## [1.3.1] - 2026-10-01
 
 ### Fixed
