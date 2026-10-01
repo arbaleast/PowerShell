@@ -11,7 +11,8 @@
 function Invoke-Reload {
     [CmdletBinding()]
     [OutputType([void])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param()
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param()
     if (Test-Path $PROFILE) {
         Remove-Module ShellPrompt -Force -ErrorAction SilentlyContinue
         . $PROFILE

@@ -7,7 +7,8 @@
 function Start-SshInteractive {
     [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([pscustomobject])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]$HostName,

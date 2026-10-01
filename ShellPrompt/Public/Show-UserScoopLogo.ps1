@@ -31,7 +31,8 @@
 function Show-UserScoopLogo {
     [CmdletBinding()]
     [OutputType([void])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param(
         [Parameter(Mandatory = $false)]
         [string]$QuotesPath,
 

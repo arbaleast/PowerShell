@@ -24,7 +24,8 @@ function New-StatusBadge {
     #>
     [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([PSCustomObject])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param(
         [Parameter(Mandatory = $true)]
         [ValidateSet('Online', 'Attached', 'Detached', 'NetworkError', 'Pending', 'Disabled', 'Warning')]
         [string]$Status,

@@ -28,7 +28,8 @@ function New-DynamicHelpPanel {
     #>
     [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([string])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param(
         [Parameter(Mandatory = $true)]
         [AllowEmptyCollection()]
         [array]$Entries,

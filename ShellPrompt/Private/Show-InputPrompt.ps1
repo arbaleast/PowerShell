@@ -44,7 +44,8 @@ function Update-InputBuffer {
     #>
     [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([PSCustomObject])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param(
         [Parameter(Mandatory = $false)]
         [AllowEmptyString()]
         [string]$Buffer = '',

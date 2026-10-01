@@ -16,7 +16,8 @@ $script:TmuxSessionPrefix = "tmux-"
 
 function New-RandomSessionName {
     [OutputType([string])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param()
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param()
     "$script:TmuxSessionPrefix$(Get-Random -Minimum 100000 -Maximum 999999)"
 }
 

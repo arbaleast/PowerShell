@@ -66,7 +66,8 @@ $script:ColorCache = @{
 function Get-CachedConfig {
     [CmdletBinding()]
     [OutputType([object])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param(
         [Parameter(Mandatory = $true)]
         [ValidateSet('Paths', 'Colors', 'Keys', 'SSH')]
         [string]$Section,

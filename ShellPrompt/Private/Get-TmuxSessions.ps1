@@ -13,7 +13,8 @@ function Get-TmuxAvailability {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param(
         [Parameter(Mandatory = $true)]
         [string]$HostName,
 

@@ -37,7 +37,8 @@ function Show-HostSelector {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param(
         [Parameter(Mandatory = $true)]
         [AllowEmptyCollection()]
         [string[]]$Hosts,

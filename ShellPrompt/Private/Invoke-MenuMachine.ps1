@@ -8,8 +8,7 @@
 . "$PSScriptRoot\Write-MenuItem.ps1"
 . "$PSScriptRoot\New-StatusBadge.ps1"
 
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'New-MenuContext 是状态机纯构造函数,无外部副作用')]
-
+function New-MenuContext {
     <#
     .SYNOPSIS
         构造菜单状态机上下文(状态 + 可见项 + 选中索引 + 过滤字符串)
@@ -33,9 +32,11 @@
     .EXAMPLE
         $ctx = New-MenuContext -AllItems $items -ExitItem $exit
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'New-MenuContext 是状态机纯构造函数,无外部副作用')]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
+    param(
         [Parameter(Mandatory = $true)]
         [AllowEmptyCollection()]
         [array]$AllItems,
@@ -58,6 +59,7 @@
         AllowFilter = $AllowFilter
     }
 }
+
 
 function Get-VisibleMenuItems {
     <#

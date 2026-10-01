@@ -9,7 +9,8 @@
 function Reset-TerminalMode {
     [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([void])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param()
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param()
 
     # --- A. 远程协议层 (原 Invoke-SshCommand 版) ---
     # 关闭 tmux 启用过的鼠标追踪模式 + 显示光标 + 重置 SGR

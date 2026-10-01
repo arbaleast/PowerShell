@@ -19,7 +19,8 @@ function Test-FilterCharacter {
     #>
     [CmdletBinding()]
     [OutputType([bool])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param(
         [Parameter(Mandatory = $true)]
         [AllowEmptyString()]
         [string]$Character

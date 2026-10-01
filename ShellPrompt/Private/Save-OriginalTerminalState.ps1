@@ -4,7 +4,8 @@
 function Save-OriginalTerminalState {
     [CmdletBinding()]
     [OutputType([void])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param()
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param()
 
     # 保存原始控制台状态到 $script:Original*, Reset-TerminalMode finally 读取并恢复
     $script:OriginalOutputEncoding = [System.Console]::OutputEncoding

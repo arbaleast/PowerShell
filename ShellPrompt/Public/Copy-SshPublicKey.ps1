@@ -31,7 +31,8 @@
 function Copy-SshPublicKey {
     [CmdletBinding()]
     [OutputType([void])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param(
         [Parameter(Mandatory = $true, Position = 0)]
         [string]$RemoteHost,
         [string]$IdentityFile,

@@ -1,4 +1,4 @@
-﻿# New-AnsiLayout.ps1 - ANSI 终端布局构建器
+# New-AnsiLayout.ps1 - ANSI 终端布局构建器
 # 三区布局基元: Header(标题/状态徽章) / Main(可滚动列表) / Footer(快捷键)
 # 所有渲染走 [Console]::Write + ANSI 转义, 避免 Write-Host 光标追踪不同步;
 # 颜色统一走 Get-CachedConfig 预热缓存。
@@ -6,7 +6,8 @@
 function Write-AnsiLine {
     [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([void])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+param(
         [int]$Line,
         [string]$Text
     )

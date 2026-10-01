@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-01
+
+### Fixed
+
+- **模块加载失败回归**: v1.3.0 在 [`Invoke-MenuMachine.ps1`](ShellPrompt/Private/Invoke-MenuMachine.ps1) 注入 BOM 抑制属性时,P4-3a 批量脚本误把一个文件级 `[Diagnostics.CodeAnalysis.SuppressMessageAttribute()]` 写在第 11 行,而该行不存在 `function` 头 — 形成"孤儿属性"。PowerShell 5.1 解析器在 `Import-Module ShellPrompt` 阶段报 3 条 `WARNING: Unexpected attribute / Unexpected token 'param' / Unexpected token '}'`,导致 `New-MenuContext` 函数从未被定义。hotfix 将孤儿属性包裹到真正的 `function New-MenuContext { ... }` 函数体中(放在 `[CmdletBinding()]` 之前),与模块内其余函数风格一致,并补全 35 个 `.ps1` 中 BOM 抑制属性的换行格式(属性独占一行,`param(` 独占一行,消除与未来更多抑制属性堆叠时的脆弱性)。
+
 ## [1.3.0] - 2026-10-01
 
 ### Fixed
