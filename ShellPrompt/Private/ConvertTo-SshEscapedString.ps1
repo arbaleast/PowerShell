@@ -15,7 +15,7 @@ function ConvertTo-SshEscapedString {
     #>
     [CmdletBinding()]
     [OutputType([string])]
-    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
         [string]$Value
     )

@@ -6,7 +6,10 @@ $script:ActualRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 # ============================================================
 # 阶段 1：仅加载配置和欢迎语（轻量级）
 # ============================================================
+# P2-2 重构后, Show-UserScoopLogo 委托给 Get-RandomQuote / New-WelcomeBanner
+# 需先 dot-source 依赖再调用
 . "$script:ActualRoot\ShellPrompt\Private\Initialize-Config.ps1"
+. "$script:ActualRoot\ShellPrompt\Private\New-WelcomeBanner.ps1"
 . "$script:ActualRoot\ShellPrompt\Public\Show-UserScoopLogo.ps1"
 Show-UserScoopLogo
 

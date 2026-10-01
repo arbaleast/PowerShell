@@ -33,7 +33,7 @@ function Get-SshArgs {
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.ArrayList])]
-    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
         [Parameter(Mandatory = $true)]
         [string]$HostName,
 

@@ -28,7 +28,7 @@ function Invoke-SshCaptureOutput {
     #>
     [CmdletBinding()]
     [OutputType([string])]
-    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
         [Parameter(Mandatory = $true)]
         [array]$ArgumentList,
 

@@ -3,6 +3,7 @@
 
     ExcludeRules = @(
         'PSAvoidUsingWriteHost'  # Invoke-ConsoleMenu 和 Show-UserScoopLogo 需要 Write-Host
+        'PSUseBOMForUnicodeEncodedFile'  # P4-3a: 统一 UTF-8 无 BOM,避免 chcp 65001 + ANSI 转义错位
     )
 
     Rules = @{

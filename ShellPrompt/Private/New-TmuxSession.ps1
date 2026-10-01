@@ -1,5 +1,6 @@
 # New-TmuxSession.ps1 - 在远程主机上创建新的 tmux 会话
 
+
 function New-TmuxSession {
     <#
     .SYNOPSIS
@@ -15,12 +16,13 @@ function New-TmuxSession {
     .EXAMPLE
         New-TmuxSession -HostName myserver
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([void])]
-    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
         [Parameter(Mandatory = $true)]
         [string]$HostName
     )
+    if ($PSCmdlet.ShouldProcess("tmux session on $HostName", "Perform New-TmuxSession")) { } else { return  }
 
     # Invoke-ConsoleMenu 布局：1空行 + 3行header + N选项 + 1EXIT + 2分隔 + 1描述 + 1| + 1底边 + 2底部空行
     $optCount = 5

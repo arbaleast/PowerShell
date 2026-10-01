@@ -5,7 +5,7 @@
 function Write-MenuLine {
     [CmdletBinding()]
     [OutputType([void])]
-    param([int]$Line, [string]$Text)
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param([int]$Line, [string]$Text)
     [Console]::Write("`e[${Line};1H`e[2K${Text}")
 }
 

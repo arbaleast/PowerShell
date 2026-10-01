@@ -21,6 +21,16 @@
 - **PSReadLine 增强** — 基于历史记录的自动补全与优化导航体验。
 - **Profile 加载计时** — 输出各阶段初始化耗时，便于调优。
 
+### 交互式 UI 组件 (P2 阶段)
+
+- **加载动画 (ProgressSpinner)** — 5 套 unicode 样式 (Braille / Ascii / Blocks / Dots / Arrows) 在耗时操作期间提供单行动态反馈；采用纯函数 + I/O 包装分层，PS 5.1 兼容（不依赖 `Start-ThreadJob`）。[`Show-ProgressSpinner.ps1`](ShellPrompt/Private/Show-ProgressSpinner.ps1)
+- **`Invoke-WithProgress` 封装** — 接受 `-ScriptBlock` + 可选 `-PollScript`，内部 spin 循环 + 超时（默认 60s）+ 异常重拋，集成于 `Start-TmuxSession` 入口的 SSH 探测与远程会话刷新。([`Show-ProgressSpinner.ps1:209`](ShellPrompt/Private/Show-ProgressSpinner.ps1:209))
+- **欢迎 Banner 纯函数** — `New-WelcomeBanner` 构造行数组，`Get-RandomQuote` 带 mtime 缓存避免反复读盘；`Start-TmuxSession` 入口处展示运行主题 banner（主机名+语录）。([`New-WelcomeBanner.ps1`](ShellPrompt/Private/New-WelcomeBanner.ps1))
+- **输入提示 (InputPrompt)** — 支持默认值 / 校验器（bool / hashtable / throw 三种契约）/ Esc 取消 / Ctrl+U 清空，提取 `Update-InputBuffer` / `Test-InputValidation` 纯函数便于测试。([`Show-InputPrompt.ps1`](ShellPrompt/Private/Show-InputPrompt.ps1))
+- **菜单状态机 (MenuMachine)** — P1 阶段实现的纯函数状态机驱动 `Show-HostSelector` 与 `Show-SessionManager`，统一处理键盘 / 过滤 / 焦点切换。([`Invoke-MenuMachine.ps1`](ShellPrompt/Private/Invoke-MenuMachine.ps1))
+- **动态帮助面板** — 根据当前动作集合动态生成键位提示。([`New-DynamicHelpPanel.ps1`](ShellPrompt/Private/New-DynamicHelpPanel.ps1))
+- **状态徽章** — Online / Attached / Detached / NetworkError / Pending / Disabled / Warning 七种状态点。([`New-StatusBadge.ps1`](ShellPrompt/Private/New-StatusBadge.ps1))
+
 ### 现代工具链集成
 
 - **Starship Prompt 延迟加载** — 跨 Shell 提示符，显示 git 上下文、Node 版本等信息，推迟到首次交互前加载。
@@ -147,10 +157,17 @@ $Config.SSH.ConnectTimeout = 10                  # 连接超时延长至 10 秒
 
 | 命令 | 说明 | 关键参数 | 依赖 | 源文件 |
 |------|------|----------|------|--------|
-| `Show-UserScoopLogo` | 显示 ANSI 欢迎 Banner 及随机语录 | `-QuotesPath`、`-ColorPrimary` | — | [`Show-UserScoopLogo.ps1`](ShellPrompt/Public/Show-UserScoopLogo.ps1) |
-| `Start-TmuxSession` | 远程 tmux 会话交互式管理 | `-HostName` | ssh、tmux | [`Start-TmuxSession.ps1`](ShellPrompt/Public/Start-TmuxSession.ps1) |
+| `Show-UserScoopLogo` | 显示 ANSI 欢迎 Banner 及随机语录(委托 `New-WelcomeBanner` + `Get-RandomQuote`,带 mtime 缓存) | `-QuotesPath`、`-ColorPrimary` | — | [`Show-UserScoopLogo.ps1`](ShellPrompt/Public/Show-UserScoopLogo.ps1) |
+| `Start-TmuxSession` | 远程 tmux 会话交互式管理(进入后展示欢迎 banner + SSH 探测 / 会话刷新期间 spin 动画 + 超时控制) | `-HostName` | ssh、tmux | [`Start-TmuxSession.ps1`](ShellPrompt/Public/Start-TmuxSession.ps1) |
 | `Copy-SshPublicKey` | 一键推送 SSH 公钥到远程主机 | `-RemoteHost`、`-IdentityFile`、`-Port` | ssh | [`Copy-SshPublicKey.ps1`](ShellPrompt/Public/Copy-SshPublicKey.ps1) |
 | `Invoke-Reload` | 一键重载 PowerShell 配置 | — | — | [`Invoke-Reload.ps1`](ShellPrompt/Public/Invoke-Reload.ps1) |
+| `Invoke-WithProgress` | **P2 内部封装**:spin 动画期间执行 `-ScriptBlock`,支持 `-PollScript` 完成检测与 `-TimeoutSeconds`,异常统一重拋 | `-ScriptBlock`、`-PollScript`、`-TimeoutSeconds`、`-Style` | — | [`Show-ProgressSpinner.ps1:209`](ShellPrompt/Private/Show-ProgressSpinner.ps1:209) |
+
+> **P2 UX 流程**(`Start-TmuxSession` 启动后顺序):
+> 1. **欢迎 banner** — `New-WelcomeBanner` 渲染主机名 + 随机语录(见 [`New-WelcomeBanner.ps1`](ShellPrompt/Private/New-WelcomeBanner.ps1))
+> 2. **SSH 探测 + 会话刷新** — `Invoke-WithProgress` 包覆,期间单行 Braille spinner 滚动;超时默认 60s(见 [`Show-ProgressSpinner.ps1`](ShellPrompt/Private/Show-ProgressSpinner.ps1))
+> 3. **主机 / 会话选择** — `Show-HostSelector` / `Show-SessionManager` 由 `Invoke-MenuMachine` 状态机驱动(见 [`Invoke-MenuMachine.ps1`](ShellPrompt/Private/Invoke-MenuMachine.ps1))
+> 4. **连接 / 附着** — `Connect-TmuxSession` / `New-TmuxSession` / `Remove-TmuxSession` 分派,期间 `Save-OriginalTerminalState` + `Reset-TerminalMode` 在 `try/finally` 中保护终端态
 
 ### 别名
 
@@ -175,7 +192,7 @@ PowerShell/
 ├── data/
 │   └── quotes.txt                     # 随机语录数据
 └── ShellPrompt/                       # 模块根目录
-    ├── ShellPrompt.psd1               # 模块清单 (ModuleVersion 1.2.0)
+    ├── ShellPrompt.psd1               # 模块清单 (ModuleVersion 1.3.0)
     ├── ShellPrompt.psm1               # 模块入口脚本
     ├── Settings.ScriptAnalyzer.psd1   # PSScriptAnalyzer 规则配置
     ├── CHANGELOG.md
@@ -190,18 +207,25 @@ PowerShell/
     └── Private/                       # 内部辅助函数（不暴露给用户）
         ├── Connect-TmuxSession.ps1        # 附着已有 tmux 会话
         ├── ConvertTo-SshEscapedString.ps1 # SSH 单引号转义
+        ├── Get-KeyboardFilter.ps1         # [P1] PSReadLine 键盘事件过滤
         ├── Get-SshArgs.ps1                # SSH 参数生成器
         ├── Get-SshConfigHosts.ps1         # SSH config 主机解析
         ├── Get-SshSocketPath.ps1          # SSH socket 路径
         ├── Get-TmuxSessions.ps1           # 远程 tmux 探测与列表
         ├── Initialize-Config.ps1          # 配置初始化与缓存
         ├── Invoke-ConsoleMenu.ps1         # 终端交互式菜单 UI
+        ├── Invoke-MenuMachine.ps1         # [P1] 菜单状态机（驱动 HostSelector/SessionManager）
         ├── Invoke-SshCaptureOutput.ps1    # SSH 异步输出捕获
         ├── Invoke-SshCommand.ps1          # SSH 命令调度（主线逻辑）
+        ├── New-DynamicHelpPanel.ps1       # [P1] 动态生成键位提示
+        ├── New-StatusBadge.ps1            # [P1] 状态徽章（Online/Attached/Detached/...）
         ├── New-TmuxSession.ps1            # 创建新 tmux 会话
+        ├── New-WelcomeBanner.ps1          # [P2] 欢迎 Banner 纯函数（主机名+随机语录）
         ├── Remove-TmuxSession.ps1         # 删除 tmux 会话
         ├── Reset-TerminalMode.ps1         # 终端编码/TERM 恢复
         ├── Save-OriginalTerminalState.ps1 # 终端状态保存
+        ├── Show-InputPrompt.ps1           # [P2] 输入提示（默认值/校验器/Esc 取消/Ctrl+U 清空）
+        ├── Show-ProgressSpinner.ps1       # [P2] 加载动画 + Invoke-WithProgress 封装
         ├── Start-SshInteractive.ps1       # 交互式 SSH 启动
         └── Test-SshHostName.ps1           # 主机名校验
 ```
@@ -220,8 +244,12 @@ PowerShell 启动
      ▼
 ┌─────────────────────────────────────────────┐
 │ ② Profile Phase 1                          │
-│   · 初始化配置 (Initialize-Config.ps1)      │
-│   · 显示欢迎 Banner (Show-UserScoopLogo)    │
+│   · dot-source 顺序（修复 P2-2 依赖链）:    │
+│     ① Initialize-Config.ps1                 │
+│     ② New-WelcomeBanner.ps1                 │
+│     ③ Show-UserScoopLogo.ps1                │
+│   · 显示欢迎 Banner (委托 New-WelcomeBanner │
+│     + Get-RandomQuote,带 mtime 缓存)        │
 │   · 设置 ll / which 别名                    │
 └─────────────────────────────────────────────┘
      │
@@ -326,6 +354,7 @@ PowerShell 启动
 | 症状 | 可能原因 | 解决方案 |
 |------|----------|----------|
 | 模块导入失败 | Profile 路径不正确或 `ShellPrompt.psd1` 未找到 | 确认 `$PROFILE` 指向正确路径；检查 [`ShellPrompt.psd1`](ShellPrompt/ShellPrompt.psd1) 是否存在 |
+| Profile 启动报 `Get-RandomQuote` / `New-WelcomeBanner` 未识别 | `Microsoft.PowerShell_profile.ps1` Phase 1 dot-source 链缺失 `New-WelcomeBanner.ps1`（P2-2 重构 `Show-UserScoopLogo` 后新增的依赖） | 在 `Show-UserScoopLogo.ps1` 之前显式 dot-source [`New-WelcomeBanner.ps1`](ShellPrompt/Private/New-WelcomeBanner.ps1) |
 | 显示 "ShellPrompt 模块未正确导入" | 模块未在启动流程中加载 | 手动执行 `Import-Module ./ShellPrompt/ShellPrompt.psd1` 验证 |
 | `Start-TmuxSession` 提示 "SSH 配置中未找到任何主机" | `~/.ssh/config` 文件缺失或为空 | 编辑 `~/.ssh/config` 添加主机配置 |
 | 远程主机无 tmux | 远程未安装 tmux | 输出黄色警告并自动降级为直连 SSH |

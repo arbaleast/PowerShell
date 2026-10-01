@@ -1,5 +1,6 @@
 # Remove-TmuxSession.ps1 - 删除远程 tmux 会话
 
+
 function Remove-TmuxSession {
     <#
     .SYNOPSIS
@@ -17,15 +18,16 @@ function Remove-TmuxSession {
     .EXAMPLE
         Remove-TmuxSession -HostName myserver -Sessions $sessions
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([void])]
-    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
         [Parameter(Mandatory = $true)]
         [string]$HostName,
 
         [Parameter(Mandatory = $true)]
         [array]$Sessions
     )
+    if ($PSCmdlet.ShouldProcess("tmux session on $HostName", "Perform Remove-TmuxSession")) { } else { return  }
 
     if ($Sessions.Count -eq 0) {
         Write-Warning "没有可删除的会话"

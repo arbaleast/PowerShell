@@ -3,10 +3,11 @@
 
 . "$PSScriptRoot\Get-SshSocketPath.ps1"
 
+
 function Start-SshInteractive {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([pscustomobject])]
-    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]$HostName,
@@ -20,6 +21,7 @@ function Start-SshInteractive {
         [Parameter()]
         [switch]$PassThru
     )
+    if ($PSCmdlet.ShouldProcess("SSH to $HostName", "Perform Start-SshInteractive")) { } else { return $null }
 
     # ControlMaster socket 缓存: 按主机名复用已建立的 master 连接
     $socket = $null

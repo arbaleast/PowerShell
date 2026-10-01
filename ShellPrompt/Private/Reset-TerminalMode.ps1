@@ -5,10 +5,11 @@
 # 状态源: 调用方在 try 顶部把原始值写入 $script:OriginalOutputEncoding /
 #         $script:OriginalInputEncoding / $script:OriginalTerm,本函数 finally 读取并恢复。
 
+
 function Reset-TerminalMode {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([void])]
-    param()
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param()
 
     # --- A. 远程协议层 (原 Invoke-SshCommand 版) ---
     # 关闭 tmux 启用过的鼠标追踪模式 + 显示光标 + 重置 SGR

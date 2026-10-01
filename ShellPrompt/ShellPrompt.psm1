@@ -29,11 +29,15 @@ if (Test-Path $userConfigPath) {
 $sshHosts = Get-SshConfigHosts
 if ($sshHosts.Count -gt 0) {
     Register-ArgumentCompleter -CommandName 'Start-TmuxSession' -ParameterName 'HostName' -ScriptBlock {
+        # $commandAst / $cursorPosition 由 PowerShell 补全基础架构提供，
+        # 用于在多 token 命令行中精确定位当前补全位置。
         param($wordToComplete, $commandAst, $cursorPosition)
         $hosts = Get-SshConfigHosts
         $hosts | Where-Object { $_ -like "*$wordToComplete*" } | ForEach-Object {
             [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
         }
+        # 静默引用 AST 与位置参数，避免 PSReviewUnusedParameter 误报（运行时由 PowerShell 注入）。
+        $null = $commandAst, $cursorPosition
     }
 }
 

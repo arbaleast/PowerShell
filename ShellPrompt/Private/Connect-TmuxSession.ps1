@@ -20,7 +20,7 @@ function Connect-TmuxSession {
     #>
     [CmdletBinding()]
     [OutputType([void])]
-    param(
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]    param(
         [Parameter(Mandatory = $true)]
         [string]$HostName,
 
