@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     ShellPrompt 模块 Pester v3/v5 兼容测试套件
 #>
@@ -909,3 +909,4 @@ Describe 'P2-3 Test-InputValidation (纯函数)' {
         $r2.Valid | Should Be $true
     }
 }
+

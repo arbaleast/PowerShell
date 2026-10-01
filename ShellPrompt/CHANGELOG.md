@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`Invoke-Reload` 增强**: 修复了 v1.3.1 遗留的 PSScriptAnalyzer 抑制属性误用(原本作为 `param()` 前坬儿属性,会在 PS 5.1 拋语法错误),现改为在函数体内并补充 `try/catch` 包裹重载逻辑,避免重载失败时中断调用方。新增 `-Quiet` 开关用于脚本/管道场景不打印成功提示。详见 [`Invoke-Reload.ps1`](ShellPrompt/Public/Invoke-Reload.ps1)。
+
+### Removed
+
+- **热重载 watcher(FSW) 方案**: v1.3.3 探索中的 `Private/Start-HotReloadWatcher.ps1` 拆解为 ~160 行复杂代码(`Register-ObjectEvent` + `ThreadPool Timer` + 跨 runspace `SessionState` 读写)仍未能在 PS 5.1 下被手动烟测验证触发。Pester 的 126/126 覆盖虚高(测试本身走 `$script:HotReloadSuppressed=$true` 提前 return,从未实际 cover 到 watcher 订阅路径)。为遵守"小而深"模块边界,本版本不包含自动热重载;请开发者改完源码后手动跑 `Invoke-Reload`。
+
 ## [1.3.2] - 2026-10-01
 
 ### Fixed

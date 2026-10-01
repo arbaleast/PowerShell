@@ -180,6 +180,25 @@ $Config.SSH.ConnectTimeout = 10                  # 连接超时延长至 10 秒
 
 > 别名由 `Microsoft.PowerShell_profile.ps1` 以 `-Scope Global` 注册，模块内不再定义。
 
+### 🛠️ 开发模式重载
+
+改完 `ShellPrompt/Private/*.ps1` / `Public/*.ps1` / `ShellPrompt.psm1` / `~/.ShellPrompt/config.ps1` 后,**不需要重启 PowerShell**,跑一次:
+
+```powershell
+Invoke-Reload          # 默认: 重载 PROFILE + ShellPrompt, 打印 " [OK] ..." 提示
+Invoke-Reload -Quiet   # 静默模式(脚本/管道场景用)
+```
+
+原理: 卸载 `ShellPrompt` 模块 + dot-source `$PROFILE`,后者中的 `Ensure-ShellPrompt` 会重新 `Import-Module` 拉起最新代码(见 [`Microsoft.PowerShell_profile.ps1`](Microsoft.PowerShell_profile.ps1:25))。
+
+> **为什么不做 FileSystemWatcher 自动重载?**
+> 一次性 ~150 行代码 + EventManager + ThreadPool + 跨 runspace SessionState 读写,
+> 远超本项目"小而深"模块边界;且 Pester 虚高 + PS 5.1 scope 链路过深,
+> 实测 7 次重试仍无法稳定 fire。手动 `Invoke-Reload` 成本低、可预测。
+>
+> **推荐编辑器工作流**: VSCode / vim 配 `chokidar` / `watchexec` 监听 `ShellPrompt/*.ps*`,
+> 存盘后自动调 `Invoke-Reload -Quiet`(项目根 `.vscode/settings.json` 或 `~/.config/watchexec/config.toml`)。
+
 ## 🏗️ 架构
 
 ### 目录结构
