@@ -90,22 +90,25 @@ function Start-TmuxSession {
     $availInfo = Invoke-WithProgress -Message "检测远程 tmux (可能几秒)" -ScriptBlock { Get-TmuxAvailability -HostName $HostName }
     $hasTmux = $availInfo.Available
 
+    # fix(sss): 探测失败不再直接 fall through 到 ssh, 改成警告后仍进 SessionManager。
+    # 之前 `sss <host>` 在远端没 tmux(或探测失败)时会跳过 UI 直接进 SSH TTY,
+    # 违反 UI-first 原则;现在改: 菜单 header 仍显示 `tmux?` 徽章
+    # (Show-SessionManager 在 TmuxVersion='' 时已实现),用户可手动选 `Ssh` 直连、
+    # `Refresh` 重试、`Exit` 退;网络错误下 `Refresh` 还能从 30s 缓存里快速恢复。
     if (-not $hasTmux) {
-        Write-Warning "远程主机 $HostName 未安装 tmux(或探测失败)"
+        Write-Warning "远程主机 $HostName 未安装 tmux(或探测失败), 仍进入菜单,可选: Ssh 直连 / Refresh 重试 / Exit 退"
         $rawErr = $availInfo.Error
         if ($rawErr) {
             Write-Host "     远程错误: $($rawErr.Trim())" -ForegroundColor DarkGray
         }
         Write-Host "     排查: 手动跑 `ssh $HostName 'command -v tmux; tmux -V'` 看输出" -ForegroundColor DarkGray
-        Write-Host " [SSH] 直接连接..." -ForegroundColor Green
-        Invoke-SshCommand -HostName $HostName -Interactive
-        Write-Host "`n [OK] SSH 连接已关闭，回到本地 PowerShell" -ForegroundColor Cyan
-        return
+    } else {
+        Write-Host " [OK] 远程 tmux 可用 (版本: $($availInfo.Version))" -ForegroundColor Green
     }
 
-    Write-Host " [OK] 远程 tmux 可用 (版本: $($availInfo.Version))" -ForegroundColor Green
-
-    # P2-5: 首次会话获取走 spinner(初次进入菜单前的预加载)
+    # P2-5: 首次会话获取走 spinner(初次进入菜单前的预加载)。
+    # 探测失败时 SessionData.Sessions 为空列表, 菜单靠 HasSessions=$false 隐藏
+    # "附着/删除"项, 只剩 "创建新 tmux / 直接 SSH / 刷新", 与方案 A 体验一致。
     $sessionData = Invoke-WithProgress -Message "获取远程 tmux 会话" -ScriptBlock { Get-TmuxSessions -HostName $HostName }
     $sessions = $sessionData.Sessions
 
