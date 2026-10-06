@@ -910,3 +910,193 @@ Describe 'P2-3 Test-InputValidation (纯函数)' {
     }
 }
 
+
+
+Describe 'Send-MenuKey (ESC 退出 + 方向键不闪退)' {
+
+    # fix(sss) v2: 字节级 CSI 重组 + Key 枚举作为唯一可靠字段。
+    # Windows Terminal + PS 5.1 下方向键被 ReadKey 拆为 3 字节序列
+    # (ESC + '[' + A/B/C/D), 字节 1 的 vK=27, char=0x1B, Key=Escape 会被误判退出。
+    # 修复方案: 调 ConvertTo-CsiArrowKey 吞字节 2/3 重组为单一 Key 枚举,
+    # 然后 Send-MenuKey 用 Key 枚举判断导航 (5-arg 构造后 vK/char=0, 唯一可靠是 Key).
+    # 本组测试覆盖:
+    #   - 重组后 Up/Down 导航 (Key 枚举路径)
+    #   - 重组后 ESC/Enter 退出与确认
+    #   - 真 ESC (Win API 路径: vK=27) 仍退出
+    #
+    # 注意: ConsoleKeyInfo 跨 & $mod { } 边界后 .NET 属性 (Character/Key) 会被
+    # .NET 反射层置空, 因此 key 构造必须在 module scope 内完成。
+    # 真 ESC 的 vK=27 路径也必须在 module 内构造 (跨边界 vK 字段丢失).
+
+    $mod = Get-Module ShellPrompt
+    $script:mod = $mod
+
+    # 共享工厂: 每个 It 独立 ctx, 避免 Pester 顺序污染
+    function Get-TestMenuContext {
+        & $script:mod {
+            New-MenuContext -AllItems @(
+                (New-MenuItem -Label 'a')
+                (New-MenuItem -Label 'b')
+                (New-MenuItem -Label 'c')
+            )
+        }
+    }
+
+    It '重组后 UpArrow (Key=UpArrow) 应走 Up 导航' {
+        $ctx = Get-TestMenuContext
+        $result = & $mod { param($c)
+            # 模拟 ConvertTo-CsiArrowKey 重组后的 5-arg 构造 key: vK=0, char=0, Key=UpArrow
+            $k = [System.ConsoleKeyInfo]::new([char]0, [System.ConsoleKey]::UpArrow, $false, $false, $false)
+            Send-MenuKey -Context $c -Key $k
+        } $ctx
+
+        $result | Should Not BeNullOrEmpty
+        $result.SelectedIdx | Should Be 2   # 从 0 上移 -> 2 (mod 3)
+        $result.State       | Should Be 'Selecting'
+    }
+
+    It '重组后 DownArrow (Key=DownArrow) 应走 Down 导航' {
+        $ctx = Get-TestMenuContext
+        $result = & $mod { param($c)
+            $k = [System.ConsoleKeyInfo]::new([char]0, [System.ConsoleKey]::DownArrow, $false, $false, $false)
+            Send-MenuKey -Context $c -Key $k
+        } $ctx
+
+        $result | Should Not BeNullOrEmpty
+        $result.SelectedIdx | Should Be 1   # 从 0 下移 -> 1
+        $result.State       | Should Be 'Selecting'
+    }
+
+    It '重组后 LeftArrow (Key=LeftArrow) 不应退出' {
+        $ctx = Get-TestMenuContext
+        $result = & $mod { param($c)
+            $k = [System.ConsoleKeyInfo]::new([char]0, [System.ConsoleKey]::LeftArrow, $false, $false, $false)
+            Send-MenuKey -Context $c -Key $k
+        } $ctx
+        $result | Should Not BeNullOrEmpty
+    }
+
+    It '重组后 RightArrow (Key=RightArrow) 不应退出' {
+        $ctx = Get-TestMenuContext
+        $result = & $mod { param($c)
+            $k = [System.ConsoleKeyInfo]::new([char]0, [System.ConsoleKey]::RightArrow, $false, $false, $false)
+            Send-MenuKey -Context $c -Key $k
+        } $ctx
+        $result | Should Not BeNullOrEmpty
+    }
+
+    It '真 ESC (vK=27) 应退出, 返回 null (Win API 路径)' {
+        # 真 ESC: vK=27, char=0x1B, Key=Escape (Win ReadKey API 填的)
+        $ctx = Get-TestMenuContext
+        $result = & $mod { param($c)
+            $k = [System.ConsoleKeyInfo]::new([char]0x1B, [System.ConsoleKey]::Escape, $false, $false, $false)
+            # 反射设 vK=27 (5-arg 构造后 vK=0, 真实 ReadKey 会填 27)
+            $type = $k.GetType()
+            $vkField = $type.GetField('_virtualKeyCode', [System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic)
+            if ($vkField) { $vkField.SetValue($k, [uint16]27) }
+            Send-MenuKey -Context $c -Key $k
+        } $ctx
+
+        $result | Should BeNullOrEmpty
+    }
+}
+
+
+Describe 'ConvertTo-CsiArrowKey (字节级 CSI 重组)' {
+
+    # 验证 Windows Terminal + PS 5.1 方向键 3 字节序列重组逻辑:
+    #   字节 1 = ESC (vK=27, char=0x1B, Key=Escape)
+    #   字节 2 = '[' (vK=0,  char='[',   Key=NoName)
+    #   字节 3 = 'A'/'B'/'C'/'D'
+    # ConvertTo-CsiArrowKey 接受 -NextKeyProvider 注入, 在 Pester 中不读真实 stdin.
+    #
+    # 关键: 真实 ReadKey 由 .NET runtime 直接填三个字段 (vK, char, Key).
+    #       5-arg 构造 [ConsoleKeyInfo]::new(char, key, ...) 会丢 vK/char 字段, 仅 Key 保留.
+    #       PS 5.1 跨 module 边界 (via & $mod {}) 时 Key 字段被 PSObject 反射层置 0 (NoName).
+    # 解法: FirstByte 必须在 module scope 内反射设 _key/_keyChar/_virtualKeyCode 三个字段,
+    #       provider 也必须在 module scope 内被 invoke (返回值再 PSObject 包装前读到).
+    #       caller-scope 构造的 [char] 通过 param 传入 module 内部 Queue, provider 内部
+    #       立即 ReadKey 性质使用, 避开 .NET 反射层丢字段.
+
+    $mod = Get-Module ShellPrompt
+    $script:mod = $mod
+
+    # PS 5.1 跨 module 边界 (via & $mod {}) 时 ConsoleKeyInfo.Key/Character 字段
+    # 会被 PSObject 反射层置空。FirstByte 必须在 module scope 内 5-arg 构造。
+    # provider 必须模拟真实 ReadKey: 每次调用返回一个新字节, 消费是 in-place。
+    # 闭包内 int 自增 ($idx++) 不可变, 必改用 Queue<char> (Dequeue in-place)。
+
+    # 1) ESC 路径 + 后续字节 (A/B/C/D/Z/非[) → 一律在 module scope 内构造 FirstByte + Queue
+    # 2) param 跨边界 OK (值类型 / 引用类型复制)
+    function Invoke-CsiArrow {
+        param([char]$Char1, [System.ConsoleKey]$Key1, [char[]]$Bytes)
+        & $mod { param($c1, $k1, $b)
+            $first = [System.ConsoleKeyInfo]::new($c1, $k1, $false, $false, $false)
+            $q = [System.Collections.Generic.Queue[char]]::new()
+            foreach ($x in $b) { $q.Enqueue($x) }
+            $provider = { $q.Dequeue() }
+            $consumed = $false
+            $result = ConvertTo-CsiArrowKey -FirstByte $first -NextKeyProvider $provider -Consumed ([ref]$consumed)
+            [pscustomobject]@{
+                Consumed = $consumed
+                Result   = $result
+                Key      = if ($result) { $result.Key } else { $null }
+                Remaining = $q.Count
+            }
+        } $Char1 $Key1 $Bytes
+    }
+
+    It 'ESC + [ + A 应重组为 UpArrow (Consumed=true)' {
+        $r = Invoke-CsiArrow -Char1 ([char]0x1B) -Key1 ([System.ConsoleKey]::Escape) -Bytes ([char[]]@('[', 'A'))
+
+        $r.Consumed   | Should Be $true
+        $r.Result     | Should Not BeNullOrEmpty
+        $r.Key        | Should Be ([System.ConsoleKey]::UpArrow)
+        $r.Remaining  | Should Be 0
+    }
+
+    It 'ESC + [ + B 应重组为 DownArrow' {
+        $r = Invoke-CsiArrow -Char1 ([char]0x1B) -Key1 ([System.ConsoleKey]::Escape) -Bytes ([char[]]@('[', 'B'))
+
+        $r.Consumed | Should Be $true
+        $r.Key      | Should Be ([System.ConsoleKey]::DownArrow)
+    }
+
+    It 'ESC + [ + C 应重组为 RightArrow' {
+        $r = Invoke-CsiArrow -Char1 ([char]0x1B) -Key1 ([System.ConsoleKey]::Escape) -Bytes ([char[]]@('[', 'C'))
+
+        $r.Consumed | Should Be $true
+        $r.Key      | Should Be ([System.ConsoleKey]::RightArrow)
+    }
+
+    It 'ESC + [ + D 应重组为 LeftArrow' {
+        $r = Invoke-CsiArrow -Char1 ([char]0x1B) -Key1 ([System.ConsoleKey]::Escape) -Bytes ([char[]]@('[', 'D'))
+
+        $r.Consumed | Should Be $true
+        $r.Key      | Should Be ([System.ConsoleKey]::LeftArrow)
+    }
+
+    It '字节 1 不是 ESC (Key=UpArrow 模拟其他键) 应直接不重组, Consumed=false, 不读下一字节' {
+        $r = Invoke-CsiArrow -Char1 ([char]'x') -Key1 ([System.ConsoleKey]::UpArrow) -Bytes ([char[]]@('[', 'A'))
+
+        $r.Consumed   | Should Be $false
+        $r.Result     | Should BeNullOrEmpty
+        $r.Remaining  | Should Be 2   # 字节 2/3 没被读
+    }
+
+    It 'ESC + (非 [) 应视为真 ESC, Consumed=false, 字节 2 已被读 (ReadKey 协议限制)' {
+        $r = Invoke-CsiArrow -Char1 ([char]0x1B) -Key1 ([System.ConsoleKey]::Escape) -Bytes ([char[]]@('q'))
+
+        $r.Consumed   | Should Be $false
+        $r.Result     | Should BeNullOrEmpty
+        $r.Remaining  | Should Be 0   # 字节 2 已被读
+    }
+
+    It 'ESC + [ + 非法字节 (Z) 应不重组, Consumed=false' {
+        $r = Invoke-CsiArrow -Char1 ([char]0x1B) -Key1 ([System.ConsoleKey]::Escape) -Bytes ([char[]]@('[', 'Z'))
+
+        $r.Consumed   | Should Be $false
+        $r.Result     | Should BeNullOrEmpty
+        $r.Remaining  | Should Be 0
+    }
+}

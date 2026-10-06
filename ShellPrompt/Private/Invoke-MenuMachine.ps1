@@ -51,12 +51,14 @@ function New-MenuContext {
         [bool]$AllowFilter = $true
     )
     return [PSCustomObject]@{
-        AllItems    = @($AllItems)
-        ExitItem    = $ExitItem
-        Filter      = $InitialFilter
-        SelectedIdx = 0
-        State       = 'Idle'
-        AllowFilter = $AllowFilter
+        AllItems        = @($AllItems)
+        ExitItem        = $ExitItem
+        Filter          = $InitialFilter
+        SelectedIdx     = 0
+        State           = 'Idle'
+        AllowFilter     = $AllowFilter
+        # CSI 重组在主循环 ReadKey 之后同步吞字节 2/3, 不需要 defer 到下一轮,
+        # 故无需在 Context 上挂 PendingEscape 状态字段。
     }
 }
 
@@ -98,6 +100,135 @@ function Get-VisibleMenuItems {
     return ,$matched
 }
 
+function ConvertTo-CsiArrowKey {
+    <#
+    .SYNOPSIS
+        吞掉多字节 CSI 序列, 合成一个 UpArrow/DownArrow/LeftArrow/RightArrow 的 ConsoleKeyInfo。
+
+    .DESCRIPTION
+        解决 Windows Terminal + PowerShell 5.1 下方向键被分成 3 次 ReadKey 读取的问题:
+        字节 1 = ESC (vK=27, char=0x1B, key=Escape)
+        字节 2 = '[' (vK=0,  char='[',   key=NoName)
+        字节 3 = 'A'/'B'/'C'/'D' (上/下/右/左)
+        单凭字节 1 无法判断"真 ESC 按键"还是"方向键前缀", 需等待字节 2:
+          - 字节 2 == '[' → 吞, 读字节 3 判定方向, 合成 UpArrow/DownArrow/LeftArrow/RightArrow
+          - 字节 2 != '[' → 保留为字节 1 (此函数不消费字节 2, 由调用方下一轮 ReadKey 重新读到)
+
+        ReadKey 来源可被 -NextKeyProvider 覆盖, 方便 Pester 注入(真实主机调用无需传参)。
+
+    .PARAMETER FirstByte
+        第一次 ReadKey 返回的 ConsoleKeyInfo, 需满足 vK=27, char=0x1B, key=Escape 才是 ESC 前缀。
+
+    .PARAMETER NextKeyProvider
+        读取下一字节的 scriptblock, 默认 = { $Host.UI.RawUI.ReadKey("NoEcho, IncludeKeyDown") }。
+        返回值需为 ConsoleKeyInfo。
+        注: PS 5.1 下 ConsoleKeyInfo 跨 & $mod { } 边界后 Character 字段会被 .NET 丢空,
+        测试场景下 provider 应仅返回 [char] (本函数内部会包成 ConsoleKeyInfo)。
+        生产场景下 ReadKey 返回的 ConsoleKeyInfo 在主机进程内传, 不存在跨边界问题。
+
+    .PARAMETER Consumed
+        [ref] 输出是否实际吞了字节 2/3 重组为方向键。
+
+    .OUTPUTS
+        合成后的 ConsoleKeyInfo, 或 $null(若字节 2 不是 '[')。
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = '仅读取/合成控制台按键, 不修改外部状态')]
+    [CmdletBinding()]
+    [OutputType([System.ConsoleKeyInfo])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.ConsoleKeyInfo]$FirstByte,
+
+        [Parameter(Mandatory = $false)]
+        [scriptblock]$NextKeyProvider,
+
+        [Parameter(Mandatory = $true)]
+        [ref]$Consumed
+    )
+
+    if (-not $NextKeyProvider) {
+        $NextKeyProvider = { $Host.UI.RawUI.ReadKey("NoEcho, IncludeKeyDown") }
+    }
+
+    # 字节 1 不是 ESC 前缀, 不重组。
+    # PS 5.1 的 ConsoleKeyInfo 5-arg 构造后 vK/char 恒为 0, 仅 Key 枚举被保留;
+    # 真实 ReadKey API 会同时设置 vK=27, char=0x1B, Key=Escape。
+    # 生产路径下三个字段都有, 这里只检查 Key=Escape (唯一可靠字段),
+    # vK/char 作为额外安全检查, 但缺失时不重判 (只在 Key=Escape 就能代表是 ESC 按键)。
+    if ($FirstByte.Key -ne [System.ConsoleKey]::Escape) {
+        $Consumed.Value = $false
+        return $null
+    }
+    # 额外检查: 若 vK/char 被 ReadKey 填上, 应是 27 / 0x1B; 都不是则不是 ESC 前缀。
+    # 用 [int] 强转避免 PS 把 ushort/char=0 当空串, `-ne 0` 退化为字符串比较
+    # VirtualKeyCode 是 ushort, 0/27 是合法值; PS 默认把 ushort 0 输出为空串, 需 [int] 强转
+    $vk = [int]$FirstByte.VirtualKeyCode
+    if ($vk -ne 0 -and $vk -ne 27) {
+        $Consumed.Value = $false
+        return $null
+    }
+    # Character 是 char, 0x00/0x1B 是合法值; PS 默认把 char 0 输出为空串, 需 [int] 强转
+    $ch = [int]$FirstByte.Character
+    if ($ch -ne 0 -and $ch -ne 27) {
+        $Consumed.Value = $false
+        return $null
+    }
+
+    # 字节 1 符合 ESC 前缀条件, 等待字节 2。
+    # Provider 可返回 ConsoleKeyInfo (生产) 或 [char] (测试, 避免 .NET 跨边界丢字段)。
+    $second = $null
+    try {
+        $second = & $NextKeyProvider
+    } catch {
+        $Consumed.Value = $false
+        return $null
+    }
+    if ($null -eq $second) {
+        $Consumed.Value = $false
+        return $null
+    }
+    # 归一化为 char: 真实 ConsoleKeyInfo 取 .Character; 测试 [char] 直接用
+    $secondChar = if ($second -is [System.ConsoleKeyInfo]) { [int][char]$second.Character } else { [int][char]$second }
+    if ($secondChar -ne 91) {  # '[' = 91
+        # 字节 2 不是 '[' → 这是真 ESC 按键, 但 ReadKey 已经消耗了字节 2。
+        # ReadKey 协议本身不支持 unget, 字节 2 的副作用无法回滚, 这是底层 API 限制。
+        # 仍返回 $null + Consumed=$false, 调用方把字节 1 当 ESC 处理, 字节 2 被吞 (实际少见场景)。
+        $Consumed.Value = $false
+        return $null
+    }
+
+    # 字节 3
+    $third = $null
+    try {
+        $third = & $NextKeyProvider
+    } catch {
+        $Consumed.Value = $false
+        return $null
+    }
+    if ($null -eq $third) {
+        $Consumed.Value = $false
+        return $null
+    }
+    $thirdChar = if ($third -is [System.ConsoleKeyInfo]) { [int][char]$third.Character } else { [int][char]$third }
+
+    # A=上, B=下, C=右, D=左 (标准 ANSI CSI 方向键定义)
+    $arrowMap = @{
+        65 = [System.ConsoleKey]::UpArrow     # 'A' = 65
+        66 = [System.ConsoleKey]::DownArrow   # 'B' = 66
+        67 = [System.ConsoleKey]::RightArrow  # 'C' = 67
+        68 = [System.ConsoleKey]::LeftArrow   # 'D' = 68
+    }
+    $finalKey = $arrowMap[$thirdChar]
+    if (-not $finalKey) {
+        $Consumed.Value = $false
+        return $null
+    }
+
+    $Consumed.Value = $true
+    # 5 参数构造: char, key, shift, alt, ctrl
+    return [System.ConsoleKeyInfo]::new([char]0, $finalKey, $false, $false, $false)
+}
+
 function Send-MenuKey {
     <#
     .SYNOPSIS
@@ -110,12 +241,14 @@ function Send-MenuKey {
           - [PSCustomObject]@{ Action = 'Select'; Item = <selected> }(若用户按 Enter 确认)
 
         不直接操作控制台, 渲染由调用方在拿到新 Context 后执行。
+        CSI 重组在调用方 (Invoke-MenuMachine) 完成, 此处只对已规范化的
+        单一 ConsoleKeyInfo 做事件分发。
 
     .PARAMETER Context
         菜单上下文
 
     .PARAMETER Key
-        原始 ReadKey 返回的 KeyInfo 对象
+        原始 ReadKey 返回的 KeyInfo 对象 (已 CSI 重组)
     #>
     [CmdletBinding()]
     [OutputType([object])]
@@ -127,11 +260,15 @@ function Send-MenuKey {
         [System.ConsoleKeyInfo]$Key
     )
 
+    # VirtualKeyCode / Character 在不同来源下可能为 0/0 (如 5-arg 构造的重组后 key),
+    # 唯一可靠字段是 Key 枚举 (CSIO 重路径) 或 vK 枚举 (Win API 路径)。
+    # 导航判断统一走 Key 枚举, 避免 CSI 重组后 vK=0 失灵。
+    $keyEnum = $Key.Key
     $vK = $Key.VirtualKeyCode
     $char = $Key.Character
 
-    # 退出: Esc(27) 或 Q/q
-    if ($vK -eq 27 -or $char -eq 'q' -or $char -eq 'Q') {
+    # 退出: Esc(Key=Escape 或 vK=27) 或 Q/q (char)
+    if ($keyEnum -eq [System.ConsoleKey]::Escape -or $vK -eq 27 -or $char -eq 'q' -or $char -eq 'Q') {
         return $null
     }
 
@@ -139,20 +276,20 @@ function Send-MenuKey {
     $count = $visible.Count
     if ($count -eq 0) { return $Context }
 
-    # 上/下导航
-    if ($vK -eq 38) {  # Up
+    # 上/下导航: 优先用 Key 枚举 (CSI 重组后 vK=0, char=0, 仅 Key 保留)
+    if ($keyEnum -eq [System.ConsoleKey]::UpArrow -or $vK -eq 38) {  # Up
         $Context.SelectedIdx = ($Context.SelectedIdx - 1 + $count) % $count
         $Context.State = 'Selecting'
         return $Context
     }
-    if ($vK -eq 40) {  # Down
+    if ($keyEnum -eq [System.ConsoleKey]::DownArrow -or $vK -eq 40) {  # Down
         $Context.SelectedIdx = ($Context.SelectedIdx + 1) % $count
         $Context.State = 'Selecting'
         return $Context
     }
 
     # Enter: 确认
-    if ($vK -eq 13) {
+    if ($keyEnum -eq [System.ConsoleKey]::Enter -or $vK -eq 13) {
         $sel = $visible[$Context.SelectedIdx]
         # EXIT 项判断: ExitItem 存在且 Label 匹配
         if ($Context.ExitItem -and $sel.Label -eq $Context.ExitItem.Label) {
@@ -293,6 +430,15 @@ function Invoke-MenuMachine {
         } catch {
             [Console]::Clear()
             return $null
+        }
+
+        # 字节级 CSI 重组: Windows Terminal + PS 5.1 下方向键拆为 3 个 ReadKey
+        # (ESC + '[' + 'A/B/C/D'), 字节 1 单独看会被误判为 ESC 退出。
+        # 重组需在 Send-MenuKey 之前完成, 避免下游误判。
+        $consumed = $false
+        $reassembled = ConvertTo-CsiArrowKey -FirstByte $key -Consumed ([ref]$consumed)
+        if ($consumed -and $reassembled) {
+            $key = $reassembled
         }
 
         $result = Send-MenuKey -Context $Context -Key $key

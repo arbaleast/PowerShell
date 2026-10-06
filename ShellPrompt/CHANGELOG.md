@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **菜单按方向键闪退 (v2 字节级 CSI 重组)**: v1.3.2 遗留 bug,Windows Terminal + PS 5.1 + [`Invoke-ConsoleMenu`](ShellPrompt/Private/Invoke-ConsoleMenu.ps1) 路径下方向键 (`UpArrow/DownArrow/LeftArrow/RightArrow`) 被编码为多字节 CSI 序列 `ESC [ A/B/C/D` (3 字节),首字节 `ReadKey` 实证返回 **`VirtualKeyCode=27, Character=0x1B, Key=Escape`** (PS issue [#16443](https://github.com/PowerShell/PowerShell/issues/16443) — 关键点:**`vK=27` 而非 0**)。v1 修复 `80405b6` 基于错误的"`vK=0`"假设硬编码 `Key.Escape` 查表,在 PS 5.1 上从未触发 → 菜单仍闪退。
+
+  **v2 方案**: 在 [`Invoke-MenuMachine.ps1`](ShellPrompt/Private/Invoke-MenuMachine.ps1) 引入字节级 CSI 重组层。新增 `ConvertTo-CsiArrowKey` 私有函数,签名 `ConvertTo-CsiArrowKey -FirstByte <ConsoleKeyInfo> -NextKeyProvider <scriptblock> -Consumed [ref]`:
+  1. 首字节若 `Key != Escape` → 透传(Consumed=$false,主循环把 `$FirstByte` 仍当原键处理)
+  2. 首字节若 `Key == Escape` → 同步从 `NextKeyProvider` 读字节 2,若非 `[` 视为真 ESC 退出(Consumed=$false,但字节 2 已被读)
+  3. 字节 2 为 `[` → 再读字节 3,在 `arrowMap` (`A/B/C/D` → `UpArrow/DownArrow/RightArrow/LeftArrow`) 查表;命中则合成 `ConsoleKeyInfo` 返回(Consumed=$true),未命中视为非法 CSI(Consumed=$false)
+
+  同步重写 `Send-MenuKey` 主循环:发现首字节是 ESC 时,**直接调用 `ConvertTo-CsiArrowKey`** 而非任何 `vK/Key` 预判分支(老 `Key→vK` 查表路径已删除)。`[ref]$Consumed` 跨 `NextKeyProvider` 闭包写回主循环 — 真 ESC 让主循环退出(向 L150 ESC 分支走),伪 ESC 重组为方向键继续主循环。
+
+  Pester 覆盖: 5 个 `Send-MenuKey` 边界 case (4 方向键 + Key.Escape 对照) + 7 个 `ConvertTo-CsiArrowKey` 字节重组 case (ESC+[+A/B/C/D 各方向、字节 1 非 ESC 透传、ESC+非[ 视为真 ESC、ESC+[+非法字节)。最终 **134/134 全绿** (127 原有 + 5 Send-MenuKey + 7 ConvertTo-CsiArrowKey, Pester 3.4.0)。
+
 ### Changed
 
 - **`Invoke-Reload` 增强**: 修复了 v1.3.1 遗留的 PSScriptAnalyzer 抑制属性误用(原本作为 `param()` 前坬儿属性,会在 PS 5.1 拋语法错误),现改为在函数体内并补充 `try/catch` 包裹重载逻辑,避免重载失败时中断调用方。新增 `-Quiet` 开关用于脚本/管道场景不打印成功提示。详见 [`Invoke-Reload.ps1`](ShellPrompt/Public/Invoke-Reload.ps1)。
