@@ -57,8 +57,12 @@ Describe '用户配置覆盖与预热缓存' {
         # 锁定回归(2026-10-29): 用户配置原先在预热缓存**之后**加载, 而
         # Get-CachedConfig 优先命中预热快照 —— 于是 config.ps1 里的颜色/路径
         # 覆盖全部不生效, 用户改了配置却看不到任何变化。
-        # 本用例用临时 HOME 重跑一次配置初始化, 直接验证"用户配置 -> Config
-        # -> 预热缓存 -> Get-CachedConfig"整条链路。
+        # 本用例在 pwsh 子进程里用"假 HOME"完整重跑一次配置初始化, 直接验证
+        # "用户配置 -> Config -> 预热缓存 -> Get-CachedConfig"整条链路。
+        # 不能在 Pester 会话内直接遮蔽 $HOME: 它是只读自动变量 (CI 实测,
+        # 赋值抛 SessionStateUnauthorizedAccessException 且触发 PSSA Error)。
+        # Windows 上 pwsh 子进程的 $HOME 由 $env:USERPROFILE 派生, 把假 home
+        # 通过环境变量传入子进程即可, 生产代码不需要为测试开钩子。
         $fakeHome = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('sp-home-' + [guid]::NewGuid().ToString('N'))
         $configDir = Join-Path -Path $fakeHome -ChildPath '.ShellPrompt'
         try {
@@ -67,14 +71,24 @@ Describe '用户配置覆盖与预热缓存' {
                 -Value '$Config.Colors.FreshGreen = ''SP-SENTINEL-GREEN''' -Encoding utf8
 
             $initConfig = $script:initConfigPath
-            $actual = @(& {
-                    # $HOME 只在这个子作用域里被替换, 用户的真实 HOME 不受影响
-                    $HOME = $fakeHome
-                    . $initConfig
-                    Get-CachedConfig -Section 'Colors' -Key 'FreshGreen' -Default 'NO-VALUE'
-                })[-1]
-            $actual | Should -Be 'SP-SENTINEL-GREEN'
-        } finally {
+            $inline = ". '$initConfig'; " +
+                      "Get-CachedConfig -Section 'Colors' -Key 'FreshGreen' -Default 'NO-VALUE'"
+            $oldUserProfile = $env:USERPROFILE
+            try {
+                $env:USERPROFILE = $fakeHome
+                $output = & pwsh -NoProfile -NoLogo -Command $inline
+            }
+            finally {
+                if ($null -eq $oldUserProfile) {
+                    Remove-Item 'Env:USERPROFILE' -ErrorAction SilentlyContinue
+                }
+                else {
+                    $env:USERPROFILE = $oldUserProfile
+                }
+            }
+            @($output | Select-Object -Last 1) | Should -Be 'SP-SENTINEL-GREEN'
+        }
+        finally {
             Remove-Item -LiteralPath $fakeHome -Recurse -Force -ErrorAction SilentlyContinue
             # 本用例会在测试文件作用域留下 $script:Config / $script:ColorCache 等变量, 清掉以免影响其它用例
             Remove-Variable -Name 'Config', 'ColorCache', 'Esc', 'ShellPromptRoot' -Scope Script -ErrorAction SilentlyContinue
