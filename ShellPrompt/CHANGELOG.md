@@ -1,9 +1,15 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to this project are recorded in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+> **⚠️ 本文件已冻结为历史快照（2026-10-29 标注）**
+>
+> - 历史段曾永久丢失；现存条目按原样保留，**不再新增、重写或回填**。
+> - `[Unreleased]` 及早期版本条目描述的是**当时**的实现，其中引用的部分文件（如 `Invoke-ConsoleMenu.ps1` / `Invoke-MenuMachine.ps1`）已在 v2.0 单轨化重构中移除，请勿将其当作现行设计依据。
+> - 现行用户可见变更同步义务落在 `README.md` 与 PR 描述，规则见 [`docs/agents/testing.md`](../docs/agents/testing.md)。
 
 ## [Unreleased]
 

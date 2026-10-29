@@ -1,10 +1,10 @@
-> 本文件由根 AGENTS.md 路由触发加载。上级约束见根文件“三层边界”。
+> 本文件由根 [`AGENTS.md`](../../AGENTS.md) 文档导航按需路由加载；通用工作原则与安全边界见根文件。
 
 # 开发规约（Development Guidelines）
 
 ## 命名与作用域（Naming & Scope）
 
-- **ALWAYS** use approved PowerShell verbs (`Get-Verb`). (e.g., `Get-TmuxSession`, `Connect-SshHost`). **NEVER** use unapproved verbs like `test1` or `ssh123`.
+- **ALWAYS** use approved PowerShell verbs (`Get-Verb`). (e.g., `Get-TmuxSessions`, `Get-SshConfigHosts`). **NEVER** use unapproved verbs like `test1` or `ssh123`.
 - **NEVER** use global variables (`$global:`) without explicit architectural justification. **ALWAYS** prefer `$script:` or local scope.
 
 ## 函数拆分与单一职责（Function Decomposition & Single Responsibility）

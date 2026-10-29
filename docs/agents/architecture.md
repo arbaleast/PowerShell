@@ -1,4 +1,4 @@
-> 本文件由根 AGENTS.md 路由触发加载。上级约束见根文件“三层边界”。
+> 本文件由根 [`AGENTS.md`](../../AGENTS.md) 文档导航按需路由加载；通用工作原则与安全边界见根文件。
 
 # 架构与目录规则
 
@@ -11,6 +11,8 @@
 
 ## 兼容性与降级（Compatibility & Fallbacks）
 
+- **支持环境**：PowerShell **7.6+**（唯一支持版本；`ShellPrompt.psd1` 声明 `PowerShellVersion = '7.6'`，抬到 7.6 是因为菜单主轨依赖的 `Modules/PSTui` 为 .NET 10 二进制模块）、**Windows**；**不支持** Windows PowerShell 5.1。
+  - **当前实现状态（2026-10-29 核对）**：代码是 **Windows-first**，且**只有 Windows 是受支持的平台**。SSH / tmux 主链路硬编码 `ssh.exe`，另有 `$env:LOCALAPPDATA`（fnm env 缓存）、`$env:TEMP`、`$env:USERPROFILE`、`where.exe`、`UserKnownHostsFile=NUL` 等 Windows 专有假设 —— **在 Linux / WSL 上这些路径不可用**（菜单、天气等纯终端功能不受影响）。Linux / WSL 是项目**目标**而非当前支持状态；改造前请先读 [`domain-ssh-tmux.md`](domain-ssh-tmux.md)。
 - Prefer feature detection over version checking.
 - 模块最低版本由 `ShellPrompt.psd1` 的 `PowerShellVersion` 统一把守, 代码内**不再**做 PS 5.1 分支。
 - `PwshSpectreConsole` 是**硬依赖** (不是可选依赖): 加载失败时 `ShellPrompt.psm1` 直接 `throw`, 不做静默降级。
@@ -18,7 +20,7 @@
   - `Private/Get-ConsoleUiBackend.ps1` 的 `Get-ConsoleUiBackend` 只做**主轨可用性检测** (PSTui 可发现性 / 命令来源冲突 / `Terminal.Gui` 主版本争用 / 交互式宿主), 其中 `Backend` **恒为** `'GridView'`。
   - **检测是惰性的** (2026-10-18 起): 模块加载期**不执行**检测 (实测是模块导入阶段最大单一热点, 约 500ms, 启动期用不到), 改由 `Get-ConsoleUiState` 在首次真正需要时现场检测一次并缓存到 `$script:ConsoleUiBackend`, 后续复用。
   - 检测自身的实现成本也已优化: 模块可发现性用目录级查找 (`Get-ConsoleUiModuleOnDisk`) 替代 `Get-Module -ListAvailable`, 同名命令来源用 `Get-Command -ListAvailable` (去掉 `-All`, 避免全量模块元数据装载) —— 四项诊断语义保持不变。
-  - **Phase 1 启动图缓存** (2026-10-18 起): 依赖闭包的解析结果缓存到 `$env:LOCALAPPDATA\ShellPrompt\startup-graph.json`; 下次启动校验所有参与文件的 `(LastWriteTimeUtc, Length)` 未变则命中缓存, 跳过索引 + AST 解析。缓存损坏 / 解析失败 / 写失败一律**静默回退**到全量重建, 不影响启动。
+  - **Phase 1 加载清单是显式有序的** (2026-10-29 改): 原先的"函数名 -> 定义文件"静态索引 + AST 依赖闭包 + 拓扑排序 + `$env:LOCALAPPDATA\ShellPrompt\startup-graph.json` 缓存已删除。实际依赖闭包只有 5 个文件 (`Private/Initialize-Config.ps1` → `Private/Resolve-ColorTable.ps1` → `Private/New-WelcomeBanner.ps1`, 另加自包含的 `Private/Initialize-FnmEnvironment.ps1` 与 `Public/Show-UserScoopLogo.ps1`), 用 `$script:StartupLoadOrder` 显式列出即可。**收益**: 启动期不再扫描 Private/Public 全目录、不再向用户目录写 JSON; **代价**: 依赖从"自动推导"变成"手工维护", 由自检兜底 —— 自检用 AST 取出这 5 个文件里真实调用的命令名逐个检查可见性, 缺失时 `Write-Warning` 报出"哪个文件缺哪个命令"。
   - `Show-HostSelector` / `Show-SessionManager` / `Show-TmuxSessionList` 是纯分发器, 调用实现前统一执行 `Assert-ConsoleUiReady -Feature <功能名>`。
   - `PSTui` 缺失 / 版本冲突 / `Terminal.Gui` 主版本争用 / stdin 被重定向 → `Assert-ConsoleUiReady` 抛出**可定位的终止错误** (含功能名与原因), **不再静默降级到其它渲染实现**。
   - 调用方 (如 `Start-TmuxSession`) 不感知渲染实现差异, 分发器已无 `-Backend` 参数。
@@ -38,7 +40,7 @@
 - `UI.Theme.Slots.Focus` / `Active` / `Highlight` 均为 **亮绿字 (`137,209,133`) + 稍亮底 (`40,40,40`)** —— 与 `Normal` (`137,209,133`/`30,30,30`) 相比仅底色亮度差 1 级, 列头与正文均为绿字, 整张表与绿主题统一; 同时保留 v2.1 的不变量"两种焦点状态下的选中行高亮一致"。
 - `UI.Theme.Slots.Editable` 为 **亮绿字 (`137,209,133`) + 近黑底 (`20,20,20`)** —— 过滤框在焦点态下用暗底承托绿字, 输入文字始终清晰可读。
 - `HotFocus` / `HotActive` (其他 View 的聚焦热区, TableView 不读取) 仍保留 v2.1 的浅色不变 —— 它们不影响 GridView 视觉, 改它们属于无收益改动。
-- 详见 [`README.md`](../README.md) 的「GridView 配色 (Terminal.Gui `Scheme` 槽位)」与 [`ShellPrompt/CHANGELOG.md`](../ShellPrompt/CHANGELOG.md) 的 `[Unreleased] / Changed` 条目。
+- 详见 [`README.md`](../../README.md) 的「GridView 配色 (Terminal.Gui `Scheme` 槽位)」与 [`ShellPrompt/CHANGELOG.md`](../../ShellPrompt/CHANGELOG.md) 的 `[Unreleased] / Changed` 条目。
 
 ## 启动期时序 (2026-10-18)
 
@@ -46,11 +48,11 @@ profile 加载分为 3 个阶段, 各阶段目标与耗时归因:
 
 | 阶段 | 内容 | 关键耗时 (本仓库现状) | 是否可优化 |
 |---|---|---|---|
-| 阶段 1 (欢迎语) | dot-source banner 链路 + 启动图缓存命中 | ~330ms (含文件 IO) | 已优化 (Phase 1 启动图缓存) |
-| 阶段 2 (延迟初始化同步路径) | Invoke-DeferredInit: fnm (走缓存) + starship (同步 init, `-join "``n"` 后 iex) + PSReadLine import + set options | ~520ms + ~365~453ms (starship init 子进程) | starship init 是 profile 期最大单一开销 (回退到 P3 优化前的同步路径; PS 7.6+ 下 `&` 捕获的多行输出必须先 join 成单字符串再 `Invoke-Expression`, 否则参数绑定器拒收, 详见 `CHANGELOG.md` `[Unreleased] / Fixed`) |
-| 阶段 3 (Import-Module ShellPrompt) | dot-source 30 Private (移除 5 个 wttr 相关后) + 加载 PwshSpectreConsole + 用户配置 | ~960ms (估) | **不可动** (AGENTS.md 红线 + 架构级变更) |
+| 阶段 1 (欢迎语) | dot-source 5 个启动期文件 + AST 自检 | ~50ms (估) | 2026-10-29 去掉启动图缓存, 改为显式有序清单 |
+| 阶段 2 (延迟初始化同步路径) | Invoke-DeferredInit: fnm (走缓存) + starship (同步 init, `-join "``n"` 后 iex) + PSReadLine import + set options | ~520ms + ~365~453ms (starship init 子进程) | starship init 是 profile 期最大单一开销 (回退到 P3 优化前的同步路径; PS 7.6+ 下 `&` 捕获的多行输出必须先 join 成单字符串再 `Invoke-Expression`, 否则参数绑定器拒收, 详见 profile 阶段 2 代码内注释) |
+| 阶段 3 (首次调用 `sss` / `ssh-copy-id` 触发**懒加载** `Import-Module ShellPrompt`) | dot-source 全部 Private (2026-10-29 核对共 41 个 .ps1; `Initialize-Config` 由 psm1 先单独加载并守卫) + 加载 PwshSpectreConsole (+ 用户配置, 由 `Private/Initialize-Config.ps1` 加载) | ~960ms (估) | **架构级不变量, 改动前先在本文件核实设计**。注意: profile 启动期**不会**导入模块, 模块加载只发生在首次调用公开命令时 |
 
-**Starship 同步 init**: 阶段 2 `Invoke-DeferredInit` 同步执行 `starship init powershell --print-full-init` (约 365~453ms 子进程), 由 starship 自身替换 `Function:prompt` 完成接管. 历史 P3 优化方案 (由 `Register-WttrPromptWrapper` wrapper 惰性触发 `Initialize-StarshipLazy`) 已随方案 B 部分回退一并移除, 详见 `CHANGELOG.md` `[Unreleased] / Removed`.
+**Starship 同步 init**: 阶段 2 `Invoke-DeferredInit` 同步执行 `starship init powershell --print-full-init` (约 365~453ms 子进程), 由 starship 自身替换 `Function:prompt` 完成接管. 历史 P3 优化方案 (由 `Register-WttrPromptWrapper` wrapper 惰性触发 `Initialize-StarshipLazy`) 已随方案 B 部分回退一并移除 (该撤销未记入 CHANGELOG, 以源码与本文件为准).
 
 **fnm env 缓存**: 阶段 2 `Invoke-DeferredInit` 调 `Initialize-FnmEnvironment`. 首次或 fnm.exe / node 版本列表变化时跑一次 `fnm env` 子进程并写 `$env:LOCALAPPDATA\ShellPrompt\fnm-env.json`; 后续启动直接读缓存 + 重算 PATH. **PATH 永不缓存** (避免静默覆盖用户临时 PATH 修改). 保底路径: 解析 aliases 目录失败时回退到同步执行 `fnm env` 子进程.
 
@@ -58,28 +60,25 @@ profile 加载分为 3 个阶段, 各阶段目标与耗时归因:
 
 本节是所有配色键 / Scheme 槽位 / 渲染层取色关系的速查表, 单轨 PSTui 时代 (2026-10-18 起) 的唯一权威描述。任何颜色改动先查这里再动手。
 
-### Colors 域（`$config.Colors.*`, 14 键）
+### Colors 域（`$config.Colors.*`, 9 键）
 
 全部定义见 [`Private/Initialize-Config.ps1`](../../ShellPrompt/Private/Initialize-Config.ps1) `Colors = [ordered]@{...}`, 值为带 ESC 的 ANSI 转义串, 渲染时由 `Get-CachedConfig -Section Colors -Key <键>` 命中 `$script:ColorCache` 快路径。
 
 | 类别 | 键名 | RGB 默认 | 消费方 | 备注 |
 |---|---|---|---|---|
-| 主绿色系 | `FreshGreen` | 137,209,133 | Tables / 状态行 / TG Scheme `Normal/Focus/Active/Highlight/Editable` | 表格正文主色 |
-| 主绿色系 | `SageGreen` | 159,177,159 | TG Scheme `HotNormal/ReadOnly` | 弱化绿, 热区与只读行 |
-| 灰阶层 | `DarkGray` | 50,50,50 | 备用 | 当前渲染层未消费 |
-| 灰阶层 | `MidGray` | 100,100,100 | TG Scheme `Disabled` | 禁用态 |
-| 灰阶层 | `LightGray` | 180,180,180 | 备用 | 当前渲染层未消费 |
-| 灰阶层 | `White` | 255,255,255 | 备用 | 当前渲染层未消费 |
-| 标题色 | `Cyan` | 112,199,209 | Title 区主色 / wttr 后缀拼接 | 仅一条路径消费 |
-| 死代码 | `Danger` | 220,90,90 | 未消费 | PSTui 不支持行级配色, 已定义未用 |
-| 死代码 | `Warning` | 220,180,80 | 未消费 | 同上, 用 `⚠` 符号代替 |
-| 死代码 | `SelectedBg` | 112,199,209 底 + 近黑字 | 未消费 | TG Scheme `Focus` 已接管高亮 |
-| 暗背景 | `BgDarker` | 40,40,40 | TG Scheme 多个槽位底 | 表格基色一致 |
-| 复位 | `Rst` | (重置 ESC `\e[0m`) | 全部 Spectre / ANSI 输出末尾 | 必需, 漏写颜色泄漏 |
-| 强调 | `Bold` | `\e[1m` | 备用 | 当前渲染层未消费 |
-| 弱化 | `Dim` | `\e[2m` | `Write-GridViewHint` 提示行外层 | 唯一显式消费 |
+| 主绿色系 | `FreshGreen` | 137,209,133 | Tables / 状态行 / TG Scheme `Normal/Focus/Active/Highlight/Editable` | 表格正文主色；语义 `Primary` / `Border` |
+| 主绿色系 | `SageGreen` | 159,177,159 | TG Scheme `HotNormal/ReadOnly` | 弱化绿, 热区与只读行；语义 `Accent` |
+| 灰阶层 | `DarkGray` | 50,50,50 | 语义 `Dark`（当前无调用方请求） | 语义位保留, 未预热 |
+| 灰阶层 | `MidGray` | 100,100,100 | TG Scheme `Disabled` | 禁用态；语义 `Muted` |
+| 标题色 | `Cyan` | 112,199,209 | 语义 `Cyan`（当前无调用方请求） | Title 区配色已由 TG Scheme 接管 |
+| 状态色 | `Danger` | 220,90,90 | State 列 `⚠ 危险` 文字染色 (`Format-GridViewStateText` ← `Get-GridViewManagerRow`) | PSTui 无行级配色, 语义落在 State 文本 |
+| 状态色 | `Warning` | 220,180,80 | State 列 `⚠ 备选` 文字染色 (同上) | 同上 |
+| 选中底 | `SelectedBg` | 112,199,209 底 + 近黑字 | 语义 `SelectedBg`（当前无调用方请求） | TG Scheme `Focus` 已接管高亮 |
+| 复位 | `Rst` | (重置 ESC `\e[0m`) | 全部 Spectre / ANSI 输出末尾; `Format-GridViewStateText` 也读取 | 必需, 漏写颜色泄漏 |
 
-总计：消费中 **8 键**（FreshGreen / SageGreen / MidGray / Cyan / BgDarker / Rst / Dim + 列头走 `Colors.*` 的间接消费 Bold） / 死代码 **3 键**（Danger / Warning / SelectedBg, 待 PSTui 支持行级配色前不会复活）/ 备用 **3 键**（DarkGray / LightGray / White）。
+总计（2026-10-29 核对）：**9 键**。直接消费 **6 键**（`FreshGreen` / `SageGreen` / `MidGray` / `Danger` / `Warning` / `Rst`）/ 经 `$script:ColorSemanticMap` 保留语义但当前无调用方 **3 键**（`DarkGray` / `Cyan` / `SelectedBg`）。主绿色系的 RGB 值同时是 `UI.Theme.Slots` 的默认色来源，但 Scheme 槽位落地为 RGB 字面量，不经由 `Colors.*` 键读取。
+
+> **2026-10-29 清理**：因长期无消费方已删除 5 键 —— `LightGray` / `White` / `BgDarker` / `Bold` / `Dim`。它们既不在 `$script:ColorSemanticMap` 里, 也没有任何直接读取点; 在 `config.ps1` 里继续配置会被静默忽略。
 
 ### UI 域 / `Theme.Slots`（10 槽位）
 
@@ -89,11 +88,11 @@ profile 加载分为 3 个阶段, 各阶段目标与耗时归因:
 |---|---|---|
 | `Normal` | 正文单元格 / 无焦点列头 / 列间竖线 | FreshGreen + 暗背景 |
 | `HotNormal` | 快捷键热区 | SageGreen |
-| `Focus` | 聚焦列头 / 有焦点时选中行 | FreshGreen + BgDarker |
+| `Focus` | 聚焦列头 / 有焦点时选中行 | FreshGreen + 暗背景(40,40,40) |
 | `HotFocus` | 其他 View 的聚焦热区 (TableView 不读取) | — |
-| `Active` | 无焦点时选中行 | FreshGreen + BgDarker |
+| `Active` | 无焦点时选中行 | FreshGreen + 暗背景(40,40,40) |
 | `HotActive` | 激活项热区 (TableView 不读取) | — |
-| `Highlight` | 高亮标记 | FreshGreen + BgDarker |
+| `Highlight` | 高亮标记 | FreshGreen + 暗背景(40,40,40) |
 | `Editable` | 过滤框输入区 | FreshGreen + 近黑底 |
 | `ReadOnly` | 只读行 | SageGreen |
 | `Disabled` | 禁用行 | MidGray |
@@ -122,7 +121,7 @@ profile 加载分为 3 个阶段, 各阶段目标与耗时归因:
 
 ## 提示符 wrapper（2026-10-18 起已移除）
 
-本项目**不接管** `Function:prompt`. 历史版本中的模块侧 [`Private/Register-WttrPromptWrapper.ps1`](../../ShellPrompt/Private/Register-WttrPromptWrapper.ps1) (含 starship lazy init / 锚点替换 / 底部 ASCII 栏拼接) 已于 2026-10-18 整体移除 (含配套 3 个 Pester 文件 + 4 个 Private 工具函数 + `Initialize-StarshipLazy.ps1`), 详见 [`CHANGELOG.md`](../../ShellPrompt/CHANGELOG.md) `[Unreleased] / Removed`. 用户的 prompt 由 starship 原生接管 (`profile 阶段 2` 同步执行 `$starshipInit = & $starship init powershell --print-full-init; Invoke-Expression ($starshipInit -join "`n")`, PS 7.6+ 必须先 join), 提示符样式不受本项目约束.
+本项目**不接管** `Function:prompt`. 历史版本中的模块侧 `Private/Register-WttrPromptWrapper.ps1` (含 starship lazy init / 锚点替换 / 底部 ASCII 栏拼接) 已于 2026-10-18 整体移除 (含配套 3 个 Pester 文件 + 4 个 Private 工具函数 + `Initialize-StarshipLazy.ps1`; 该撤销未记入 CHANGELOG, 以源码与本文件为准). 用户的 prompt 由 starship 原生接管 (`profile 阶段 2` 同步执行 `$starshipInit = & $starship init powershell --print-full-init; Invoke-Expression ($starshipInit -join "`n")`, PS 7.6+ 必须先 join), 提示符样式不受本项目约束.
 
 **`Microsoft.PowerShell_profile.ps1` 的边界**: profile 始终**仅**做模块加载 + 环境初始化 + 启动配置, 不持有任何 wttr 业务代码 (符合 AGENTS.md 的"profile 不放业务逻辑"原则).
 
@@ -130,10 +129,10 @@ profile 加载分为 3 个阶段, 各阶段目标与耗时归因:
 
 三个交互菜单 (SSH 主机选择器 / tmux 管理器 / tmux 会话列表) 的 PSTui 窗口**标题区**自动追加一行 wttr 天气短串 (如 `Shanghai: 🌫 +18°C`), 顶部居中显示. 渲染入口在 [`Private/Invoke-GridViewMenu.ps1`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1) 的三个 `Invoke-GridViewPrompt` 调用点 (`Invoke-GridViewHostSelector` / `Invoke-GridViewSessionManager` / `Invoke-GridViewSessionList`):
 
-- 在拼装 `-Title` 参数之前, 用一段 6 行模板 (判定 `$script:Config.Weather.Enabled` + `Get-WttrWeather -Format Short -CacheMinutes 10 -ErrorAction SilentlyContinue`) 计算 `$wttrSuffix`;
+- 在拼装 `-Title` 参数之前, 由 [`Private/Get-WttrTitleSuffix.ps1`](../../ShellPrompt/Private/Get-WttrTitleSuffix.ps1) 判定 `$script:Config.Weather.Enabled` 并调用 `Get-WttrWeather -Format CustomUrl -Url 'https://wttr.in/?format=j1&lang=zh' -CacheMinutes 10 -ErrorAction SilentlyContinue`, 自解析 j1 JSON 拼出 ` - <City>: <中文描述> <Temp>°C` 片段;
 - 启用且 wttr 非空时, 把 ` - <wttr>` 拼到原标题末尾; 否则 `$wttrSuffix` 留空, 标题原样渲染;
 - `Get-WttrWeather` 自带超时/失败兜底(返回 `''`), 此处再加 `IsNullOrWhiteSpace` 兜底, 永不抛异常, 永不破坏 PSTui 标题;
 - 数据源: [`Private/Get-WttrWeather.ps1`](../../ShellPrompt/Private/Get-WttrWeather.ps1) (`$script:_WttrCache` 缓存键 = `"Format|Url"`);
-- 副作用: `Write-GridViewHint` 已**不再**渲染天气片段 (上一轮挂在提示行末尾的逻辑已撤掉), 避免与标题区重复显示; 函数回到只渲染按键提示的纯职责.
+- 副作用: 提示行草案 A.2 已撤回, `Write-GridViewHint` 已**不再**渲染天气片段 (上一轮挂在提示行末尾的逻辑已撤掉), 避免与标题区重复显示; 该函数本身已于 2026-10-29 一并删除(无生产调用方).
 
-`Weather` 配置域已收缩为只 `Enabled` 布尔 (历史 7 键已随 wrapper 全链路移除):
+`Weather` 配置域现为两个键 (历史 wrapper 时代的 7 键已随移除收缩): `Weather.Enabled` (总开关, 默认 `$true`) 与 `Weather.ExtraWeatherDescMap` (用户扩展中文字典, 默认 `[ordered]@{}`), 定义见 [`Private/Initialize-Config.ps1`](../../ShellPrompt/Private/Initialize-Config.ps1); 细则见 [`docs/agents/wttr.md`](wttr.md).
