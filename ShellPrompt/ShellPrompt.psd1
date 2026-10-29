@@ -1,18 +1,21 @@
 @{
     RootModule        = 'ShellPrompt.psm1'
-    ModuleVersion     = '1.3.1'
+    ModuleVersion     = '2.0.0'
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
     Author            = 'arbaleast'
     CompanyName       = 'arbaleast'
     Copyright         = '(c) 2024 arbaleast. All rights reserved.'
-    Description       = 'PowerShell prompt and remote session management module'
-    PowerShellVersion = '5.1'
+    Description       = 'PowerShell prompt and remote session management module (Spectre.Console UI)'
+    # v2.0 单轨 Spectre: UI 渲染全部走 PwshSpectreConsole (要求 7.6+),
+    # 已移除 PS 5.1 fallback 与 legacy ANSI 路径
+    PowerShellVersion = '7.6'
 
     FunctionsToExport = @(
         'Show-UserScoopLogo'
         'Start-TmuxSession'
         'Copy-SshPublicKey'
         'Invoke-Reload'
+        'Update-Weather'
     )
 
     CmdletsToExport   = @()

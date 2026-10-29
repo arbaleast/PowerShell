@@ -34,6 +34,9 @@ param(
         # 跳过 SSH 主机密钥检查（仅在信任网络中使用，默认关闭）
         [switch]$SkipHostKeyCheck,
 
+        # 强制双 -t: 详见 Get-SshArgs -DoubleTty 说明。默认关闭。
+        [switch]$DoubleTty,
+
         # PassThru: 在 CaptureOutput 模式下，返回包含 Output 和 ExitCode 的对象
         [switch]$PassThru
     )
@@ -41,7 +44,8 @@ param(
     # 委托 Get-SshArgs 构建 SSH 参数列表
     $sshArgs = Get-SshArgs -HostName $HostName -RemoteCommand $RemoteCommand `
         -Interactive:$Interactive -ConnectTimeout $ConnectTimeout `
-        -SkipHostKeyCheck:$SkipHostKeyCheck -CaptureOutput:$CaptureOutput
+        -SkipHostKeyCheck:$SkipHostKeyCheck -CaptureOutput:$CaptureOutput `
+        -DoubleTty:$DoubleTty
 
     if ($CaptureOutput) {
         # 捕获输出路径: 委托 Invoke-SshCaptureOutput

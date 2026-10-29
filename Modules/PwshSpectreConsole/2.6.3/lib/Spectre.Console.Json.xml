@@ -1,0 +1,338 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Spectre.Console.Json</name>
+    </assembly>
+    <members>
+        <member name="T:Spectre.Console.Json.IJsonParser">
+            <summary>
+            Represents a JSON parser.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Json.IJsonParser.Parse(System.String)">
+            <summary>
+            Parses the provided JSON into an abstract syntax tree.
+            </summary>
+            <param name="json">The JSON to parse.</param>
+            <returns>An <see cref="T:Spectre.Console.Json.Syntax.JsonSyntax"/> instance.</returns>
+        </member>
+        <member name="T:Spectre.Console.Json.JsonText">
+            <summary>
+            A renderable piece of JSON text.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.JsonText.BracesStyle">
+            <summary>
+            Gets or sets the style used for braces.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.JsonText.BracketsStyle">
+            <summary>
+            Gets or sets the style used for brackets.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.JsonText.MemberStyle">
+            <summary>
+            Gets or sets the style used for member names.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.JsonText.ColonStyle">
+            <summary>
+            Gets or sets the style used for colons.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.JsonText.CommaStyle">
+            <summary>
+            Gets or sets the style used for commas.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.JsonText.StringStyle">
+            <summary>
+            Gets or sets the style used for string literals.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.JsonText.NumberStyle">
+            <summary>
+            Gets or sets the style used for number literals.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.JsonText.BooleanStyle">
+            <summary>
+            Gets or sets the style used for boolean literals.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.JsonText.NullStyle">
+            <summary>
+            Gets or sets the style used for <c>null</c> literals.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.JsonText.Parser">
+            <summary>
+            Gets or sets the JSON parser.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonText.#ctor(System.String)">
+            <summary>
+            Initializes a new instance of the <see cref="T:Spectre.Console.Json.JsonText"/> class.
+            </summary>
+            <param name="json">The JSON to render.</param>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonText.Build">
+            <inheritdoc/>
+        </member>
+        <member name="T:Spectre.Console.Json.JsonTextExtensions">
+            <summary>
+            Contains extension methods for <see cref="T:Spectre.Console.Json.JsonText"/>.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.BracesStyle(Spectre.Console.Json.JsonText,Spectre.Console.Style)">
+            <summary>
+            Sets the style used for braces.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="style">The style to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.BracketStyle(Spectre.Console.Json.JsonText,Spectre.Console.Style)">
+            <summary>
+            Sets the style used for brackets.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="style">The style to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.MemberStyle(Spectre.Console.Json.JsonText,Spectre.Console.Style)">
+            <summary>
+            Sets the style used for member names.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="style">The style to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.ColonStyle(Spectre.Console.Json.JsonText,Spectre.Console.Style)">
+            <summary>
+            Sets the style used for colons.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="style">The style to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.CommaStyle(Spectre.Console.Json.JsonText,Spectre.Console.Style)">
+            <summary>
+            Sets the style used for commas.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="style">The style to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.StringStyle(Spectre.Console.Json.JsonText,Spectre.Console.Style)">
+            <summary>
+            Sets the style used for string literals.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="style">The style to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.NumberStyle(Spectre.Console.Json.JsonText,Spectre.Console.Style)">
+            <summary>
+            Sets the style used for number literals.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="style">The style to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.BooleanStyle(Spectre.Console.Json.JsonText,Spectre.Console.Style)">
+            <summary>
+            Sets the style used for boolean literals.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="style">The style to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.NullStyle(Spectre.Console.Json.JsonText,Spectre.Console.Style)">
+            <summary>
+            Sets the style used for <c>null</c> literals.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="style">The style to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.BracesColor(Spectre.Console.Json.JsonText,Spectre.Console.Color)">
+            <summary>
+            Sets the color used for braces.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="color">The color to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.BracketColor(Spectre.Console.Json.JsonText,Spectre.Console.Color)">
+            <summary>
+            Sets the color used for brackets.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="color">The color to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.MemberColor(Spectre.Console.Json.JsonText,Spectre.Console.Color)">
+            <summary>
+            Sets the color used for member names.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="color">The color to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.ColonColor(Spectre.Console.Json.JsonText,Spectre.Console.Color)">
+            <summary>
+            Sets the color used for colons.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="color">The color to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.CommaColor(Spectre.Console.Json.JsonText,Spectre.Console.Color)">
+            <summary>
+            Sets the color used for commas.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="color">The color to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.StringColor(Spectre.Console.Json.JsonText,Spectre.Console.Color)">
+            <summary>
+            Sets the color used for string literals.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="color">The color to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.NumberColor(Spectre.Console.Json.JsonText,Spectre.Console.Color)">
+            <summary>
+            Sets the color used for number literals.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="color">The color to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.BooleanColor(Spectre.Console.Json.JsonText,Spectre.Console.Color)">
+            <summary>
+            Sets the color used for boolean literals.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="color">The color to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Json.JsonTextExtensions.NullColor(Spectre.Console.Json.JsonText,Spectre.Console.Color)">
+            <summary>
+            Sets the color used for <c>null</c> literals.
+            </summary>
+            <param name="text">The JSON text instance.</param>
+            <param name="color">The color to set.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="T:Spectre.Console.Json.Syntax.JsonArray">
+            <summary>
+            Represents an array in the JSON abstract syntax tree.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.Syntax.JsonArray.Items">
+            <summary>
+            Gets the array items.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Json.Syntax.JsonArray.#ctor">
+            <summary>
+            Initializes a new instance of the <see cref="T:Spectre.Console.Json.Syntax.JsonArray"/> class.
+            </summary>
+        </member>
+        <member name="T:Spectre.Console.Json.Syntax.JsonBoolean">
+            <summary>
+            Represents a boolean literal in the JSON abstract syntax tree.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.Syntax.JsonBoolean.Lexeme">
+            <summary>
+            Gets the lexeme.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Json.Syntax.JsonBoolean.#ctor(System.String)">
+            <summary>
+            Initializes a new instance of the <see cref="T:Spectre.Console.Json.Syntax.JsonBoolean"/> class.
+            </summary>
+            <param name="lexeme">The lexeme.</param>
+        </member>
+        <member name="T:Spectre.Console.Json.Syntax.JsonMember">
+            <summary>
+            Represents a member in the JSON abstract syntax tree.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.Syntax.JsonMember.Name">
+            <summary>
+            Gets the member name.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.Syntax.JsonMember.Value">
+            <summary>
+            Gets the member value.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Json.Syntax.JsonMember.#ctor(System.String,Spectre.Console.Json.Syntax.JsonSyntax)">
+            <summary>
+            Initializes a new instance of the <see cref="T:Spectre.Console.Json.Syntax.JsonMember"/> class.
+            </summary>
+            <param name="name">The name.</param>
+            <param name="value">The value.</param>
+        </member>
+        <member name="T:Spectre.Console.Json.Syntax.JsonNull">
+            <summary>
+            Represents a null literal in the JSON abstract syntax tree.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.Syntax.JsonNull.Lexeme">
+            <summary>
+            Gets the lexeme.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Json.Syntax.JsonNull.#ctor(System.String)">
+            <summary>
+            Initializes a new instance of the <see cref="T:Spectre.Console.Json.Syntax.JsonNull"/> class.
+            </summary>
+            <param name="lexeme">The lexeme.</param>
+        </member>
+        <member name="T:Spectre.Console.Json.Syntax.JsonObject">
+            <summary>
+            Represents an object in the JSON abstract syntax tree.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.Syntax.JsonObject.Members">
+            <summary>
+            Gets the object's members.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Json.Syntax.JsonObject.#ctor">
+            <summary>
+            Initializes a new instance of the <see cref="T:Spectre.Console.Json.Syntax.JsonObject"/> class.
+            </summary>
+        </member>
+        <member name="T:Spectre.Console.Json.Syntax.JsonString">
+            <summary>
+            Represents a string literal in the JSON abstract syntax tree.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Json.Syntax.JsonString.Lexeme">
+            <summary>
+            Gets the lexeme.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Json.Syntax.JsonString.#ctor(System.String)">
+            <summary>
+            Initializes a new instance of the <see cref="T:Spectre.Console.Json.Syntax.JsonString"/> class.
+            </summary>
+            <param name="lexeme">The lexeme.</param>
+        </member>
+        <member name="T:Spectre.Console.Json.Syntax.JsonSyntax">
+            <summary>
+            Represents a syntax node in the JSON abstract syntax tree.
+            </summary>
+        </member>
+    </members>
+</doc>

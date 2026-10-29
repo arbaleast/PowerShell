@@ -1,0 +1,254 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Spectre.Console.Testing</name>
+    </assembly>
+    <members>
+        <member name="T:Spectre.Console.Testing.ShouldlyExtensions">
+            <summary>
+            Provides extensions for testing using the Shouldly-style fluent assertions.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Testing.ShouldlyExtensions.And``1(``0,System.Action{``0})">
+            <summary>
+            Performs the specified action on the given object and then returns the object.
+            Useful for fluent testing patterns where additional assertions or operations
+            are chained together in a readable manner.
+            </summary>
+            <typeparam name="T">The type of the object.</typeparam>
+            <param name="item">The object to operate on.</param>
+            <param name="action">An action to perform on the object.</param>
+            <returns>The original object, to allow further chaining.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown if <paramref name="action"/> is null.</exception>
+        </member>
+        <member name="T:Spectre.Console.Testing.StringExtensions">
+            <summary>
+            Contains extensions for <see cref="T:System.String"/>.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Testing.StringExtensions.TrimLines(System.String)">
+            <summary>
+            Returns a new string with all lines trimmed of trailing whitespace.
+            </summary>
+            <param name="value">The string to trim.</param>
+            <returns>A new string with all lines trimmed of trailing whitespace.</returns>
+        </member>
+        <member name="M:Spectre.Console.Testing.StringExtensions.NormalizeLineEndings(System.String)">
+            <summary>
+            Returns a new string with normalized line endings.
+            </summary>
+            <param name="value">The string to normalize line endings for.</param>
+            <returns>A new string with normalized line endings.</returns>
+        </member>
+        <member name="T:Spectre.Console.Testing.StyleExtensions">
+            <summary>
+            Contains extensions for <see cref="T:Spectre.Console.Style"/>.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Testing.StyleExtensions.SetColor(Spectre.Console.Style,Spectre.Console.Color,System.Boolean)">
+            <summary>
+            Sets the foreground or background color of the specified style.
+            </summary>
+            <param name="style">The style.</param>
+            <param name="color">The color.</param>
+            <param name="foreground">Whether or not to set the foreground color.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="T:Spectre.Console.Testing.TestConsoleExtensions">
+            <summary>
+            Contains extensions for <see cref="T:Spectre.Console.Testing.TestConsole"/>.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleExtensions.Colors(Spectre.Console.Testing.TestConsole,Spectre.Console.ColorSystem)">
+            <summary>
+            Sets the console's color system.
+            </summary>
+            <param name="console">The console.</param>
+            <param name="colors">The color system to use.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleExtensions.SupportsAnsi(Spectre.Console.Testing.TestConsole,System.Boolean)">
+            <summary>
+            Sets whether or not ANSI is supported.
+            </summary>
+            <param name="console">The console.</param>
+            <param name="enable">Whether or not VT/ANSI control codes are supported.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleExtensions.Interactive(Spectre.Console.Testing.TestConsole)">
+            <summary>
+            Makes the console interactive.
+            </summary>
+            <param name="console">The console.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleExtensions.Width(Spectre.Console.Testing.TestConsole,System.Int32)">
+            <summary>
+            Sets the console width.
+            </summary>
+            <param name="console">The console.</param>
+            <param name="width">The console width.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleExtensions.Height(Spectre.Console.Testing.TestConsole,System.Int32)">
+            <summary>
+            Sets the console height.
+            </summary>
+            <param name="console">The console.</param>
+            <param name="width">The console height.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleExtensions.Size(Spectre.Console.Testing.TestConsole,Spectre.Console.Size)">
+            <summary>
+            Sets the console size.
+            </summary>
+            <param name="console">The console.</param>
+            <param name="size">The console size.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleExtensions.EmitAnsiSequences(Spectre.Console.Testing.TestConsole)">
+            <summary>
+            Turns on emitting of VT/ANSI sequences.
+            </summary>
+            <param name="console">The console.</param>
+            <returns>The same instance so that multiple calls can be chained.</returns>
+        </member>
+        <member name="T:Spectre.Console.Testing.TestCapabilities">
+            <summary>
+            Represents fake capabilities useful in tests.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestCapabilities.ColorSystem">
+            <inheritdoc/>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestCapabilities.Ansi">
+            <inheritdoc/>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestCapabilities.Links">
+            <inheritdoc/>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestCapabilities.Legacy">
+            <inheritdoc/>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestCapabilities.IsTerminal">
+            <inheritdoc/>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestCapabilities.Interactive">
+            <inheritdoc/>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestCapabilities.Unicode">
+            <inheritdoc/>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestCapabilities.CreateRenderContext(Spectre.Console.IAnsiConsole)">
+            <summary>
+            Creates a <see cref="T:Spectre.Console.Rendering.RenderOptions"/> with the same capabilities as this instace.
+            </summary>
+            <param name="console">The console.</param>
+            <returns>A <see cref="T:Spectre.Console.Rendering.RenderOptions"/> with the same capabilities as this instace.</returns>
+        </member>
+        <member name="T:Spectre.Console.Testing.TestConsole">
+            <summary>
+            A testable console.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestConsole.Profile">
+            <inheritdoc/>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestConsole.ExclusivityMode">
+            <inheritdoc/>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestConsole.Input">
+            <summary>
+            Gets the console input.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestConsole.Pipeline">
+            <inheritdoc/>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestConsole.Cursor">
+            <inheritdoc/>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestConsole.Spectre#Console#IAnsiConsole#Input">
+            <inheritdoc/>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestConsole.Output">
+            <summary>
+            Gets the console output.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestConsole.Lines">
+            <summary>
+            Gets the console output lines.
+            </summary>
+        </member>
+        <member name="P:Spectre.Console.Testing.TestConsole.EmitAnsiSequences">
+            <summary>
+            Gets or sets a value indicating whether or not VT/ANSI sequences
+            should be emitted to the console.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsole.#ctor">
+            <summary>
+            Initializes a new instance of the <see cref="T:Spectre.Console.Testing.TestConsole"/> class.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsole.Dispose">
+            <inheritdoc/>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsole.Clear(System.Boolean)">
+            <inheritdoc/>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsole.Write(Spectre.Console.Rendering.IRenderable)">
+            <inheritdoc/>
+        </member>
+        <member name="T:Spectre.Console.Testing.TestConsoleInput">
+            <summary>
+            Represents a testable console input mechanism.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleInput.#ctor">
+            <summary>
+            Initializes a new instance of the <see cref="T:Spectre.Console.Testing.TestConsoleInput"/> class.
+            </summary>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleInput.PushText(System.String)">
+            <summary>
+            Pushes the specified text to the input queue.
+            </summary>
+            <param name="input">The input string.</param>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleInput.PushTextWithEnter(System.String)">
+            <summary>
+            Pushes the specified text followed by 'Enter' to the input queue.
+            </summary>
+            <param name="input">The input.</param>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleInput.PushCharacter(System.Char)">
+            <summary>
+            Pushes the specified character to the input queue.
+            </summary>
+            <param name="input">The input.</param>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleInput.PushKey(System.ConsoleKey)">
+            <summary>
+            Pushes the specified key to the input queue.
+            </summary>
+            <param name="input">The input.</param>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleInput.PushKey(System.ConsoleKeyInfo)">
+            <summary>
+            Pushes the specified key to the input queue.
+            </summary>
+            <param name="consoleKeyInfo">The input.</param>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleInput.IsKeyAvailable">
+            <inheritdoc/>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleInput.ReadKey(System.Boolean)">
+            <inheritdoc/>
+        </member>
+        <member name="M:Spectre.Console.Testing.TestConsoleInput.ReadKeyAsync(System.Boolean,System.Threading.CancellationToken)">
+            <inheritdoc/>
+        </member>
+    </members>
+</doc>

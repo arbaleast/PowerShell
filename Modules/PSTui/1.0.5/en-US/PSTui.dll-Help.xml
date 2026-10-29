@@ -1,0 +1,851 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<helpItems schema="maml" xmlns="http://msh">
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp">
+    <command:details>
+      <command:name>Disable-PSTuiHistoryKeyHandler</command:name>
+      <command:verb>Disable</command:verb>
+      <command:noun>PSTuiHistoryKeyHandler</command:noun>
+      <maml:description>
+        <maml:para>Removes PSTui's `F7` / `Shift+F7` command-history key bindings.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Removes the `F7` and `Shift+F7` PSReadLine key handlers that PSTui registers on import. Use Enable-PSTuiHistoryKeyHandler (Enable-PSTuiHistoryKeyHandler.md)to re-add them. If PSReadLine is not available, the command is a no-op.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Disable-PSTuiHistoryKeyHandler</maml:name>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters />
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para></maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para></maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>To opt out permanently, set `$PSTuiDisableHistoryKeyHandler = $true` or `$env:PSTUI_DISABLE_HISTORY_KEYS = 1` before * importing PSTui, rather than calling this at runtime.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>------- Example 1: Remove the bindings for this session -------</maml:title>
+        <dev:code>Disable-PSTuiHistoryKeyHandler</dev:code>
+        <dev:remarks>
+          <maml:para>Unbinds `F7` and `Shift+F7` for the current session.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Enable-PSTuiHistoryKeyHandler</maml:linkText>
+        <maml:uri></maml:uri>
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Show-PSTuiHistory</maml:linkText>
+        <maml:uri></maml:uri>
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp">
+    <command:details>
+      <command:name>Enable-PSTuiHistoryKeyHandler</command:name>
+      <command:verb>Enable</command:verb>
+      <command:noun>PSTuiHistoryKeyHandler</command:noun>
+      <maml:description>
+        <maml:para>Binds `F7` / `Shift+F7` to PSTui's graphical command history.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>`F7` shows the current session's history; `Shift+F7` shows global PSReadLine history. This command is called automatically when PSTui is imported (unless opted out), and is safe to call again to re-bind after Disable-PSTuiHistoryKeyHandler (Disable-PSTuiHistoryKeyHandler.md).</maml:para>
+      <maml:para>If PSReadLine is not available (for example, a non-interactive host), the command is a no-op and writes a verbose message.</maml:para>
+      <maml:para>To opt out of the automatic binding on import, set either `$PSTuiDisableHistoryKeyHandler = $true` (a PowerShell variable) or `$env:PSTUI_DISABLE_HISTORY_KEYS = 1` (an environment variable) before importing PSTui.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Enable-PSTuiHistoryKeyHandler</maml:name>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters />
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para></maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para></maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>* The bindings only register on `Import-Module PSTui` — `Install-Module` alone does not bind the keys. Add `Import-Module PSTui` to your `$PROFILE` to get them in every session.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>-------------- Example 1: Re-enable the bindings --------------</maml:title>
+        <dev:code>Enable-PSTuiHistoryKeyHandler</dev:code>
+        <dev:remarks>
+          <maml:para>Re-binds `F7` and `Shift+F7` after they were removed with Disable-PSTuiHistoryKeyHandler (Disable-PSTuiHistoryKeyHandler.md).</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Disable-PSTuiHistoryKeyHandler</maml:linkText>
+        <maml:uri></maml:uri>
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Show-PSTuiHistory</maml:linkText>
+        <maml:uri></maml:uri>
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp">
+    <command:details>
+      <command:name>Out-ConsoleGridView</command:name>
+      <command:verb>Out</command:verb>
+      <command:noun>ConsoleGridView</command:noun>
+      <maml:description>
+        <maml:para>Sends output to an interactive table view with column headers, horizontal scrolling, sorting, and streaming support.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>The Out-ConsoleGridView cmdlet sends the output from a command to a grid view window where the output is displayed in an interactive table with column headers, column sizing, horizontal scrolling, and column sorting.</maml:para>
+      <maml:para>Use the Filter box at the top of the window to search the text in the table using regular expressions. Unlike the Filter, the `-Search` parameter positions the cursor on the first matching row without hiding non-matching rows.</maml:para>
+      <maml:para>Objects are streamed into the table as they arrive from the pipeline — the UI appears immediately and rows are added incrementally. A spinner in the status bar indicates loading is in progress.</maml:para>
+      <maml:para>To send items from the interactive window down the pipeline, select rows (use arrow keys and `SPACE` or click with the mouse) and then press `ENTER`. Press `ESC` to cancel without output. Use `Ctrl+A` to select all rows, or `Ctrl+D` to deselect all. Click column headers to sort.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Out-ConsoleGridView</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Filter</maml:name>
+          <maml:description>
+            <maml:para>Pre-populates the Filter edit box, hiding rows that do not match the regular expression pattern.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Search</maml:name>
+          <maml:description>
+            <maml:para>Positions the cursor on the first row matching this regular expression pattern. Unlike `-Filter`, non-matching rows remain visible.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Focus</maml:name>
+          <maml:description>
+            <maml:para>Specifies which UI element receives initial focus.</maml:para>
+            <maml:para>- Table (default): The table view receives focus. Use arrow keys to navigate immediately. - Filter : The filter text field receives focus. Start typing to filter. Press `ENTER` to accept the selected item(s).</maml:para>
+          </maml:description>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" command:variableLength="false">Table</command:parameterValue>
+            <command:parameterValue required="false" command:variableLength="false">Filter</command:parameterValue>
+          </command:parameterValueGroup>
+          <command:parameterValue required="true" variableLength="false">FocusTarget</command:parameterValue>
+          <dev:type>
+            <maml:name>FocusTarget</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>Table</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="none">
+          <maml:name>InputObject</maml:name>
+          <maml:description>
+            <maml:para>Specifies that the cmdlet accepts input for Out-ConsoleGridView .</maml:para>
+            <maml:para>When you use the InputObject parameter to send a collection of objects to Out-ConsoleGridView , Out-ConsoleGridView treats the collection as one collection object, and it displays one row that represents the collection.</maml:para>
+            <maml:para>To display each object in the collection, use a pipeline operator (|) to send objects to Out-ConsoleGridView .</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">PSObject</command:parameterValue>
+          <dev:type>
+            <maml:name>PSObject</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>OutputMode</maml:name>
+          <maml:description>
+            <maml:para>Specifies the items that the interactive window sends down the pipeline as input to other commands. By default, this cmdlet generates zero, one, or many items.</maml:para>
+            <maml:para>To send items from the interactive window down the pipeline, select items and press `ENTER`. `ESC` cancels.</maml:para>
+            <maml:para>The values of this parameter determine how many items you can send down the pipeline.</maml:para>
+            <maml:para>- None. No items.</maml:para>
+            <maml:para>- Single. Zero items or one item. Use this value when the next command can take only one input object.</maml:para>
+            <maml:para>- Multiple. Zero, one, or many items. Use this value when the next command can take multiple input objects. This is the default value.</maml:para>
+          </maml:description>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" command:variableLength="false">None</command:parameterValue>
+            <command:parameterValue required="false" command:variableLength="false">Single</command:parameterValue>
+            <command:parameterValue required="false" command:variableLength="false">Multiple</command:parameterValue>
+          </command:parameterValueGroup>
+          <command:parameterValue required="true" variableLength="false">OutputModeOption</command:parameterValue>
+          <dev:type>
+            <maml:name>OutputModeOption</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>Multiple</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Title</maml:name>
+          <maml:description>
+            <maml:para>Specifies the text that appears in the title bar of the Out-ConsoleGridView window.</maml:para>
+            <maml:para>By default, the title bar displays the command that invokes Out-ConsoleGridView .</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>MinUI</maml:name>
+          <maml:description>
+            <maml:para>If specified, no window frame, filter box, or status bar will be displayed. The table is shown without chrome.</maml:para>
+          </maml:description>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>False</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="ForceDriver">
+          <maml:name>Driver</maml:name>
+          <maml:description>
+            <maml:para>Sets the Terminal.Gui driver to use. Valid values are `ansi`, `windows`, or `unix`.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>FullScreen</maml:name>
+          <maml:description>
+            <maml:para>If specified, the application runs in full-screen mode using the alternate screen buffer. By default, the application renders inline in the current terminal.</maml:para>
+          </maml:description>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>False</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Filter</maml:name>
+        <maml:description>
+          <maml:para>Pre-populates the Filter edit box, hiding rows that do not match the regular expression pattern.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Search</maml:name>
+        <maml:description>
+          <maml:para>Positions the cursor on the first row matching this regular expression pattern. Unlike `-Filter`, non-matching rows remain visible.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Focus</maml:name>
+        <maml:description>
+          <maml:para>Specifies which UI element receives initial focus.</maml:para>
+          <maml:para>- Table (default): The table view receives focus. Use arrow keys to navigate immediately. - Filter : The filter text field receives focus. Start typing to filter. Press `ENTER` to accept the selected item(s).</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">FocusTarget</command:parameterValue>
+        <dev:type>
+          <maml:name>FocusTarget</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>Table</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="none">
+        <maml:name>InputObject</maml:name>
+        <maml:description>
+          <maml:para>Specifies that the cmdlet accepts input for Out-ConsoleGridView .</maml:para>
+          <maml:para>When you use the InputObject parameter to send a collection of objects to Out-ConsoleGridView , Out-ConsoleGridView treats the collection as one collection object, and it displays one row that represents the collection.</maml:para>
+          <maml:para>To display each object in the collection, use a pipeline operator (|) to send objects to Out-ConsoleGridView .</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">PSObject</command:parameterValue>
+        <dev:type>
+          <maml:name>PSObject</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>OutputMode</maml:name>
+        <maml:description>
+          <maml:para>Specifies the items that the interactive window sends down the pipeline as input to other commands. By default, this cmdlet generates zero, one, or many items.</maml:para>
+          <maml:para>To send items from the interactive window down the pipeline, select items and press `ENTER`. `ESC` cancels.</maml:para>
+          <maml:para>The values of this parameter determine how many items you can send down the pipeline.</maml:para>
+          <maml:para>- None. No items.</maml:para>
+          <maml:para>- Single. Zero items or one item. Use this value when the next command can take only one input object.</maml:para>
+          <maml:para>- Multiple. Zero, one, or many items. Use this value when the next command can take multiple input objects. This is the default value.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">OutputModeOption</command:parameterValue>
+        <dev:type>
+          <maml:name>OutputModeOption</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>Multiple</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Title</maml:name>
+        <maml:description>
+          <maml:para>Specifies the text that appears in the title bar of the Out-ConsoleGridView window.</maml:para>
+          <maml:para>By default, the title bar displays the command that invokes Out-ConsoleGridView .</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>MinUI</maml:name>
+        <maml:description>
+          <maml:para>If specified, no window frame, filter box, or status bar will be displayed. The table is shown without chrome.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>False</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="ForceDriver">
+        <maml:name>Driver</maml:name>
+        <maml:description>
+          <maml:para>Sets the Terminal.Gui driver to use. Valid values are `ansi`, `windows`, or `unix`.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>FullScreen</maml:name>
+        <maml:description>
+          <maml:para>If specified, the application runs in full-screen mode using the alternate screen buffer. By default, the application renders inline in the current terminal.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>False</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.Management.Automation.PSObject</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>You can send any object to this cmdlet. Objects are streamed — the UI appears as soon as the first object arrives.</maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Object</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>By default Out-ConsoleGridView returns objects representing the selected rows to the pipeline. Use `-OutputMode` to change this behavior.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para> Out-ConsoleGridView * uses Terminal.Gui's `TableView` control which provides column headers, column sizing, horizontal scrolling, column sorting, and native multi-row selection. The alias for Out-ConsoleGridView * is `ocgv`.</maml:para>
+        <maml:para>* Objects are streamed into the table as they arrive from the pipeline. The UI appears immediately on the first object and rows are added incrementally. A spinner in the status bar indicates loading is in progress. The command output that you send to Out-ConsoleGridView * should not be formatted, such as by using the Format-Table or Format-Wide cmdlets. To select properties, use the Select-Object cmdlet.</maml:para>
+        <maml:para>* Keyboard shortcuts:   - `ENTER` — Accept selection and close   - `ESC` — Cancel and close   - `Ctrl+A` — Select all rows (when OutputMode is Multiple)   - `Ctrl+D` — Deselect all rows (when OutputMode is Multiple)   - `Home`/`End` — Jump to first/last row   - Arrow keys — Navigate rows and columns   - `Tab` — Move focus between filter and table   - Click column headers — Sort by that column</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>---------- Example 1: Output processes to a grid view ----------</maml:title>
+        <dev:code>Get-Process | Out-ConsoleGridView</dev:code>
+        <dev:remarks>
+          <maml:para>This command gets the processes running on the local computer and sends them to a grid view window with column headers for each property. The table appears as soon as the first object arrives — rows stream in as the pipeline executes.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>- Example 2: Use a variable to output processes to a grid view -</maml:title>
+        <dev:code>$P = Get-Process
+$P | Out-ConsoleGridView -OutputMode Single</dev:code>
+        <dev:remarks>
+          <maml:para>This command also gets the processes running on the local computer and sends them to a grid view window.</maml:para>
+          <maml:para>The first command uses the Get-Process cmdlet to get the processes on the computer and then saves the process objects in the $P variable.</maml:para>
+          <maml:para>The second command uses a pipeline operator to send the $P variable to Out-ConsoleGridView .</maml:para>
+          <maml:para>By specifying `-OutputMode Single` the grid view window will be restricted to a single selection, ensuring no more than a single object is returned.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>----- Example 3: Display a formatted table in a grid view -----</maml:title>
+        <dev:code>Get-Process | Select-Object -Property Name, WorkingSet, PeakWorkingSet | Sort-Object -Property WorkingSet -Descending | Out-ConsoleGridView</dev:code>
+        <dev:remarks>
+          <maml:para>This command displays a formatted table in a grid view window.</maml:para>
+          <maml:para>It uses the Get-Process cmdlet to get the processes on the computer.</maml:para>
+          <maml:para>Then, it uses a pipeline operator (|) to send the process objects to the Select-Object cmdlet. The command uses the Property parameter of Select-Object to select the Name, WorkingSet, and PeakWorkingSet properties to be displayed in the table.</maml:para>
+          <maml:para>Another pipeline operator sends the filtered objects to the Sort-Object cmdlet, which sorts them in descending order by the value of the WorkingSet property.</maml:para>
+          <maml:para>The final part of the command uses a pipeline operator (|) to send the formatted table to Out-ConsoleGridView .</maml:para>
+          <maml:para>You can now use the features of the grid view to search, sort, and filter the data.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Example 4: Save output to a variable, and then output a grid view</maml:title>
+        <dev:code>($A = Get-ChildItem -Path $pshome -Recurse) | Out-ConsoleGridView</dev:code>
+        <dev:remarks>
+          <maml:para>This command saves its output in a variable and sends it to Out-ConsoleGridView .</maml:para>
+          <maml:para>The command uses the Get-ChildItem cmdlet to get the files in the Windows PowerShell installation directory and its subdirectories. The path to the installation directory is saved in the $pshome automatic variable.</maml:para>
+          <maml:para>The command uses the assignment operator (=) to save the output in the $A variable and the pipeline operator (|) to send the output to Out-ConsoleGridView .</maml:para>
+          <maml:para>The parentheses in the command establish the order of operations. As a result, the output from the Get-ChildItem command is saved in the $A variable before it is sent to Out-ConsoleGridView .</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Example 5: Output processes for a specified computer to a grid view</maml:title>
+        <dev:code>Get-Process -ComputerName "Server01" | ocgv -Title "Processes - Server01"</dev:code>
+        <dev:remarks>
+          <maml:para>This command displays the processes that are running on the Server01 computer in a grid view window.</maml:para>
+          <maml:para>The command uses `ocgv`, which is the built-in alias for the Out-ConsoleGridView cmdlet, it uses the Title parameter to specify the window title.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Example 6: Define a function to kill processes using a graphical chooser</maml:title>
+        <dev:code>function killp { Get-Process | Out-ConsoleGridView -OutputMode Single -Filter $args[0] | Stop-Process -Id {$_.Id} }
+killp note</dev:code>
+        <dev:remarks>
+          <maml:para>This example shows defining a function named `killp` that shows a grid view of all running processes and allows the user to select one to kill it.</maml:para>
+          <maml:para>The example uses the `-Filter` parameter to filter for all processes with a name that includes `note` (thus highlighting `Notepad` if it were running). Selecting an item in the grid view and pressing `ENTER` will kill that process.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>-- Example 7: Pass multiple items through Out-ConsoleGridView --</maml:title>
+        <dev:code>Get-Process | Out-ConsoleGridView -OutputMode Multiple | Export-Csv -Path .\ProcessLog.csv</dev:code>
+        <dev:remarks>
+          <maml:para>This command lets you select multiple processes from the Out-ConsoleGridView window. The processes that you select are passed to the Export-Csv command and written to the ProcessLog.csv file.</maml:para>
+          <maml:para>By default, `-OutputMode` is `Multiple`, which lets you send multiple items down the pipeline.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>----- Example 8: Browse command history with F7 / Shift+F7 -----</maml:title>
+        <dev:code></dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>-------- Example 9: Search for a row without filtering --------</maml:title>
+        <dev:code>Get-Service | ocgv -Search "wuauserv"</dev:code>
+        <dev:remarks>
+          <maml:para>This command displays all services but positions the cursor on the first row matching "wuauserv". Unlike `-Filter`, all rows remain visible.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>------- Example 10: Start with focus on the filter field -------</maml:title>
+        <dev:code>Get-ChildItem | ocgv -Focus Filter</dev:code>
+        <dev:remarks>
+          <maml:para>This command opens the grid view with the cursor in the filter text field, ready to type a filter immediately. Pressing `ENTER` while in the filter field accepts the currently selected item(s).</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>------- Example 11: Full screen mode with a custom title -------</maml:title>
+        <dev:code>Get-Process | ocgv -FullScreen -Title "Process Monitor"</dev:code>
+        <dev:remarks>
+          <maml:para>This command runs the grid view in full-screen mode using the alternate screen buffer, with a custom window title.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>------------- Example 12: Minimal UI for scripting -------------</maml:title>
+        <dev:code>Get-Process | ocgv -MinUI -OutputMode Single</dev:code>
+        <dev:remarks>
+          <maml:para>This command shows the grid view with no window frame, filter box, or status bar — just the table. Useful for quick selection in scripts.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Show-ObjectTree</maml:linkText>
+        <maml:uri></maml:uri>
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp">
+    <command:details>
+      <command:name>Show-ObjectTree</command:name>
+      <command:verb>Show</command:verb>
+      <command:noun>ObjectTree</command:noun>
+      <maml:description>
+        <maml:para>Sends output to an interactive tree in the same console window.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>The Show-ObjectTree cmdlet sends the output from a command to a tree view window where the output is displayed in an interactive tree.</maml:para>
+      <maml:para>Use the Filter box at the top of the window to search the text in the tree including literals or multiple words. Use the `-Filter` parameter to pre-populate the Filter box. The filter uses regular expressions.</maml:para>
+      <maml:para>Navigate the tree with the arrow keys: &lt;kbd&gt;Right&lt;/kbd&gt; expands a node (rows marked with `+`), &lt;kbd&gt;Left&lt;/kbd&gt; collapses it. Press &lt;kbd&gt;Esc&lt;/kbd&gt; to close the window.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Show-ObjectTree</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Filter</maml:name>
+          <maml:description>
+            <maml:para>Pre-populates the Filter edit box, allowing filtering to be specified on the command line.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="none">
+          <maml:name>InputObject</maml:name>
+          <maml:description>
+            <maml:para>Specifies that the cmdlet accepts input for Show-ObjectTree .</maml:para>
+            <maml:para>The InputObject parameter enables sending a collection of objects to Show-ObjectTree , Show-ObjectTree treats the collection as one collection object, and it displays one row that represents the collection.</maml:para>
+            <maml:para>To display the each object in the collection, use a pipeline operator (|) to send objects to Show-ObjectTree .</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">PSObject</command:parameterValue>
+          <dev:type>
+            <maml:name>PSObject</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Title</maml:name>
+          <maml:description>
+            <maml:para>Specifies the text that appears in the title bar of the Show-ObjectTree window.</maml:para>
+            <maml:para>By default, the title bar displays the command that invokes Show-ObjectTree .</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>MinUI</maml:name>
+          <maml:description>
+            <maml:para>If specified no title or status bar will be displayed in the Show-ObjectTree window. The filter will only be displayed if `-Filter` is specified.</maml:para>
+          </maml:description>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>False</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Driver</maml:name>
+          <maml:description>
+            <maml:para>Specifies the Terminal.Gui driver to use. Valid values are `ansi`, `windows`, or `unix`. The default is `ansi`.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>ansi</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>FullScreen</maml:name>
+          <maml:description>
+            <maml:para>If specified, the application runs in full-screen mode using the alternate screen buffer. By default, the application renders inline.</maml:para>
+          </maml:description>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>False</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Filter</maml:name>
+        <maml:description>
+          <maml:para>Pre-populates the Filter edit box, allowing filtering to be specified on the command line.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="none">
+        <maml:name>InputObject</maml:name>
+        <maml:description>
+          <maml:para>Specifies that the cmdlet accepts input for Show-ObjectTree .</maml:para>
+          <maml:para>The InputObject parameter enables sending a collection of objects to Show-ObjectTree , Show-ObjectTree treats the collection as one collection object, and it displays one row that represents the collection.</maml:para>
+          <maml:para>To display the each object in the collection, use a pipeline operator (|) to send objects to Show-ObjectTree .</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">PSObject</command:parameterValue>
+        <dev:type>
+          <maml:name>PSObject</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Title</maml:name>
+        <maml:description>
+          <maml:para>Specifies the text that appears in the title bar of the Show-ObjectTree window.</maml:para>
+          <maml:para>By default, the title bar displays the command that invokes Show-ObjectTree .</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>MinUI</maml:name>
+        <maml:description>
+          <maml:para>If specified no title or status bar will be displayed in the Show-ObjectTree window. The filter will only be displayed if `-Filter` is specified.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>False</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Driver</maml:name>
+        <maml:description>
+          <maml:para>Specifies the Terminal.Gui driver to use. Valid values are `ansi`, `windows`, or `unix`. The default is `ansi`.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>ansi</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>FullScreen</maml:name>
+        <maml:description>
+          <maml:para>If specified, the application runs in full-screen mode using the alternate screen buffer. By default, the application renders inline.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>False</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.Management.Automation.PSObject</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>You can send any object to this cmdlet.</maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>`Show-ObjectTree` does not output any objects.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>The command output sent to Show-ObjectTree * should not be formatted, such as by using the Format-Table or Format-Wide cmdlets. To select properties, use the Select-Object cmdlet.</maml:para>
+        <maml:para>* Deserialized output from remote commands might not be formatted correctly in the tree view window.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>---------- Example 1: Output processes to a tree view ----------</maml:title>
+        <dev:code>Get-Process | Show-ObjectTree</dev:code>
+        <dev:remarks>
+          <maml:para>This command gets the processes running on the local computer and sends them to a tree view window.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Example 2: Save output to a variable, and then output a tree view</maml:title>
+        <dev:code>($A = Get-ChildItem -Path $pshome -Recurse) | shot</dev:code>
+        <dev:remarks>
+          <maml:para>This command saves its output in a variable and sends it to Show-ObjectTree .</maml:para>
+          <maml:para>The command uses the Get-ChildItem cmdlet to get the files in the Windows PowerShell installation directory and its subdirectories.</maml:para>
+          <maml:para>The path to the installation directory is saved in the $pshome automatic variable.</maml:para>
+          <maml:para>The command uses the assignment operator (=) to save the output in the $A variable and the pipeline operator (|) to send the output to Show-ObjectTree .</maml:para>
+          <maml:para>The parentheses in the command establish the order of operations. As a result, the output from the Get-ChildItem command is saved in the $A variable before it is sent to Show-ObjectTree .</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Out-ConsoleGridView</maml:linkText>
+        <maml:uri></maml:uri>
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp">
+    <command:details>
+      <command:name>Show-PSTuiHistory</command:name>
+      <command:verb>Show</command:verb>
+      <command:noun>PSTuiHistory</command:noun>
+      <maml:description>
+        <maml:para>Shows PowerShell command history in `Out-ConsoleGridView` and inserts the selected command at the prompt.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Backs the `F7` / `Shift+F7` command-history key handlers, and can be called or bound to other keys directly. The current prompt text is used as the initial filter; the selected command is inserted at the prompt.</maml:para>
+      <maml:para>This command is exported (rather than module-private) so the PSReadLine key handlers, which run in the global session state, can resolve it.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Show-PSTuiHistory</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Global</maml:name>
+          <maml:description>
+            <maml:para>Show history from all PowerShell sessions (PSReadLine), de-duplicated, instead of only the current session.</maml:para>
+          </maml:description>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>False</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Global</maml:name>
+        <maml:description>
+          <maml:para>Show history from all PowerShell sessions (PSReadLine), de-duplicated, instead of only the current session.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>False</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para></maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>This command updates the PSReadLine prompt buffer directly; it does not write to the pipeline.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>* The bindings register on `Import-Module PSTui`. See Enable-PSTuiHistoryKeyHandler (Enable-PSTuiHistoryKeyHandler.md) / [Disable-PSTuiHistoryKeyHandler](Disable-PSTuiHistoryKeyHandler.md)to toggle them at runtime.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>------------ Example 1: Show this session's history ------------</maml:title>
+        <dev:code>Show-PSTuiHistory</dev:code>
+        <dev:remarks>
+          <maml:para>Opens the current session's command history in `Out-ConsoleGridView`. Selecting an entry and pressing `ENTER` inserts it at the prompt.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>------------ Example 2: Bind it to a different key ------------</maml:title>
+        <dev:code>Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -ScriptBlock { Show-PSTuiHistory -Global }</dev:code>
+        <dev:remarks>
+          <maml:para>Binds &lt;kbd&gt;Ctrl&lt;/kbd&gt;+&lt;kbd&gt;R&lt;/kbd&gt; to the all-sessions history picker.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Enable-PSTuiHistoryKeyHandler</maml:linkText>
+        <maml:uri></maml:uri>
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Disable-PSTuiHistoryKeyHandler</maml:linkText>
+        <maml:uri></maml:uri>
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Out-ConsoleGridView</maml:linkText>
+        <maml:uri></maml:uri>
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+</helpItems>

@@ -28,7 +28,7 @@
 | Runtime fatal error | `throw` (terminating) | Config missing, dependency unavailable |
 | Recoverable failure | `Write-Warning` (non-terminating) | SSH timeout, tmux not available |
 | Missing external command | `Get-Command` check → `Write-Warning` | tmux, ssh not installed |
-| **Exception**: UI rendering | `Write-Host` allowed | `Invoke-ConsoleMenu`, `Show-UserScoopLogo` |
+| **Exception**: UI rendering | `Write-Host` allowed | `Show-UserScoopLogo` |
 
 ## 配置（Configuration）
 

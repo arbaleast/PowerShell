@@ -1,5 +1,5 @@
-# New-WelcomeBanner.ps1 - 欢迎横幅构建器
-# P2-2: 统一风格化的欢迎 banner, 与 New-AnsiLayout Header 视觉一致
+﻿# New-WelcomeBanner.ps1 - 欢迎横幅构建器
+# P2-2: 统一风格化的欢迎 banner, 与 GridView 表格头部视觉一致
 # 设计原则:
 # 1. 纯函数 New-WelcomeBanner 返回行数组, 便于 Pester 测试
 # 2. Show-UserScoopLogo (Public) 内部委托给 New-WelcomeBanner, 保持向后兼容
@@ -7,7 +7,9 @@
 # 4. 调用方负责实际渲染: $lines | ForEach-Object { [Console]::WriteLine($_) }
 
 function Get-RandomQuote {
-    [CmdletBinding(SupportsShouldProcess=$true)]
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    [OutputType([string])]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     <#
     .SYNOPSIS
         从语录文件读取并随机抽取一行(纯函数封装 + 缓存)
@@ -26,10 +28,7 @@ function Get-RandomQuote {
     .OUTPUTS
         [string] 随机抽取的语录(已 Trim)
     #>
-    [CmdletBinding(SupportsShouldProcess=$true)]
-    [OutputType([string])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
-param(
+    param(
         [Parameter(Mandatory = $false)]
         [string]$QuotesPath,
 
@@ -74,7 +73,7 @@ function New-WelcomeBanner {
         构造欢迎横幅(纯函数, 返回行数组, 不做 I/O)
 
     .DESCRIPTION
-        风格与 New-AnsiLayout 的 Header 区域保持一致:
+        风格与 GridView 表格的 Header 区域保持一致:
           ╔══< user@host >══[ cwd ]══[ title ] [badge1] [badge2]
           ║
           ║  ~ quote
@@ -142,12 +141,13 @@ function New-WelcomeBanner {
         [hashtable]$Colors
     )
 
-    # 颜色预解析: 走 Get-CachedConfig 缓存
-    $primary = if ($Colors -and $Colors.Primary) { $Colors.Primary } else { Get-CachedConfig -Section 'Colors' -Key 'FreshGreen' -Default "`e[38;2;137;209;133m" }
-    $accent  = if ($Colors -and $Colors.Accent)  { $Colors.Accent  } else { Get-CachedConfig -Section 'Colors' -Key 'SageGreen'  -Default "`e[38;2;159;177;159m" }
-    $muted   = if ($Colors -and $Colors.Muted)   { $Colors.Muted   } else { Get-CachedConfig -Section 'Colors' -Key 'MidGray'    -Default "`e[38;2;100;100;100m" }
-    $border  = if ($Colors -and $Colors.Border)  { $Colors.Border  } else { $primary }
-    $rst     = if ($Colors -and $Colors.Rst)     { $Colors.Rst     } else { Get-CachedConfig -Section 'Colors' -Key 'Rst' -Default "`e[0m" }
+    # 颜色预解析: 统一走 Resolve-ColorTable(调用方覆盖 -> 预热缓存 -> 配置层默认值)
+    $colorTable = Resolve-ColorTable -Name 'Primary', 'Accent', 'Muted', 'Rst', 'Border' -Colors $Colors
+    $primary = $colorTable.Primary
+    $accent  = $colorTable.Accent
+    $muted   = $colorTable.Muted
+    $border  = $colorTable.Border
+    $rst     = $colorTable.Rst
 
     if (-not $UserName) { $UserName = if ($env:USERNAME) { $env:USERNAME } else { 'user' } }
     if (-not $HostName) { $HostName = if ($env:COMPUTERNAME) { $env:COMPUTERNAME } else { 'local' } }

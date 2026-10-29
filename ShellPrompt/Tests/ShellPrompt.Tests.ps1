@@ -1,71 +1,104 @@
 ﻿<#
 .SYNOPSIS
-    ShellPrompt 模块 Pester v3/v5 兼容测试套件
+    ShellPrompt 模块 Pester 测试套件 (由 Pester v3 旧断言语法最小迁移而来)
+.DESCRIPTION
+    历史沿革:
+    1) 本文件源自 `git show HEAD:ShellPrompt/Tests/ShellPrompt.Tests.ps1` (1102 行),
+       采用 Pester v3 旧断言语法 (`Should Be` / `Should Not Be` / `Should Match` ...)。
+    2) 本机安装的是 Pester 6.2.0, 实测全部旧语法在运行时抛
+       `ParameterBindingException: Parameter set cannot be resolved using the specified
+       named parameters.` (12/12 旧写法全部失败, 仅新写法 `Should -Be` 通过),
+       因此必须把旧语法改写为 Pester v5+ 的 `Should -Be` / `Should -Not -Be` 形式。
+    3) 2026-10-18 控制台 UI 单轨化 (仅保留 PSTui GridView 主轨, 自研 ANSI 降级轨已移除),
+       原文件中针对已删除函数 (Test-FilterCharacter / Get-FilteredItems /
+       Update-FilterString / New-StatusBadge / Format-StatusBadge / New-MenuItem /
+       Write-MenuItem / New-DynamicHelpPanel / Get-SessionActionHelp / New-AnsiLayout /
+       Add-MainLine / Set-FooterLine / Write-AnsiLine / Update-InputBuffer /
+       Test-InputValidation / Send-MenuKey / ConvertTo-CsiArrowKey) 的用例已按
+       "单轨 GridView 等价实现" 重写, 而不是简单删除。
+    4) 文件末尾追加 "单轨 GridView 契约" 断言组, 覆盖:
+       Backend 恒为 GridView / Assert-ConsoleUiReady 抛错与放行 /
+       三个分发器无 -Backend 参数 / 已删除降级轨函数在模块作用域不存在 /
+       已删除源文件不在模块目录内 (基于 ModuleBase, 不依赖仓库工作区路径)。
 #>
 
 # 模块路径：相对于测试目录的父目录
 $moduleRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $manifestPath = Join-Path $moduleRoot 'ShellPrompt.psd1'
 
+BeforeAll {
+    $script:manifestPath = Join-Path (Resolve-Path "$PSScriptRoot\..").Path 'ShellPrompt.psd1'
+    Import-Module $script:manifestPath -Force -ErrorAction Stop
+    $script:mod = Get-Module ShellPrompt
+}
+
 Describe 'Module Import' {
 
     It '应能成功导入模块' {
-        { Import-Module $manifestPath -Force -ErrorAction Stop } | Should Not Throw
+        { Import-Module $script:manifestPath -Force -ErrorAction Stop } | Should -Not -Throw
     }
 
     It '导入后模块应可用' {
-        Import-Module $manifestPath -Force
         $module = Get-Module ShellPrompt
-        $module | Should Not BeNullOrEmpty
-        $module.Name | Should Be 'ShellPrompt'
+        $module | Should -Not -BeNullOrEmpty
+        $module.Name | Should -Be 'ShellPrompt'
     }
 }
 
 Describe 'Command Export' {
 
     It '应导出 Invoke-Reload' {
-        Import-Module $manifestPath -Force
         Get-Command -Module ShellPrompt -Name 'Invoke-Reload' -ErrorAction SilentlyContinue |
-            Should Not BeNullOrEmpty
+            Should -Not -BeNullOrEmpty
     }
 
     It '应导出 Show-UserScoopLogo' {
-        Import-Module $manifestPath -Force
         Get-Command -Module ShellPrompt -Name 'Show-UserScoopLogo' -ErrorAction SilentlyContinue |
-            Should Not BeNullOrEmpty
+            Should -Not -BeNullOrEmpty
     }
 
     It '应导出 Start-TmuxSession' {
-        Import-Module $manifestPath -Force
         Get-Command -Module ShellPrompt -Name 'Start-TmuxSession' -ErrorAction SilentlyContinue |
-            Should Not BeNullOrEmpty
+            Should -Not -BeNullOrEmpty
     }
 
     It '应导出 Copy-SshPublicKey' {
-        Import-Module $manifestPath -Force
         Get-Command -Module ShellPrompt -Name 'Copy-SshPublicKey' -ErrorAction SilentlyContinue |
-            Should Not BeNullOrEmpty
+            Should -Not -BeNullOrEmpty
     }
 
     It '不应导出旧命令 reload' {
-        Import-Module $manifestPath -Force
         Get-Command -Module ShellPrompt -Name 'reload' -ErrorAction SilentlyContinue |
-            Should BeNullOrEmpty
+            Should -BeNullOrEmpty
     }
 
     It '不应导出内部辅助函数' {
-        Import-Module $manifestPath -Force
         $privateNames = @(
             'Get-CachedConfig', 'Get-SshConfigHosts', 'Get-TmuxAvailability',
-            'Get-TmuxSessions', 'Invoke-ConsoleMenu', 'Invoke-SshCommand',
+            'Get-TmuxSessions', 'Invoke-SshCommand',
             'Invoke-SshCaptureOutput', 'New-RandomSessionName', 'Reset-TerminalMode',
-            'Start-SshInteractive', 'Get-SshArgs', 'Connect-TmuxSession',
+            'Get-SshArgs', 'Connect-TmuxSession',
             'New-TmuxSession', 'Remove-TmuxSession', 'ConvertTo-SshEscapedString',
             'Test-SshHostName', 'Save-OriginalTerminalState'
         )
         $exported = @(Get-Command -Module ShellPrompt | Select-Object -ExpandProperty Name)
         foreach ($name in $privateNames) {
-            ($exported -notcontains $name) | Should Be $true
+            $exported | Should -Not -Contain $name
+        }
+    }
+
+    It '不应导出单轨化后新增的内部实现函数' {
+        $privateNames = @(
+            'Invoke-GridViewPrompt', 'Invoke-GridViewHostSelector',
+            'Invoke-GridViewSessionManager', 'Invoke-GridViewSessionList',
+            'Get-GridViewColumnPlan', 'Get-GridViewHostRow', 'Get-GridViewManagerRow',
+            'Get-TmuxSessionGridRow', 'Get-TmuxSessionStateText', 'Get-TmuxSessionSummary',
+            'Restore-GridViewSelection', 'ConvertTo-TmuxRefreshSelection',
+            'Get-TmuxRefreshedSession', 'Get-ConsoleUiBackend', 'Assert-ConsoleUiReady'
+        )
+        $exported = @(Get-Command -Module ShellPrompt | Select-Object -ExpandProperty Name)
+        foreach ($name in $privateNames) {
+            $exported | Should -Not -Contain $name
         }
     }
 }
@@ -73,12 +106,11 @@ Describe 'Command Export' {
 Describe 'Verb-Noun Compliance' {
 
     It '所有导出命令的动词应在 Get-Verb 批准列表中' {
-        Import-Module $manifestPath -Force
         $approvedVerbs = @(Get-Verb | Select-Object -ExpandProperty Verb)
         $exported = @(Get-Command -Module ShellPrompt)
         foreach ($cmd in $exported) {
             $verb = $cmd.Name -split '-' | Select-Object -First 1
-            ($approvedVerbs -contains $verb) | Should Be $true
+            $approvedVerbs | Should -Contain $verb
         }
     }
 }
@@ -86,548 +118,123 @@ Describe 'Verb-Noun Compliance' {
 Describe 'Config Access' {
 
     It '$script:Config 应包含所有域' {
-        Import-Module $manifestPath -Force
-        $config = & (Get-Module ShellPrompt) { $script:Config }
-        $config | Should Not BeNullOrEmpty
-        $config.Contains('Colors') | Should Be $true
-        $config.Contains('Keys') | Should Be $true
-        $config.Contains('Paths') | Should Be $true
-        $config.Contains('SSH') | Should Be $true
+        $config = & $script:mod { $script:Config }
+        $config | Should -Not -BeNullOrEmpty
+        $config.Contains('Colors') | Should -BeTrue
+        $config.Contains('Keys') | Should -BeTrue
+        $config.Contains('Paths') | Should -BeTrue
+        $config.Contains('SSH') | Should -BeTrue
+        $config.Contains('UI') | Should -BeTrue
+    }
+
+    It 'UI 域应保留 GridView 行为配置' {
+        $keys = & $script:mod { @($script:Config.UI.Keys) }
+        $keys | Should -Contain 'GridViewFocus'
+        $keys | Should -Contain 'GridViewFullScreen'
+    }
+
+    It 'UI 域不应再提供 Backend 后端选择项' {
+        $keys = & $script:mod { @($script:Config.UI.Keys) }
+        $keys | Should -Not -Contain 'Backend'
     }
 }
 
 Describe 'ConvertTo-SshEscapedString' {
 
     It '应正确处理普通字符' {
-        $result = & (Get-Module ShellPrompt) { ConvertTo-SshEscapedString -Value 'hello' }
-        $result | Should Be 'hello'
+        $result = & $script:mod { ConvertTo-SshEscapedString -Value 'hello' }
+        $result | Should -Be 'hello'
     }
 
     It '应转义单引号' {
-        $result = & (Get-Module ShellPrompt) { ConvertTo-SshEscapedString -Value "it's a test" }
-        $result | Should Be "it'\''s a test"
+        $result = & $script:mod { ConvertTo-SshEscapedString -Value "it's a test" }
+        $result | Should -Be "it'\''s a test"
     }
 
     It '应通过管道处理输入' {
-        $result = "don't stop" | & (Get-Module ShellPrompt) { $input | ConvertTo-SshEscapedString }
-        $result | Should Be "don'\''t stop"
+        $result = "don't stop" | & $script:mod { $input | ConvertTo-SshEscapedString }
+        $result | Should -Be "don'\''t stop"
     }
 }
 
 Describe 'Test-SshHostName' {
 
     It '合法主机名应返回 $true' {
-        & (Get-Module ShellPrompt) { Test-SshHostName -HostName 'example.com' } | Should Be $true
+        & $script:mod { Test-SshHostName -HostName 'example.com' } | Should -BeTrue
     }
 
     It '带短横线的合法主机名应返回 $true' {
-        & (Get-Module ShellPrompt) { Test-SshHostName -HostName 'my-server-01' } | Should Be $true
+        & $script:mod { Test-SshHostName -HostName 'my-server-01' } | Should -BeTrue
     }
 
     It '含空格的主机名应返回 $false' {
-        & (Get-Module ShellPrompt) { Test-SshHostName -HostName 'bad host' } | Should Be $false
+        & $script:mod { Test-SshHostName -HostName 'bad host' } | Should -BeFalse
     }
 
     It '含管道符的主机名应返回 $false' {
-        & (Get-Module ShellPrompt) { Test-SshHostName -HostName 'host|danger' } | Should Be $false
-    }
-}
-
-Describe 'Test-FilterCharacter' {
-
-    It '应接受小写字母' {
-        & (Get-Module ShellPrompt) { Test-FilterCharacter -Character 'a' } | Should Be $true
-    }
-
-    It '应接受大写字母' {
-        & (Get-Module ShellPrompt) { Test-FilterCharacter -Character 'Z' } | Should Be $true
-    }
-
-    It '应接受数字' {
-        & (Get-Module ShellPrompt) { Test-FilterCharacter -Character '7' } | Should Be $true
-    }
-
-    It '应接受点号' {
-        & (Get-Module ShellPrompt) { Test-FilterCharacter -Character '.' } | Should Be $true
-    }
-
-    It '应接受下划线和短横线' {
-        & (Get-Module ShellPrompt) { Test-FilterCharacter -Character '_' } | Should Be $true
-        & (Get-Module ShellPrompt) { Test-FilterCharacter -Character '-' } | Should Be $true
-    }
-
-    It '应拒绝空格' {
-        & (Get-Module ShellPrompt) { Test-FilterCharacter -Character ' ' } | Should Be $false
-    }
-
-    It '应拒绝空字符串' {
-        & (Get-Module ShellPrompt) { Test-FilterCharacter -Character '' } | Should Be $false
-    }
-
-    It '应拒绝控制字符' {
-        & (Get-Module ShellPrompt) { Test-FilterCharacter -Character ([char]27) } | Should Be $false
-    }
-
-    It '应拒绝斜杠和管道符' {
-        & (Get-Module ShellPrompt) { Test-FilterCharacter -Character '/' } | Should Be $false
-        & (Get-Module ShellPrompt) { Test-FilterCharacter -Character '|' } | Should Be $false
-    }
-}
-
-Describe 'Get-FilteredItems' {
-
-    It '空 Filter 应返回全部 Items' {
-        $result = & (Get-Module ShellPrompt) { Get-FilteredItems -Items @('debian', 'ubuntu', 'arch') -Filter '' }
-        @($result).Count | Should Be 3
-    }
-
-    It '应按 Contains 方式大小写不敏感匹配' {
-        $result = & (Get-Module ShellPrompt) { Get-FilteredItems -Items @('Debian-Server', 'Ubuntu-Cloud', 'ArchLinux') -Filter 'UBUNTU' }
-        @($result).Count | Should Be 1
-        @($result)[0] | Should Be 'Ubuntu-Cloud'
-    }
-
-    It '支持多结果匹配' {
-        $result = & (Get-Module ShellPrompt) { Get-FilteredItems -Items @('dev-01', 'dev-02', 'prod-01') -Filter 'dev' }
-        @($result).Count | Should Be 2
-    }
-
-    It '应支持 PSCustomObject 候选项' {
-        $result = & (Get-Module ShellPrompt) {
-            Get-FilteredItems -Items @(
-                [PSCustomObject]@{ Label = 'alpha'; Value = 1 }
-                [PSCustomObject]@{ Label = 'beta';  Value = 2 }
-            ) -Filter 'bet'
-        }
-        @($result).Count | Should Be 1
-        @($result)[0].Value | Should Be 2
-    }
-
-    It '应支持 AlwaysInclude 始终保留项' {
-        $result = & (Get-Module ShellPrompt) { Get-FilteredItems -Items @('debian', 'ubuntu') -Filter 'notexist' -AlwaysInclude 'EXIT' }
-        @($result).Count | Should Be 1
-        @($result)[0] | Should Be 'EXIT'
-    }
-
-    It '无匹配时返回空数组' {
-        $result = & (Get-Module ShellPrompt) { Get-FilteredItems -Items @('debian') -Filter 'xyz' }
-        @($result).Count | Should Be 0
-    }
-}
-
-Describe 'Update-FilterString' {
-
-    It '应追加可打印字符' {
-        $result = & (Get-Module ShellPrompt) {
-            Update-FilterString -Filter 'deb' -Key ([PSCustomObject]@{ VirtualKeyCode = 65; Character = '1' })
-        }
-        $result | Should Be 'deb1'
-    }
-
-    It '应处理 Backspace 删除末尾字符' {
-        $result = & (Get-Module ShellPrompt) {
-            Update-FilterString -Filter 'debian' -Key ([PSCustomObject]@{ VirtualKeyCode = 8; Character = ([char]8) })
-        }
-        $result | Should Be 'debia'
-    }
-
-    It '空 Filter 时 Backspace 应保持空' {
-        $result = & (Get-Module ShellPrompt) {
-            Update-FilterString -Filter '' -Key ([PSCustomObject]@{ VirtualKeyCode = 8; Character = ([char]8) })
-        }
-        $result | Should Be ''
-    }
-
-    It '应处理 Ctrl+U 清空' {
-        $result = & (Get-Module ShellPrompt) {
-            Update-FilterString -Filter 'whatever' -Key ([PSCustomObject]@{ VirtualKeyCode = 17; Character = ([char]21) })
-        }
-        $result | Should Be ''
-    }
-
-    It '应拒绝非法字符(空格)' {
-        $result = & (Get-Module ShellPrompt) {
-            Update-FilterString -Filter 'deb' -Key ([PSCustomObject]@{ VirtualKeyCode = 32; Character = ' ' })
-        }
-        $result | Should Be 'deb'
-    }
-}
-
-Describe 'New-StatusBadge' {
-
-    It 'Online 状态应使用绿色圆点' {
-        $b = & (Get-Module ShellPrompt) { New-StatusBadge -Status Online }
-        $b.Status | Should Be 'Online'
-        $b.Glyph  | Should Be '●'
-    }
-
-    It 'Attached 状态应使用蓝色圆点' {
-        $b = & (Get-Module ShellPrompt) { New-StatusBadge -Status Attached }
-        $b.Status | Should Be 'Attached'
-        $b.Glyph  | Should Be '●'
-    }
-
-    It 'Detached 状态应使用灰色空心圆' {
-        $b = & (Get-Module ShellPrompt) { New-StatusBadge -Status Detached }
-        $b.Glyph | Should Be '○'
-    }
-
-    It 'NetworkError 状态应使用红色叉号' {
-        $b = & (Get-Module ShellPrompt) { New-StatusBadge -Status NetworkError }
-        $b.Glyph | Should Be '✗'
-    }
-
-    It 'Pending 状态应使用黄色半圆' {
-        $b = & (Get-Module ShellPrompt) { New-StatusBadge -Status Pending }
-        $b.Glyph | Should Be '◐'
-    }
-
-    It 'Disabled 状态应使用暗灰叉号' {
-        $b = & (Get-Module ShellPrompt) { New-StatusBadge -Status Disabled }
-        $b.Glyph | Should Be '×'
-    }
-
-    It 'Warning 状态应使用黄色感叹号' {
-        $b = & (Get-Module ShellPrompt) { New-StatusBadge -Status Warning }
-        $b.Glyph | Should Be '!'
-    }
-
-    It '未指定 Text 时应使用默认说明' {
-        $b = & (Get-Module ShellPrompt) { New-StatusBadge -Status Online }
-        $b.Text | Should Be 'ready'
-    }
-
-    It '指定 Text 时应使用自定义说明' {
-        $b = & (Get-Module ShellPrompt) { New-StatusBadge -Status NetworkError -Text '连接超时' }
-        $b.Text | Should Be '连接超时'
-    }
-
-    It '应返回包含 Rst 重置码的对象' {
-        $b = & (Get-Module ShellPrompt) { New-StatusBadge -Status Online }
-        $b.Rst | Should Not BeNullOrEmpty
-        $b.Rst | Should Match '\[0m'
-    }
-}
-
-Describe 'Format-StatusBadge' {
-
-    It '应返回包含 Glyph + Text 的单行字符串' {
-        $script:badgeObj = & (Get-Module ShellPrompt) { New-StatusBadge -Status Online -Text 'ok' }
-        $s = & (Get-Module ShellPrompt) { param($bg) Format-StatusBadge -Badge $bg } -bg $script:badgeObj
-        $s | Should Match '●'
-        $s | Should Match 'ok'
-    }
-
-    It '应包含 ANSI 颜色转义' {
-        $script:badgeObj = & (Get-Module ShellPrompt) { New-StatusBadge -Status Detached }
-        $s = & (Get-Module ShellPrompt) { param($bg) Format-StatusBadge -Badge $bg } -bg $script:badgeObj
-        $s | Should Match '\[38;2;\d+;\d+;\d+m'
-    }
-
-    It '应包含重置码' {
-        $script:badgeObj = & (Get-Module ShellPrompt) { New-StatusBadge -Status Online }
-        $s = & (Get-Module ShellPrompt) { param($bg) Format-StatusBadge -Badge $bg } -bg $script:badgeObj
-        $s | Should Match '\[0m'
-    }
-}
-
-Describe 'New-MenuItem' {
-
-    It '未指定 Value 时应默认等于 Label' {
-        $item = & (Get-Module ShellPrompt) { New-MenuItem -Label 'debian' }
-        $item.Label | Should Be 'debian'
-        $item.Value | Should Be 'debian'
-    }
-
-    It '指定 Value 时应使用自定义值' {
-        $item = & (Get-Module ShellPrompt) { New-MenuItem -Label 'debian' -Value ([PSCustomObject]@{ Name = 'srv' }) }
-        $item.Value.Name | Should Be 'srv'
-    }
-
-    It '默认 Disabled 应为 false' {
-        $item = & (Get-Module ShellPrompt) { New-MenuItem -Label 'a' }
-        $item.Disabled | Should Be $false
-    }
-
-    It '指定 Disabled 时应正确记录' {
-        $item = & (Get-Module ShellPrompt) { New-MenuItem -Label 'a' -Disabled $true }
-        $item.Disabled | Should Be $true
-    }
-
-    It '应保留 Desc 描述' {
-        $item = & (Get-Module ShellPrompt) { New-MenuItem -Label 'a' -Desc 'desc' }
-        $item.Desc | Should Be 'desc'
-    }
-}
-
-Describe 'Write-MenuItem' {
-
-    $script:itemNormal   = & (Get-Module ShellPrompt) { New-MenuItem -Label 'debian' -Desc 'SSH 远程' }
-    $script:itemDisabled = & (Get-Module ShellPrompt) { New-MenuItem -Label 'nope' -Disabled $true }
-    $script:itemSelected = & (Get-Module ShellPrompt) { New-MenuItem -Label 'ubuntu' }
-
-    It '未选中态应输出 [01] 序号' {
-        $s = & (Get-Module ShellPrompt) { param($it) Write-MenuItem -Item $it -Index 0 -IsSelected $false } -it $script:itemNormal
-        $s | Should Match '\[01\]'
-    }
-
-    It '选中态应包含 `>` 焦点箭头' {
-        $s = & (Get-Module ShellPrompt) { param($it) Write-MenuItem -Item $it -Index 0 -IsSelected $true } -it $script:itemSelected
-        $s | Should Match '>'
-        $s | Should Match '\[01\]'
-    }
-
-    It '禁用态应包含 `/` 斜杠前缀' {
-        $s = & (Get-Module ShellPrompt) { param($it) Write-MenuItem -Item $it -Index 0 -IsSelected $false } -it $script:itemDisabled
-        $s | Should Match '/'
-    }
-
-    It '禁用态应包含序号' {
-        $s = & (Get-Module ShellPrompt) { param($it) Write-MenuItem -Item $it -Index 0 -IsSelected $false } -it $script:itemDisabled
-        $s | Should Match '\[01\]'
-    }
-
-    It '应包含 Label 主显示文本' {
-        $s = & (Get-Module ShellPrompt) { param($it) Write-MenuItem -Item $it -Index 0 -IsSelected $false } -it $script:itemNormal
-        $s | Should Match 'debian'
-    }
-
-    It '选中态且有 Desc 时应输出描述' {
-        $script:itemWithDesc = & (Get-Module ShellPrompt) { New-MenuItem -Label 'srv' -Desc 'note here' }
-        $s = & (Get-Module ShellPrompt) { param($it) Write-MenuItem -Item $it -Index 2 -IsSelected $true } -it $script:itemWithDesc
-        $s | Should Match 'srv'
-        $s | Should Match 'note here'
-    }
-
-    It '不同 Index 应输出不同序号' {
-        $s1 = & (Get-Module ShellPrompt) { param($it) Write-MenuItem -Item $it -Index 0 -IsSelected $false } -it $script:itemNormal
-        $s5 = & (Get-Module ShellPrompt) { param($it) Write-MenuItem -Item $it -Index 4 -IsSelected $false } -it $script:itemNormal
-        $s1 | Should Match '\[01\]'
-        $s5 | Should Match '\[05\]'
-    }
-}
-
-Describe 'New-DynamicHelpPanel' {
-
-    It '空 Entries 应返回空字符串' {
-        $s = & (Get-Module ShellPrompt) { New-DynamicHelpPanel -Entries @() }
-        $s | Should Be ''
-    }
-
-    It '应拼接多个条目' {
-        $s = & (Get-Module ShellPrompt) {
-            New-DynamicHelpPanel -Entries @(
-                @{ Keys = 'Enter'; Action = '附着' }
-                @{ Keys = 'Del';   Action = '删除' }
-            )
-        }
-        $s | Should Match 'Enter'
-        $s | Should Match '附着'
-        $s | Should Match 'Del'
-        $s | Should Match '删除'
-    }
-
-    It '多个条目应以 │ 分隔' {
-        $s = & (Get-Module ShellPrompt) {
-            New-DynamicHelpPanel -Entries @(
-                @{ Keys = 'Enter'; Action = 'A' }
-                @{ Keys = 'R';     Action = 'B' }
-            )
-        }
-        $s | Should Match '│'
-    }
-
-    It 'Keys 或 Action 为空时跳过该条目' {
-        $s = & (Get-Module ShellPrompt) {
-            New-DynamicHelpPanel -Entries @(
-                @{ Keys = 'Enter'; Action = 'OK' }
-                @{ Keys = '';      Action = 'skip' }
-                @{ Keys = 'R';     Action = '' }
-            )
-        }
-        $s | Should Match 'Enter'
-        $s | Should Match 'R'
-        ($s -notmatch 'skip') | Should Be $true
-    }
-}
-
-Describe 'Get-SessionActionHelp' {
-
-    It '附着/恢复动作应返回含 Enter+R 的条目' {
-        $result = @( & (Get-Module ShellPrompt) { Get-SessionActionHelp -ActionLabel '附着/恢复 tmux 会话' } )
-        $result.Count | Should BeGreaterThan 0
-        $joined = ($result | ConvertTo-Json -Compress)
-        $joined | Should Match 'Enter'
-        $joined | Should Match 'R'
-    }
-
-    It '删除动作应包含二次确认提示' {
-        $result = @( & (Get-Module ShellPrompt) { Get-SessionActionHelp -ActionLabel '删除 tmux 会话' } )
-        $joined = ($result | ConvertTo-Json -Compress)
-        $joined | Should Match '二次确认'
-    }
-
-    It '刷新动作应包含 Enter 条目' {
-        $result = @( & (Get-Module ShellPrompt) { Get-SessionActionHelp -ActionLabel '刷新会话列表' } )
-        $joined = ($result | ConvertTo-Json -Compress)
-        $joined | Should Match 'Enter'
-    }
-
-    It '所有动作都应包含退出提示(Esc/Q)' {
-        $labels = @('附着/恢复 tmux 会话', '删除 tmux 会话', '刷新会话列表', '其他动作')
-        foreach ($lbl in $labels) {
-            $result = @( & (Get-Module ShellPrompt) { param($l) Get-SessionActionHelp -ActionLabel $l } -l $lbl )
-            $joined = ($result | ConvertTo-Json -Compress)
-            $joined | Should Match 'Esc'
-            $joined | Should Match 'Q'
-        }
-    }
-}
-
-Describe 'New-AnsiLayout' {
-
-    It '应返回含 Header/Main/Footer 三个集合的布局对象' {
-        $l = & (Get-Module ShellPrompt) { New-AnsiLayout -Title '测试' -Width 80 }
-        $l.Header.Count | Should BeGreaterThan 0
-        $l.Main.Count   | Should Be 0
-        $l.Footer.Count | Should BeGreaterThan 0
-        # Header 必须包含至少 1 行非空内容(标题行/装饰行/分隔线)
-        ($l.Header | Where-Object { $_ -and $_.Length -gt 0 }).Count | Should BeGreaterThan 0
-    }
-
-    It '应暴露颜色调色板字段' {
-        $l = & (Get-Module ShellPrompt) { New-AnsiLayout -Title 'x' -Width 80 }
-        $l.Primary | Should Not BeNullOrEmpty
-        $l.Accent  | Should Not BeNullOrEmpty
-        $l.Muted   | Should Not BeNullOrEmpty
-        $l.Rst     | Should Not BeNullOrEmpty
-    }
-
-    It 'Header 应至少 3 行(标题/分隔/边框)' {
-        $l = & (Get-Module ShellPrompt) { New-AnsiLayout -Title 'x' -Width 80 }
-        $l.Header.Count | Should BeGreaterThan 2
-    }
-
-    It 'Width 指定为 80 时应记录 Width=80' {
-        $l = & (Get-Module ShellPrompt) { New-AnsiLayout -Title 'x' -Width 80 }
-        $l.Width | Should Be 80
-    }
-
-    It 'Title 应出现在 Header 中' {
-        $l = & (Get-Module ShellPrompt) { New-AnsiLayout -Title 'MyTitle' -Width 80 }
-        $joined = ($l.Header -join "`n")
-        $joined | Should Match 'MyTitle'
-    }
-
-    It 'HeaderBadges 应嵌入 Header 行' {
-        $script:badges = @('badge-text-1', 'badge-text-2')
-        $l = & (Get-Module ShellPrompt) { param($b) New-AnsiLayout -Title 'x' -Width 80 -HeaderBadges $b } -b $script:badges
-        $joined = ($l.Header -join "`n")
-        $joined | Should Match 'badge-text-1'
-        $joined | Should Match 'badge-text-2'
-    }
-}
-
-Describe 'Add-MainLine / Set-FooterLine' {
-
-    It 'Add-MainLine 应向 Main 区域追加行' {
-        $script:layout = & (Get-Module ShellPrompt) { New-AnsiLayout -Title 'x' -Width 80 }
-        $before = $script:layout.Main.Count
-        & (Get-Module ShellPrompt) { param($ly) Add-MainLine -Layout $ly -Text 'hello' } -ly $script:layout
-        $script:layout.Main.Count | Should Be ($before + 1)
-        $script:layout.Main[$script:layout.Main.Count - 1] | Should Be 'hello'
-    }
-
-    It 'Set-FooterLine 应修改指定索引处的 Footer 行' {
-        $script:layout = & (Get-Module ShellPrompt) { New-AnsiLayout -Title 'x' -Width 80 }
-        & (Get-Module ShellPrompt) { param($ly) Set-FooterLine -Layout $ly -Index 0 -Text 'replaced' } -ly $script:layout
-        $script:layout.Footer[0] | Should Be 'replaced'
-    }
-
-    It 'Set-FooterLine 越界 Index 不应崩溃' {
-        $script:layout = & (Get-Module ShellPrompt) { New-AnsiLayout -Title 'x' -Width 80 }
-        { & (Get-Module ShellPrompt) { param($ly) Set-FooterLine -Layout $ly -Index 999 -Text 'x' } -ly $script:layout } | Should Not Throw
-    }
-
-    It 'Set-FooterLine 负数 Index 不应崩溃' {
-        $script:layout = & (Get-Module ShellPrompt) { New-AnsiLayout -Title 'x' -Width 80 }
-        { & (Get-Module ShellPrompt) { param($ly) Set-FooterLine -Layout $ly -Index -1 -Text 'x' } -ly $script:layout } | Should Not Throw
-    }
-}
-
-Describe 'Write-AnsiLine' {
-
-    It 'Write-AnsiLine 应为已注册的内部函数' {
-        # 验证函数定义存在(需先 dot-source)
-        $moduleRoot = (Resolve-Path "$PSScriptRoot\..").Path
-        $src = Join-Path $moduleRoot 'Private\New-AnsiLayout.ps1'
-        Test-Path $src | Should Be $true
-        $content = Get-Content $src -Raw
-        $content | Should Match 'function Write-AnsiLine'
+        & $script:mod { Test-SshHostName -HostName 'host|danger' } | Should -BeFalse
     }
 }
 
 Describe 'P2-1 Get-SpinnerFrame (纯函数)' {
 
     It '默认样式 (Braille) Frame=0 应返回首帧' {
-        $glyph = & (Get-Module ShellPrompt) { Get-SpinnerFrame -Frame 0 -Style 'Braille' }
-        $glyph | Should Be '⠋'
+        $glyph = & $script:mod { Get-SpinnerFrame -Frame 0 -Style 'Braille' }
+        $glyph | Should -Be '⠋'
     }
 
     It 'Braille 样式第 5 帧应为 ⠴' {
-        $glyph = & (Get-Module ShellPrompt) { Get-SpinnerFrame -Frame 5 -Style 'Braille' }
-        $glyph | Should Be '⠴'
+        $glyph = & $script:mod { Get-SpinnerFrame -Frame 5 -Style 'Braille' }
+        $glyph | Should -Be '⠴'
     }
 
     It 'Ascii 样式 Frame=2 应为 |' {
-        $glyph = & (Get-Module ShellPrompt) { Get-SpinnerFrame -Frame 2 -Style 'Ascii' }
-        $glyph | Should Be '|'
+        $glyph = & $script:mod { Get-SpinnerFrame -Frame 2 -Style 'Ascii' }
+        $glyph | Should -Be '|'
     }
 
     It 'Arrows 样式 Frame=4 应为 →' {
-        $glyph = & (Get-Module ShellPrompt) { Get-SpinnerFrame -Frame 4 -Style 'Arrows' }
-        $glyph | Should Be '→'
+        $glyph = & $script:mod { Get-SpinnerFrame -Frame 4 -Style 'Arrows' }
+        $glyph | Should -Be '→'
     }
 
     It '超出范围的 Frame 索引应正确回绕' {
-        $mod = Get-Module ShellPrompt
         # Ascii 4 帧: '-','\','|','/'。 Frame=4 应回绕到 Frame=0 = '-'
-        $glyph = & $mod { Get-SpinnerFrame -Frame 4 -Style 'Ascii' }
-        $glyph | Should Be '-'
+        $glyph = & $script:mod { Get-SpinnerFrame -Frame 4 -Style 'Ascii' }
+        $glyph | Should -Be '-'
         # Frame=8 (8 mod 4 = 0) 也应回绕到 '-'
-        $glyph2 = & $mod { Get-SpinnerFrame -Frame 8 -Style 'Ascii' }
-        $glyph2 | Should Be '-'
+        $glyph2 = & $script:mod { Get-SpinnerFrame -Frame 8 -Style 'Ascii' }
+        $glyph2 | Should -Be '-'
     }
 
     It '负数 Frame 索引应正确回绕 (negative-safe modulo)' {
-        $mod = Get-Module ShellPrompt
         # -1 在 Ascii (4 帧) 中应映射到 index 3 ('/')
-        $glyph = & $mod { Get-SpinnerFrame -Frame (-1) -Style 'Ascii' }
-        $glyph | Should Be '/'
+        $glyph = & $script:mod { Get-SpinnerFrame -Frame (-1) -Style 'Ascii' }
+        $glyph | Should -Be '/'
     }
 
     It '未知样式应回退到 Braille' {
-        $glyph = & (Get-Module ShellPrompt) { Get-SpinnerFrame -Frame 0 -Style 'NonExistentStyle' }
-        $glyph | Should Be '⠋'
+        $glyph = & $script:mod { Get-SpinnerFrame -Frame 0 -Style 'NonExistentStyle' }
+        $glyph | Should -Be '⠋'
     }
 }
 
 Describe 'P2-1 Get-SpinnerSequence' {
 
     It '默认应返回 10 个 Braille 帧' {
-        $seq = & (Get-Module ShellPrompt) { Get-SpinnerSequence -Style 'Braille' }
-        $seq.Count | Should Be 10
+        $seq = & $script:mod { Get-SpinnerSequence -Style 'Braille' }
+        $seq.Count | Should -Be 10
     }
 
     It 'Blocks 样式应返回 14 帧' {
-        $seq = & (Get-Module ShellPrompt) { Get-SpinnerSequence -Style 'Blocks' }
-        $seq.Count | Should Be 14
+        $seq = & $script:mod { Get-SpinnerSequence -Style 'Blocks' }
+        $seq.Count | Should -Be 14
     }
 
     It 'Dots 样式所有帧应为 3 字符宽 (幂等总宽度)' {
-        $seq = & (Get-Module ShellPrompt) { Get-SpinnerSequence -Style 'Dots' }
+        $seq = & $script:mod { Get-SpinnerSequence -Style 'Dots' }
         foreach ($frame in $seq) {
-            $frame.Length | Should Be 3
+            $frame.Length | Should -Be 3
         }
     }
 }
@@ -635,42 +242,40 @@ Describe 'P2-1 Get-SpinnerSequence' {
 Describe 'P2-4 Invoke-WithProgress (同步模式)' {
 
     It '同步 ScriptBlock 返回值应传递给 Result' {
-        $r = & (Get-Module ShellPrompt) {
+        $r = & $script:mod {
             Invoke-WithProgress -Message '测试' -ScriptBlock { 'ok' } -SuppressConsole
         }
-        $r.Status | Should Be 'Success'
-        $r.Result | Should Be 'ok'
+        $r.Status | Should -Be 'Success'
+        $r.Result | Should -Be 'ok'
     }
 
-    It 'ScriptBlock 拋异常时函数应拋出原始异常' {
-        $mod = Get-Module ShellPrompt
+    It 'ScriptBlock 抛异常时函数应抛出原始异常' {
         $threw = $false
         try {
-            & $mod {
+            & $script:mod {
                 Invoke-WithProgress -Message '测试' -ScriptBlock { throw 'boom' } -SuppressConsole
             }
         } catch {
             $threw = $true
         }
-        $threw | Should Be $true
+        $threw | Should -BeTrue
     }
 
     It '轮询模式 PollScript=true 立即完成' {
-        $r = & (Get-Module ShellPrompt) {
+        $r = & $script:mod {
             Invoke-WithProgress -Message '测试' -ScriptBlock { } `
                                 -PollScript { $true } -IntervalMs 50 -TimeoutSeconds 5 `
                                 -SuppressConsole
         }
-        $r.Status | Should Be 'Success'
-        $r.ElapsedMs | Should BeLessThan 500
+        $r.Status | Should -Be 'Success'
+        $r.ElapsedMs | Should -BeLessThan 500
     }
 
-    It '轮询模式超时应拋 TimeoutException' {
-        $mod = Get-Module ShellPrompt
+    It '轮询模式超时应抛 TimeoutException' {
         $threw = $false
         $typeName = ''
         try {
-            & $mod {
+            & $script:mod {
                 Invoke-WithProgress -Message '测试' -ScriptBlock { } `
                                     -PollScript { $false } -IntervalMs 80 -TimeoutSeconds 1 `
                                     -SuppressConsole
@@ -679,15 +284,14 @@ Describe 'P2-4 Invoke-WithProgress (同步模式)' {
             $threw = $true
             $typeName = $_.Exception.GetType().Name
         }
-        $threw | Should Be $true
-        $typeName | Should Be 'TimeoutException'
+        $threw | Should -BeTrue
+        $typeName | Should -Be 'TimeoutException'
     }
 
-    It 'PollScript 拋异常时应结束拋出原异常' {
-        $mod = Get-Module ShellPrompt
+    It 'PollScript 抛异常时应结束抛出原异常' {
         $threw = $false
         try {
-            & $mod {
+            & $script:mod {
                 Invoke-WithProgress -Message '测试' -ScriptBlock { } `
                                     -PollScript { throw 'poll-fail' } -IntervalMs 50 -TimeoutSeconds 5 `
                                     -SuppressConsole
@@ -695,83 +299,82 @@ Describe 'P2-4 Invoke-WithProgress (同步模式)' {
         } catch {
             $threw = $true
         }
-        $threw | Should Be $true
+        $threw | Should -BeTrue
     }
 
     It 'Frames 数组应记录展示过的帧索引' {
-        $r = & (Get-Module ShellPrompt) {
+        $r = & $script:mod {
             Invoke-WithProgress -Message '测试' -ScriptBlock { return 1 } -SuppressConsole
         }
-        $r.Frames.Count | Should BeGreaterThan 0
-        $r.Frames[0] | Should Be 0
+        $r.Frames.Count | Should -BeGreaterThan 0
+        $r.Frames[0] | Should -Be 0
     }
 }
 
 Describe 'P2-2 New-WelcomeBanner (纯函数)' {
 
     It '默认应返回 10 行' {
-        $lines = & (Get-Module ShellPrompt) { New-WelcomeBanner -Title 'TEST' }
-        $lines.Count | Should Be 10
+        $lines = & $script:mod { New-WelcomeBanner -Title 'TEST' }
+        $lines.Count | Should -Be 10
     }
 
     It '首行与末行应为空行' {
-        $lines = & (Get-Module ShellPrompt) { New-WelcomeBanner -Title 'TEST' }
-        $lines[0] | Should Be ''
-        $lines[9] | Should Be ''
+        $lines = & $script:mod { New-WelcomeBanner -Title 'TEST' }
+        $lines[0] | Should -Be ''
+        $lines[9] | Should -Be ''
     }
 
     It 'Title 应出现在第 2 行' {
-        $lines = & (Get-Module ShellPrompt) { New-WelcomeBanner -Title 'MYTEST' }
-        $lines[1] | Should Match 'MYTEST'
+        $lines = & $script:mod { New-WelcomeBanner -Title 'MYTEST' }
+        $lines[1] | Should -Match 'MYTEST'
     }
 
     It 'Subtitle 应出现在第 5 行' {
-        $lines = & (Get-Module ShellPrompt) { New-WelcomeBanner -Subtitle 'HELLOTEST' }
-        $lines[4] | Should Match 'HELLOTEST'
+        $lines = & $script:mod { New-WelcomeBanner -Subtitle 'HELLOTEST' }
+        $lines[4] | Should -Match 'HELLOTEST'
     }
 
     It 'Width=60 时 HLine 应有 56 个 =' {
-        $lines = & (Get-Module ShellPrompt) { New-WelcomeBanner -Title 'X' -Width 60 }
+        $lines = & $script:mod { New-WelcomeBanner -Title 'X' -Width 60 }
         # 第 9 行形如 '  +<hLine>---'
         $line9 = $lines[8]
         $eqCount = ([regex]::Matches($line9, '=')).Count
-        $eqCount | Should Be 56
+        $eqCount | Should -Be 56
     }
 
-    It 'Width 小于 40 应拋 ValidationRange 错误' {
-        $mod = Get-Module ShellPrompt
+    It 'Width 小于 40 应抛 ValidationRange 错误' {
         $threw = $false
         try {
-            & $mod { New-WelcomeBanner -Title 'X' -Width 10 }
+            & $script:mod { New-WelcomeBanner -Title 'X' -Width 10 }
         } catch {
             $threw = $true
         }
-        $threw | Should Be $true
+        $threw | Should -BeTrue
     }
 }
 
 Describe 'P2-2 Get-RandomQuote' {
 
     It '空 QuotesPath 应返回 Fallback' {
-        $q = & (Get-Module ShellPrompt) { Get-RandomQuote -QuotesPath '' -Fallback 'FB' }
-        $q | Should Be 'FB'
+        $q = & $script:mod { Get-RandomQuote -QuotesPath '' -Fallback 'FB' }
+        $q | Should -Be 'FB'
     }
 
     It '不存在的文件应返回 Fallback' {
-        $q = & (Get-Module ShellPrompt) {
+        $q = & $script:mod {
             Get-RandomQuote -QuotesPath 'C:\nonexistent\file.txt' -Fallback 'FB'
         }
-        $q | Should Be 'FB'
+        $q | Should -Be 'FB'
     }
 
     It '存在且非空的文件应返回非空 Trim 后的语录' {
         $tmp = [System.IO.Path]::GetTempFileName()
         try {
             Set-Content -LiteralPath $tmp -Value "line one`nline two`nline three" -Encoding UTF8
-            $q = & (Get-Module ShellPrompt) {
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]                param($p) Get-RandomQuote -QuotesPath $p -Fallback 'FB'
+            $q = & $script:mod {
+                param($p) Get-RandomQuote -QuotesPath $p -Fallback 'FB'
             } -p $tmp
-            $q | Should Match 'line (one|two|three)'
+            $q | Should -Match 'line (one|two|three)'
         } finally {
             Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue
         }
@@ -781,322 +384,556 @@ Describe 'P2-2 Get-RandomQuote' {
         $tmp = [System.IO.Path]::GetTempFileName()
         try {
             Set-Content -LiteralPath $tmp -Value 'cached' -Encoding UTF8
-            $mod = Get-Module ShellPrompt
-            $q1 = & $mod { param($p) Get-RandomQuote -QuotesPath $p } -p $tmp
-            $q2 = & $mod { param($p) Get-RandomQuote -QuotesPath $p } -p $tmp
-            $q1 | Should Be $q2
+            $q1 = & $script:mod { param($p) Get-RandomQuote -QuotesPath $p } -p $tmp
+            $q2 = & $script:mod { param($p) Get-RandomQuote -QuotesPath $p } -p $tmp
+            $q1 | Should -Be $q2
             # 验证 cache 存在
-            $hasCache = & $mod { param($p) $script:QuotesCache -ne $null -and $script:QuotesCache.Path -eq $p } -p $tmp
-            $hasCache | Should Be $true
+            $hasCache = & $script:mod {
+                param($p) $script:QuotesCache -ne $null -and $script:QuotesCache.Path -eq $p
+            } -p $tmp
+            $hasCache | Should -BeTrue
         } finally {
             Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue
         }
     }
 }
 
-Describe 'P2-3 Update-InputBuffer (纯函数)' {
+Describe 'Resolve-ColorTable (颜色语义解析)' {
 
-    It 'Char 应追加字符并保持 Continue' {
-        $r = & (Get-Module ShellPrompt) { Update-InputBuffer -Buffer 'ab' -Key 'Char' -Char 'c' }
-        $r.Buffer | Should Be 'abc'
-        $r.State  | Should Be 'Continue'
+    It '应返回请求的语义键' {
+        $table = & $script:mod { Resolve-ColorTable -Name 'Primary', 'Accent', 'Rst' }
+        $table.Keys | Should -Contain 'Primary'
+        $table.Keys | Should -Contain 'Accent'
+        $table.Keys | Should -Contain 'Rst'
     }
 
-    It 'Backspace 应删除末尾字符' {
-        $r = & (Get-Module ShellPrompt) { Update-InputBuffer -Buffer 'abc' -Key 'Backspace' }
-        $r.Buffer | Should Be 'ab'
-        $r.State  | Should Be 'Continue'
-    }
-
-    It '空 Buffer Backspace 应保持空' {
-        $r = & (Get-Module ShellPrompt) { Update-InputBuffer -Buffer '' -Key 'Backspace' }
-        $r.Buffer | Should Be ''
-        $r.State  | Should Be 'Continue'
-    }
-
-    It 'MaxLength 超过时 Char 应被丢弃' {
-        $r = & (Get-Module ShellPrompt) {
-            Update-InputBuffer -Buffer 'abc' -Key 'Char' -Char 'd' -MaxLength 3
+    It '调用方覆盖值优先于配置层' {
+        $table = & $script:mod {
+            Resolve-ColorTable -Name 'Primary' -Colors @{ Primary = 'ZZ-OVERRIDE' }
         }
-        $r.Buffer | Should Be 'abc'
+        $table.Primary | Should -Be 'ZZ-OVERRIDE'
     }
 
-    It 'Enter 应提交当前 Buffer' {
-        $r = & (Get-Module ShellPrompt) { Update-InputBuffer -Buffer 'done' -Key 'Enter' }
-        $r.Buffer | Should Be 'done'
-        $r.State  | Should Be 'Submit'
+    It 'Border 语义键应跟随 Primary' {
+        $table = & $script:mod {
+            Resolve-ColorTable -Name 'Primary', 'Border' -Colors @{ Primary = 'ZZ-OWN' }
+        }
+        $table.Border | Should -Be 'ZZ-OWN'
     }
 
-    It 'Escape 应取消并保留 Buffer' {
-        $r = & (Get-Module ShellPrompt) { Update-InputBuffer -Buffer 'partial' -Key 'Escape' }
-        $r.Buffer | Should Be 'partial'
-        $r.State  | Should Be 'Cancel'
-    }
-
-    It 'Ctrl+C 应取消' {
-        $r = & (Get-Module ShellPrompt) { Update-InputBuffer -Buffer 'x' -Key 'Ctrl+C' }
-        $r.State | Should Be 'Cancel'
-    }
-
-    It 'Ctrl+U 应清空 Buffer' {
-        $r = & (Get-Module ShellPrompt) { Update-InputBuffer -Buffer 'clear me' -Key 'Ctrl+U' }
-        $r.Buffer | Should Be ''
-        $r.State  | Should Be 'Continue'
+    It '未知语义键应解析为空串而不抛错' {
+        $table = & $script:mod { Resolve-ColorTable -Name 'NotARealSemanticKey' }
+        $table.NotARealSemanticKey | Should -Be ''
     }
 }
 
-Describe 'P2-3 Test-InputValidation (纯函数)' {
+Describe 'Get-TmuxSessionStateText (状态文案单一事实来源)' {
 
-    It '无 Validator 应返回 Valid=true' {
-        $r = & (Get-Module ShellPrompt) { Test-InputValidation -Value 'anything' }
-        $r.Valid   | Should Be $true
-        $r.Message | Should Be ''
+    It 'attached 应映射为 ● 已附着' {
+        $text = & $script:mod { Get-TmuxSessionStateText -Status 'attached' }
+        $text | Should -Be '● 已附着'
     }
 
-    It 'Validator 返回 $true 应为 Valid=true' {
-        $r = & (Get-Module ShellPrompt) {
-            Test-InputValidation -Value 'foo' -Validator { param($v) $true }
-        }
-        $r.Valid | Should Be $true
+    It 'detached 应映射为 ○ 已分离' {
+        $text = & $script:mod { Get-TmuxSessionStateText -Status 'detached' }
+        $text | Should -Be '○ 已分离'
     }
 
-    It 'Validator 返回 $false 应为 Valid=false' {
-        $r = & (Get-Module ShellPrompt) {
-            Test-InputValidation -Value 'foo' -Validator { param($v) $false }
-        }
-        $r.Valid | Should Be $false
+    It '空状态应映射为 ○ 已分离' {
+        $text = & $script:mod { Get-TmuxSessionStateText -Status '' }
+        $text | Should -Be '○ 已分离'
     }
 
-    It 'Validator 返回 hashtable Valid=false 应提取 Message' {
-        $r = & (Get-Module ShellPrompt) {
-            Test-InputValidation -Value 'x' -Validator { @{ Valid=$false; Message='自定义错误' } }
-        }
-        $r.Valid   | Should Be $false
-        $r.Message | Should Be '自定义错误'
-    }
-
-    It 'Validator 返回 hashtable Valid=true 应提取 Message' {
-        $r = & (Get-Module ShellPrompt) {
-            Test-InputValidation -Value 'x' -Validator { @{ Valid=$true; Message='passed' } }
-        }
-        $r.Valid   | Should Be $true
-        $r.Message | Should Be 'passed'
-    }
-
-    It 'Validator 拋异常应被捕获并转为 Valid=false' {
-        $r = & (Get-Module ShellPrompt) {
-            Test-InputValidation -Value 'x' -Validator { throw 'validator-boom' }
-        }
-        $r.Valid   | Should Be $false
-        $r.Message | Should Match 'validator-boom'
-    }
-
-    It '非空校验场景应按预期工作' {
-        $mod = Get-Module ShellPrompt
-        $r1 = & $mod {
-            Test-InputValidation -Value '' -Validator {
-                param($v) if ([string]::IsNullOrWhiteSpace($v)) { @{ Valid=$false; Message='不能为空' } } else { $true }
-            }
-        }
-        $r1.Valid   | Should Be $false
-        $r1.Message | Should Be '不能为空'
-
-        $r2 = & $mod {
-            Test-InputValidation -Value 'hi' -Validator {
-                param($v) if ([string]::IsNullOrWhiteSpace($v)) { @{ Valid=$false; Message='不能为空' } } else { $true }
-            }
-        }
-        $r2.Valid | Should Be $true
+    It '未知状态应映射为 ○ 已分离' {
+        $text = & $script:mod { Get-TmuxSessionStateText -Status 'weird-state' }
+        $text | Should -Be '○ 已分离'
     }
 }
 
+Describe 'Get-TmuxSessionSummary (会话计数汇总)' {
 
+    It '空会话数组应得到全 0 计数' {
+        $s = & $script:mod { Get-TmuxSessionSummary -Sessions @() }
+        $s.Total | Should -Be 0
+        $s.Attached | Should -Be 0
+        $s.Detached | Should -Be 0
+    }
 
-Describe 'Send-MenuKey (ESC 退出 + 方向键不闪退)' {
-
-    # fix(sss) v2: 字节级 CSI 重组 + Key 枚举作为唯一可靠字段。
-    # Windows Terminal + PS 5.1 下方向键被 ReadKey 拆为 3 字节序列
-    # (ESC + '[' + A/B/C/D), 字节 1 的 vK=27, char=0x1B, Key=Escape 会被误判退出。
-    # 修复方案: 调 ConvertTo-CsiArrowKey 吞字节 2/3 重组为单一 Key 枚举,
-    # 然后 Send-MenuKey 用 Key 枚举判断导航 (5-arg 构造后 vK/char=0, 唯一可靠是 Key).
-    # 本组测试覆盖:
-    #   - 重组后 Up/Down 导航 (Key 枚举路径)
-    #   - 重组后 ESC/Enter 退出与确认
-    #   - 真 ESC (Win API 路径: vK=27) 仍退出
-    #
-    # 注意: ConsoleKeyInfo 跨 & $mod { } 边界后 .NET 属性 (Character/Key) 会被
-    # .NET 反射层置空, 因此 key 构造必须在 module scope 内完成。
-    # 真 ESC 的 vK=27 路径也必须在 module 内构造 (跨边界 vK 字段丢失).
-
-    $mod = Get-Module ShellPrompt
-    $script:mod = $mod
-
-    # 共享工厂: 每个 It 独立 ctx, 避免 Pester 顺序污染
-    function Get-TestMenuContext {
-        & $script:mod {
-            New-MenuContext -AllItems @(
-                (New-MenuItem -Label 'a')
-                (New-MenuItem -Label 'b')
-                (New-MenuItem -Label 'c')
+    It 'attached 与 detached 应分别计数' {
+        $s = & $script:mod {
+            Get-TmuxSessionSummary -Sessions @(
+                [PSCustomObject]@{ Name = 'a'; Status = 'attached' }
+                [PSCustomObject]@{ Name = 'b'; Status = 'detached' }
+                [PSCustomObject]@{ Name = 'c'; Status = 'detached' }
             )
         }
+        $s.Total | Should -Be 3
+        $s.Attached | Should -Be 1
+        $s.Detached | Should -Be 2
     }
 
-    It '重组后 UpArrow (Key=UpArrow) 应走 Up 导航' {
-        $ctx = Get-TestMenuContext
-        $result = & $mod { param($c)
-            # 模拟 ConvertTo-CsiArrowKey 重组后的 5-arg 构造 key: vK=0, char=0, Key=UpArrow
-            $k = [System.ConsoleKeyInfo]::new([char]0, [System.ConsoleKey]::UpArrow, $false, $false, $false)
-            Send-MenuKey -Context $c -Key $k
-        } $ctx
-
-        $result | Should Not BeNullOrEmpty
-        $result.SelectedIdx | Should Be 2   # 从 0 上移 -> 2 (mod 3)
-        $result.State       | Should Be 'Selecting'
+    It '已附着数与已分离数之和应等于总数' {
+        $s = & $script:mod {
+            Get-TmuxSessionSummary -Sessions @(
+                [PSCustomObject]@{ Name = 'a'; Status = 'attached' }
+                [PSCustomObject]@{ Name = 'b'; Status = 'unknown' }
+            )
+        }
+        ($s.Attached + $s.Detached) | Should -Be $s.Total
     }
 
-    It '重组后 DownArrow (Key=DownArrow) 应走 Down 导航' {
-        $ctx = Get-TestMenuContext
-        $result = & $mod { param($c)
-            $k = [System.ConsoleKeyInfo]::new([char]0, [System.ConsoleKey]::DownArrow, $false, $false, $false)
-            Send-MenuKey -Context $c -Key $k
-        } $ctx
-
-        $result | Should Not BeNullOrEmpty
-        $result.SelectedIdx | Should Be 1   # 从 0 下移 -> 1
-        $result.State       | Should Be 'Selecting'
-    }
-
-    It '重组后 LeftArrow (Key=LeftArrow) 不应退出' {
-        $ctx = Get-TestMenuContext
-        $result = & $mod { param($c)
-            $k = [System.ConsoleKeyInfo]::new([char]0, [System.ConsoleKey]::LeftArrow, $false, $false, $false)
-            Send-MenuKey -Context $c -Key $k
-        } $ctx
-        $result | Should Not BeNullOrEmpty
-    }
-
-    It '重组后 RightArrow (Key=RightArrow) 不应退出' {
-        $ctx = Get-TestMenuContext
-        $result = & $mod { param($c)
-            $k = [System.ConsoleKeyInfo]::new([char]0, [System.ConsoleKey]::RightArrow, $false, $false, $false)
-            Send-MenuKey -Context $c -Key $k
-        } $ctx
-        $result | Should Not BeNullOrEmpty
-    }
-
-    It '真 ESC (vK=27) 应退出, 返回 null (Win API 路径)' {
-        # 真 ESC: vK=27, char=0x1B, Key=Escape (Win ReadKey API 填的)
-        $ctx = Get-TestMenuContext
-        $result = & $mod { param($c)
-            $k = [System.ConsoleKeyInfo]::new([char]0x1B, [System.ConsoleKey]::Escape, $false, $false, $false)
-            # 反射设 vK=27 (5-arg 构造后 vK=0, 真实 ReadKey 会填 27)
-            $type = $k.GetType()
-            $vkField = $type.GetField('_virtualKeyCode', [System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic)
-            if ($vkField) { $vkField.SetValue($k, [uint16]27) }
-            Send-MenuKey -Context $c -Key $k
-        } $ctx
-
-        $result | Should BeNullOrEmpty
+    It 'TitleSuffix 应符合统一计数口径' {
+        $s = & $script:mod {
+            Get-TmuxSessionSummary -Sessions @(
+                [PSCustomObject]@{ Name = 'a'; Status = 'attached' }
+                [PSCustomObject]@{ Name = 'b'; Status = 'detached' }
+            )
+        }
+        $s.TitleSuffix | Should -Be '会话 2 附 1 / 分 1'
     }
 }
 
+Describe 'Get-GridViewHostRow (主机选择表格行)' {
 
-Describe 'ConvertTo-CsiArrowKey (字节级 CSI 重组)' {
+    It '应按输入顺序生成行' {
+        $rows = & $script:mod {
+            Get-GridViewHostRow -Hosts @('debian', 'ubuntu')
+        }
+        $rows.Count | Should -Be 2
+        $rows[0].Host | Should -Be 'debian'
+        $rows[1].Host | Should -Be 'ubuntu'
+    }
 
-    # 验证 Windows Terminal + PS 5.1 方向键 3 字节序列重组逻辑:
-    #   字节 1 = ESC (vK=27, char=0x1B, Key=Escape)
-    #   字节 2 = '[' (vK=0,  char='[',   Key=NoName)
-    #   字节 3 = 'A'/'B'/'C'/'D'
-    # ConvertTo-CsiArrowKey 接受 -NextKeyProvider 注入, 在 Pester 中不读真实 stdin.
-    #
-    # 关键: 真实 ReadKey 由 .NET runtime 直接填三个字段 (vK, char, Key).
-    #       5-arg 构造 [ConsoleKeyInfo]::new(char, key, ...) 会丢 vK/char 字段, 仅 Key 保留.
-    #       PS 5.1 跨 module 边界 (via & $mod {}) 时 Key 字段被 PSObject 反射层置 0 (NoName).
-    # 解法: FirstByte 必须在 module scope 内反射设 _key/_keyChar/_virtualKeyCode 三个字段,
-    #       provider 也必须在 module scope 内被 invoke (返回值再 PSObject 包装前读到).
-    #       caller-scope 构造的 [char] 通过 param 传入 module 内部 Queue, provider 内部
-    #       立即 ReadKey 性质使用, 避开 .NET 反射层丢字段.
+    It '列属性集应不再包含 Desc(2026-10-19 P0 删除冗余列)' {
+        # 旧 Desc 列内容'SSH 远程主机'与 Host 列重复, 已随 P0 改进移除。
+        # 锁定回归: 任何让 Desc 字段再次出现的改动都视为破坏本契约。
+        $rows = & $script:mod { Get-GridViewHostRow -Hosts @('debian') }
+        $rows[0].PSObject.Properties.Name | Should -Not -Contain 'Desc'
+    }
 
-    $mod = Get-Module ShellPrompt
-    $script:mod = $mod
+    It 'Value 应等于主机名' {
+        $rows = & $script:mod { Get-GridViewHostRow -Hosts @('debian') }
+        $rows[0].Value | Should -Be 'debian'
+    }
 
-    # PS 5.1 跨 module 边界 (via & $mod {}) 时 ConsoleKeyInfo.Key/Character 字段
-    # 会被 PSObject 反射层置空。FirstByte 必须在 module scope 内 5-arg 构造。
-    # provider 必须模拟真实 ReadKey: 每次调用返回一个新字节, 消费是 in-place。
-    # 闭包内 int 自增 ($idx++) 不可变, 必改用 Queue<char> (Dequeue in-place)。
+    It 'LastHost 应被置顶' {
+        $rows = & $script:mod {
+            Get-GridViewHostRow -Hosts @('debian', 'ubuntu', 'arch') -LastHost 'ubuntu'
+        }
+        $rows[0].Host | Should -Be 'ubuntu'
+    }
 
-    # 1) ESC 路径 + 后续字节 (A/B/C/D/Z/非[) → 一律在 module scope 内构造 FirstByte + Queue
-    # 2) param 跨边界 OK (值类型 / 引用类型复制)
-    function Invoke-CsiArrow {
-        param([char]$Char1, [System.ConsoleKey]$Key1, [char[]]$Bytes)
-        & $mod { param($c1, $k1, $b)
-            $first = [System.ConsoleKeyInfo]::new($c1, $k1, $false, $false, $false)
-            $q = [System.Collections.Generic.Queue[char]]::new()
-            foreach ($x in $b) { $q.Enqueue($x) }
-            $provider = { $q.Dequeue() }
-            $consumed = $false
-            $result = ConvertTo-CsiArrowKey -FirstByte $first -NextKeyProvider $provider -Consumed ([ref]$consumed)
-            [pscustomobject]@{
-                Consumed = $consumed
-                Result   = $result
-                Key      = if ($result) { $result.Key } else { $null }
-                Remaining = $q.Count
+    It 'LastHost 行应标注 ● last(兼容 ★ 最近变体)' {
+        $rows = & $script:mod {
+            Get-GridViewHostRow -Hosts @('debian', 'ubuntu') -LastHost 'ubuntu'
+        }
+        $rows[0].State | Should -Match '● last|★ 最近'
+    }
+
+    It '非 LastHost 行的 State 应为空' {
+        $rows = & $script:mod {
+            Get-GridViewHostRow -Hosts @('debian', 'ubuntu') -LastHost 'ubuntu'
+        }
+        $rows[1].State | Should -Be ''
+    }
+
+    It 'Disabled 应恒为 false' {
+        $rows = & $script:mod { Get-GridViewHostRow -Hosts @('debian') }
+        $rows[0].Disabled | Should -BeFalse
+    }
+}
+
+Describe 'Get-GridViewManagerRow (tmux 动作菜单表格行)' {
+
+    It '无会话时只应保留 创建/直连/刷新 三行' {
+        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $false }
+        $rows.Count | Should -Be 3
+        $rows.Value | Should -Not -Contain 'Attach'
+        $rows.Value | Should -Not -Contain 'Remove'
+        $rows.Value | Should -Contain 'New'
+    }
+
+    It '有会话时应包含 附着/删除/创建/直连/刷新 五行' {
+        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true -AttachedCount 1 }
+        $rows.Count | Should -Be 5
+        $rows.Value | Should -Contain 'Attach'
+        $rows.Value | Should -Contain 'Remove'
+        $rows.Value | Should -Contain 'New'
+        $rows.Value | Should -Contain 'Ssh'
+        $rows.Value | Should -Contain 'Refresh'
+        # 2026-10-19 P0: 锁定 Desc 列不再出现在 Manager 行对象上
+        $rows[0].PSObject.Properties.Name | Should -Not -Contain 'Desc'
+    }
+
+    It '删除动作应以 ⚠ 危险 标注危险语义' {
+        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true }
+        $remove = @($rows | Where-Object { $_.Value -eq 'Remove' })[0]
+        # P1.3: 危险文字现在包裹 Colors.Danger ANSI 码(已含 ESC), 用 -Match 兼容
+        $remove.State | Should -Match '⚠ 危险'
+        $remove.State | Should -Match '\[38;2;220;90;90m'
+    }
+
+    It '直连动作应以 ⚠ 备选 标注' {
+        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true }
+        $ssh = @($rows | Where-Object { $_.Value -eq 'Ssh' })[0]
+        # P1.3: 备选文字现在包裹 Colors.Warning ANSI 码, 用 -Match 兼容
+        $ssh.State | Should -Match '⚠ 备选'
+        $ssh.State | Should -Match '\[38;2;220;180;80m'
+    }
+
+    It '附着动作应标注已附着数量' {
+        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true -AttachedCount 3 }
+        $attach = @($rows | Where-Object { $_.Value -eq 'Attach' })[0]
+        $attach.State | Should -Be '● 已附着 3'
+    }
+
+    It '无已附着会话时附着行 State 应为空' {
+        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true -AttachedCount 0 }
+        $attach = @($rows | Where-Object { $_.Value -eq 'Attach' })[0]
+        $attach.State | Should -Be ''
+    }
+}
+
+Describe 'Get-TmuxSessionGridRow (会话列表表格行)' {
+
+    It '应按会话顺序生成编号' {
+        $rows = & $script:mod {
+            Get-TmuxSessionGridRow -Sessions @(
+                [PSCustomObject]@{ Name = 'a'; Status = 'attached' }
+                [PSCustomObject]@{ Name = 'b'; Status = 'detached' }
+            )
+        }
+        $rows.Count | Should -Be 2
+        $rows[0].No | Should -Be '01'
+        $rows[1].No | Should -Be '02'
+    }
+
+    It 'Session 与 Value 应为纯会话名' {
+        $rows = & $script:mod {
+            Get-TmuxSessionGridRow -Sessions @([PSCustomObject]@{ Name = 'btop'; Status = 'detached' })
+        }
+        $rows[0].Session | Should -Be 'btop'
+        $rows[0].Value | Should -Be 'btop'
+    }
+
+    It 'ShowStateBadge 关闭时 State 应为空' {
+        $rows = & $script:mod {
+            Get-TmuxSessionGridRow -Sessions @([PSCustomObject]@{ Name = 'a'; Status = 'attached' })
+        }
+        $rows[0].State | Should -Be ''
+    }
+
+    It 'ShowStateBadge 开启时 State 应为统一状态文案' {
+        $rows = & $script:mod {
+            Get-TmuxSessionGridRow -Sessions @(
+                [PSCustomObject]@{ Name = 'a'; Status = 'attached' }
+                [PSCustomObject]@{ Name = 'b'; Status = 'detached' }
+            ) -ShowStateBadge
+        }
+        $rows[0].State | Should -Be '● 已附着'
+        $rows[1].State | Should -Be '○ 已分离'
+    }
+
+    It 'AllowRefresh 关闭时不应追加刷新行' {
+        $rows = & $script:mod {
+            Get-TmuxSessionGridRow -Sessions @([PSCustomObject]@{ Name = 'a'; Status = 'detached' })
+        }
+        $rows.Count | Should -Be 1
+    }
+
+    It 'AllowRefresh 开启时应追加刷新行且使用哨兵值' {
+        $rows = & $script:mod {
+            Get-TmuxSessionGridRow -Sessions @([PSCustomObject]@{ Name = 'a'; Status = 'detached' }) -AllowRefresh
+        }
+        # 哨兵值定义在模块作用域, 需从模块作用域读取后再断言
+        $signal = & $script:mod { $script:TmuxRefreshSignalValue }
+        $rows.Count | Should -Be 2
+        $rows[1].Session | Should -Be '⟳ 刷新会话列表'
+        $rows[1].Value | Should -Be $signal
+    }
+}
+
+Describe 'Get-GridViewColumnPlan (列裁剪计划)' {
+
+    It '应优先选 Session 作为键列' {
+        $plan = & $script:mod {
+            Get-GridViewColumnPlan -Rows @(
+                [PSCustomObject]@{ No = '01'; Session = 'a'; Status = 'attached' }
+            ) -HiddenColumns @{ Status = '' }
+        }
+        $plan.KeyColumn | Should -Be 'Session'
+    }
+
+    It '应优先选 Host 作为键列' {
+        $plan = & $script:mod {
+            Get-GridViewColumnPlan -Rows @(
+                [PSCustomObject]@{ Host = 'debian'; Desc = 'x' }
+            ) -HiddenColumns @{ Value = '' }
+        }
+        $plan.KeyColumn | Should -Be 'Host'
+    }
+
+    It '无可用自然键列时应回退到 _RowIdx' {
+        $plan = & $script:mod {
+            Get-GridViewColumnPlan -Rows @(
+                [PSCustomObject]@{ Foo = 'a' }
+                [PSCustomObject]@{ Foo = 'b' }
+            )
+        }
+        $plan.KeyColumn | Should -Be '_RowIdx'
+    }
+
+    It '隐藏列不应出现在可见列中' {
+        $plan = & $script:mod {
+            Get-GridViewColumnPlan -Rows @(
+                [PSCustomObject]@{ Session = 'a'; Status = 'attached'; Disabled = $false; Value = 'a' }
+            ) -HiddenColumns @{ Status = ''; Disabled = $false; Value = '' }
+        }
+        $plan.VisibleColumns | Should -Not -Contain 'Status'
+        $plan.VisibleColumns | Should -Not -Contain 'Disabled'
+        $plan.VisibleColumns | Should -Not -Contain 'Value'
+        $plan.VisibleColumns | Should -Contain 'Session'
+    }
+
+    It '裁剪后的行不应再带隐藏字段' {
+        $plan = & $script:mod {
+            Get-GridViewColumnPlan -Rows @(
+                [PSCustomObject]@{ Session = 'a'; Status = 'attached'; Disabled = $false; Value = 'a' }
+            ) -HiddenColumns @{ Status = ''; Disabled = $false; Value = '' }
+        }
+        $plan.TrimmedRows[0].PSObject.Properties.Name | Should -Not -Contain 'Status'
+        $plan.TrimmedRows[0].PSObject.Properties.Name | Should -Not -Contain 'Value'
+    }
+
+    It '裁剪后的行数应与原始行数一致' {
+        $plan = & $script:mod {
+            Get-GridViewColumnPlan -Rows @(
+                [PSCustomObject]@{ Session = 'a' }
+                [PSCustomObject]@{ Session = 'b' }
+            ) -HiddenColumns @{ Value = '' }
+        }
+        $plan.TrimmedRows.Count | Should -Be 2
+    }
+}
+
+Describe 'Restore-GridViewSelection (选中结果归一化与隐藏字段恢复)' {
+
+    It '单对象形态应直接返回' {
+        $sel = & $script:mod {
+            param($r) Restore-GridViewSelection -Selected $r -Rows @() -KeyColumn 'Session'
+        } ([PSCustomObject]@{ Session = 'a' })
+        $sel.Session | Should -Be 'a'
+    }
+
+    It '单元素集合形态应归一化为单对象' {
+        $sel = & $script:mod {
+            param($r) Restore-GridViewSelection -Selected $r -Rows @() -KeyColumn 'Session'
+        } @([PSCustomObject]@{ Session = 'a' })
+        $sel.Session | Should -Be 'a'
+    }
+
+    It '应从原始行恢复隐藏字段' {
+        $sel = & $script:mod {
+            $rows = @(
+                [PSCustomObject]@{ Session = 'a'; Status = 'attached'; Disabled = $false; Value = 'a' }
+            )
+            $trimmed = [PSCustomObject]@{ Session = 'a' }
+            Restore-GridViewSelection -Selected $trimmed -Rows $rows -KeyColumn 'Session' `
+                -HiddenKeys @('Status', 'Disabled', 'Value') -HiddenColumns @{ Status = ''; Disabled = $false; Value = '' }
+        }
+        $sel.Status | Should -Be 'attached'
+        $sel.Value | Should -Be 'a'
+        $sel.Disabled | Should -BeFalse
+    }
+
+    It '原始行缺失该列时应使用默认值' {
+        $sel = & $script:mod {
+            $rows = @([PSCustomObject]@{ Session = 'a' })
+            $trimmed = [PSCustomObject]@{ Session = 'a' }
+            Restore-GridViewSelection -Selected $trimmed -Rows $rows -KeyColumn 'Session' `
+                -HiddenKeys @('Value') -HiddenColumns @{ Value = 'DEFAULT' }
+        }
+        $sel.Value | Should -Be 'DEFAULT'
+    }
+}
+
+Describe 'ConvertTo-TmuxSessionSelection / ConvertTo-TmuxRefreshSelection (选择结果归一化)' {
+
+    It '会话选择应产出统一形状且 Label 为纯会话名' {
+        $sel = & $script:mod { ConvertTo-TmuxSessionSelection -Name 'btop' -Status 'detached' }
+        $sel.Value | Should -Be 'btop'
+        $sel.RawName | Should -Be 'btop'
+        $sel.Label | Should -Be 'btop'
+        $sel.Status | Should -Be 'detached'
+        $sel.IsRefresh | Should -BeFalse
+    }
+
+    It '未指定状态时应按 detached 处理' {
+        $sel = & $script:mod { ConvertTo-TmuxSessionSelection -Name 'btop' }
+        $sel.Status | Should -Be 'detached'
+    }
+
+    It '刷新选择项应使用哨兵值并标记 IsRefresh' {
+        $sel = & $script:mod { ConvertTo-TmuxRefreshSelection }
+        # 哨兵值定义在模块作用域, 需从模块作用域读取后再断言
+        $signal = & $script:mod { $script:TmuxRefreshSignalValue }
+        $sel.Value | Should -Be $signal
+        $sel.IsRefresh | Should -BeTrue
+    }
+}
+
+Describe 'Get-TmuxRefreshedSession (用户触发的刷新)' {
+
+    It '应返回刷新脚本块的结果' {
+        $sessions = & $script:mod {
+            Get-TmuxRefreshedSession -SessionRefresher {
+                @([PSCustomObject]@{ Name = 'a'; Status = 'attached' })
             }
-        } $Char1 $Key1 $Bytes
+        }
+        $sessions.Count | Should -Be 1
+        $sessions[0].Name | Should -Be 'a'
     }
 
-    It 'ESC + [ + A 应重组为 UpArrow (Consumed=true)' {
-        $r = Invoke-CsiArrow -Char1 ([char]0x1B) -Key1 ([System.ConsoleKey]::Escape) -Bytes ([char[]]@('[', 'A'))
-
-        $r.Consumed   | Should Be $true
-        $r.Result     | Should Not BeNullOrEmpty
-        $r.Key        | Should Be ([System.ConsoleKey]::UpArrow)
-        $r.Remaining  | Should Be 0
+    It '应过滤掉 $null 元素' {
+        $sessions = & $script:mod {
+            Get-TmuxRefreshedSession -SessionRefresher {
+                @($null, [PSCustomObject]@{ Name = 'a'; Status = 'attached' }, $null)
+            }
+        }
+        $sessions.Count | Should -Be 1
     }
 
-    It 'ESC + [ + B 应重组为 DownArrow' {
-        $r = Invoke-CsiArrow -Char1 ([char]0x1B) -Key1 ([System.ConsoleKey]::Escape) -Bytes ([char[]]@('[', 'B'))
+    It '空结果应返回空数组而不是 $null' {
+        $sessions = & $script:mod {
+            Get-TmuxRefreshedSession -SessionRefresher { $null }
+        }
+        $sessions.Count | Should -Be 0
+    }
+}
 
-        $r.Consumed | Should Be $true
-        $r.Key      | Should Be ([System.ConsoleKey]::DownArrow)
+Describe '单轨 GridView 契约 (单轨化回归防护)' {
+
+    It 'Get-ConsoleUiBackend 的 Backend 恒为 GridView' {
+        $state = & $script:mod { Get-ConsoleUiBackend }
+        $state.Backend | Should -Be 'GridView'
     }
 
-    It 'ESC + [ + C 应重组为 RightArrow' {
-        $r = Invoke-CsiArrow -Char1 ([char]0x1B) -Key1 ([System.ConsoleKey]::Escape) -Bytes ([char[]]@('[', 'C'))
-
-        $r.Consumed | Should Be $true
-        $r.Key      | Should Be ([System.ConsoleKey]::RightArrow)
+    It 'Get-ConsoleUiBackend 不得返回 AnsiFallback 降级轨' {
+        $state = & $script:mod { Get-ConsoleUiBackend }
+        $state.Backend | Should -Not -Be 'AnsiFallback'
     }
 
-    It 'ESC + [ + D 应重组为 LeftArrow' {
-        $r = Invoke-CsiArrow -Char1 ([char]0x1B) -Key1 ([System.ConsoleKey]::Escape) -Bytes ([char[]]@('[', 'D'))
-
-        $r.Consumed | Should Be $true
-        $r.Key      | Should Be ([System.ConsoleKey]::LeftArrow)
+    It 'Get-ConsoleUiBackend 应返回统一的字段集合' {
+        $state = & $script:mod { Get-ConsoleUiBackend }
+        foreach ($field in @('Backend', 'Available', 'Reason', 'Conflicts', 'PstuiVersion', 'TerminalGuiVersion')) {
+            $state.PSObject.Properties.Name | Should -Contain $field
+        }
     }
 
-    It '字节 1 不是 ESC (Key=UpArrow 模拟其他键) 应直接不重组, Consumed=false, 不读下一字节' {
-        $r = Invoke-CsiArrow -Char1 ([char]'x') -Key1 ([System.ConsoleKey]::UpArrow) -Bytes ([char[]]@('[', 'A'))
-
-        $r.Consumed   | Should Be $false
-        $r.Result     | Should BeNullOrEmpty
-        $r.Remaining  | Should Be 2   # 字节 2/3 没被读
+    It 'Assert-ConsoleUiReady 在主轨可用时不应抛错' {
+        # 注入 Available=$true 的状态, 断言"可用即放行"这条契约与真实环境无关
+        $threw = $false
+        try {
+            & $script:mod {
+                $original = $script:ConsoleUiBackend
+                try {
+                    $script:ConsoleUiBackend = [PSCustomObject]@{
+                        Backend   = 'GridView'
+                        Available = $true
+                        Reason    = '测试注入的可用状态'
+                    }
+                    Assert-ConsoleUiReady -Feature '单元测试功能'
+                } finally {
+                    $script:ConsoleUiBackend = $original
+                }
+            }
+        } catch {
+            $threw = $true
+        }
+        $threw | Should -BeFalse
     }
 
-    It 'ESC + (非 [) 应视为真 ESC, Consumed=false, 字节 2 已被读 (ReadKey 协议限制)' {
-        $r = Invoke-CsiArrow -Char1 ([char]0x1B) -Key1 ([System.ConsoleKey]::Escape) -Bytes ([char[]]@('q'))
-
-        $r.Consumed   | Should Be $false
-        $r.Result     | Should BeNullOrEmpty
-        $r.Remaining  | Should Be 0   # 字节 2 已被读
+    It 'Assert-ConsoleUiReady 在主轨不可用时应抛出可定位的终止错误' {
+        $message = & $script:mod {
+            $original = $script:ConsoleUiBackend
+            try {
+                $script:ConsoleUiBackend = [PSCustomObject]@{
+                    Backend   = 'GridView'
+                    Available = $false
+                    Reason    = '测试注入的不可用原因'
+                }
+                $script:thrownMessage = ''
+                try {
+                    Assert-ConsoleUiReady -Feature '单元测试功能'
+                } catch {
+                    $script:thrownMessage = $_.Exception.Message
+                }
+            } finally {
+                $script:ConsoleUiBackend = $original
+            }
+            $script:thrownMessage
+        }
+        $message | Should -Not -BeNullOrEmpty
+        $message | Should -BeLike '*单元测试功能*'
+        $message | Should -BeLike '*测试注入的不可用原因*'
     }
 
-    It 'ESC + [ + 非法字节 (Z) 应不重组, Consumed=false' {
-        $r = Invoke-CsiArrow -Char1 ([char]0x1B) -Key1 ([System.ConsoleKey]::Escape) -Bytes ([char[]]@('[', 'Z'))
+    It 'Show-HostSelector 不再提供 -Backend 参数' {
+        $keys = & $script:mod { (Get-Command Show-HostSelector).Parameters.Keys }
+        $keys | Should -Not -Contain 'Backend'
+    }
 
-        $r.Consumed   | Should Be $false
-        $r.Result     | Should BeNullOrEmpty
-        $r.Remaining  | Should Be 0
+    It 'Show-SessionManager 不再提供 -Backend 参数' {
+        $keys = & $script:mod { (Get-Command Show-SessionManager).Parameters.Keys }
+        $keys | Should -Not -Contain 'Backend'
+    }
+
+    It 'Show-TmuxSessionList 不再提供 -Backend 参数' {
+        $keys = & $script:mod { (Get-Command Show-TmuxSessionList).Parameters.Keys }
+        $keys | Should -Not -Contain 'Backend'
+    }
+
+    It '已删除的 AnsiFallback 降级轨函数在模块作用域内应不存在' {
+        $removed = @(
+            'Invoke-AnsiMenu', 'Invoke-AnsiHostSelector', 'Invoke-AnsiSessionManager',
+            'Invoke-ConsoleMenu', 'Invoke-MenuMachine', 'New-AnsiLayout',
+            'Clear-AnsiScreen', 'Write-MenuItem', 'New-MenuItem',
+            'New-StatusBadge', 'Format-StatusBadge', 'New-DynamicHelpPanel',
+            'Get-SessionActionHelp', 'Resolve-MenuColorTable',
+            'Get-TmuxSessionMenuOption', 'Test-FilterCharacter',
+            'Get-FilteredItems', 'Update-FilterString', 'Send-MenuKey',
+            'ConvertTo-CsiArrowKey', 'Update-InputBuffer', 'Test-InputValidation'
+        )
+        foreach ($name in $removed) {
+            $found = & $script:mod {
+                param($n) [bool](Get-Command $n -CommandType Function -ErrorAction SilentlyContinue)
+            } $name
+            $found | Should -BeFalse
+        }
+    }
+
+    It '已删除的降级轨源文件不应出现在模块目录内' {
+        # 基于 (Get-Module ShellPrompt).ModuleBase 推导, 不依赖仓库工作区路径,
+        # 因此模块被安装到任意位置时该断言同样成立
+        $privateDir = Join-Path $script:mod.ModuleBase 'Private'
+        foreach ($file in @(
+                'Invoke-AnsiMenu.ps1', 'Invoke-ConsoleMenu.ps1', 'Invoke-MenuMachine.ps1',
+                'New-AnsiLayout.ps1', 'Clear-AnsiScreen.ps1', 'Write-MenuItem.ps1',
+                'New-MenuItem.ps1', 'New-StatusBadge.ps1', 'Format-StatusBadge.ps1',
+                'New-DynamicHelpPanel.ps1', 'Get-TmuxSessionMenuOption.ps1',
+                'Get-KeyboardFilter.ps1', 'Show-InputPrompt.ps1')) {
+            Test-Path (Join-Path $privateDir $file) | Should -BeFalse
+        }
+    }
+
+    It 'GridView 主轨实现文件应存在于模块目录内' {
+        $privateDir = Join-Path $script:mod.ModuleBase 'Private'
+        foreach ($file in @(
+                'Invoke-GridViewMenu.ps1', 'Get-GridViewColumnPlan.ps1',
+                'Get-GridViewHostRow.ps1', 'Get-GridViewManagerRow.ps1',
+                'Get-TmuxSessionGridRow.ps1', 'Get-TmuxSessionStateText.ps1',
+                'Get-ConsoleUiBackend.ps1')) {
+            Test-Path (Join-Path $privateDir $file) | Should -BeTrue
+        }
     }
 }

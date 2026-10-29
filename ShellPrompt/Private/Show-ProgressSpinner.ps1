@@ -1,12 +1,19 @@
-# Show-ProgressSpinner.ps1 - 加载动画组件
+# Show-ProgressSpinner.ps1 - 加载动画组件 (单轨 Spectre)
 # P2-1: 提供单帧 spinner 打印 + 纯函数帧查询
 # P2-4: 新增 Invoke-WithProgress 封装(调用方传入 ScriptBlock, 内部 spin 循环 + 自动完成态)
+# v2.0 (单轨 Spectre):
+#   1) 唯一渲染出口 = PwshSpectreConsole 的 Write-SpectreHost / Invoke-SpectreCommandWithStatus
+#   2) 已删除 legacy ANSI 路径与双轨探测(Test-SpectreSpinnerAvailable / -ForceLegacy)
+#   3) 运行时硬依赖 PowerShell 7.4+ 与仓库内置 Modules/PwshSpectreConsole
 # 设计原则:
 # 1. 纯函数 Get-SpinnerFrame 抽离帧序列(便于 Pester 单元测试)
 # 2. Show-ProgressSpinner 是 I/O 包装, 通过 -PassThru 返回帧数据跳过实际渲染
-# 3. PS 5.1 兼容: 不使用 Start-ThreadJob (仅 PS 7+), 改为单帧 API + 调用方控制循环
+# 3. 单帧 API: 不使用 Start-ThreadJob, 改为调用方控制循环
 # 4. 调用方负责: 在耗时操作前打 1 帧, 操作中按需刷新, 完成后打完成态
 # 5. Invoke-WithProgress: 阻塞式工作流封装, 接受 ScriptBlock, spin 循环直到 ScriptBlock 返回或超时
+
+# ESC 码(0x1B)。仅用于 Spectre markup 无法表达的光标控制(回行首 / 清行尾)
+$script:Esc = [char]27
 
 # 内置 spinner 样式: 5 套 unicode 字符序列
 # 每套包含 FrameCount 帧, 循环播放; 全部是 unicode 宽字符, 终端宽度稳定
@@ -53,7 +60,7 @@ function Get-SpinnerFrame {
     [CmdletBinding()]
     [OutputType([string])]
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
-param(
+    param(
         [Parameter(Mandatory = $true)]
         [int]$Frame,
 
@@ -100,6 +107,78 @@ function Get-SpinnerSequence {
     return $script:SpinnerStyles[$Style]
 }
 
+function Get-SpinnerStyleMapping {
+    <#
+    .SYNOPSIS
+        将 ShellPrompt spinner 样式名映射到 Spectre.Spinner.Known 枚举字符串
+
+    .DESCRIPTION
+        映射规则:
+          Dots    → Dots6   (用户原始诉求即"6 个点的加载动画")
+          Braille → Dots3   (盲文点阵最接近的 Spectre 内置样式)
+          Ascii   → Ascii   (直接对应)
+          Blocks  → Block1  (进度块最接近的 Spectre 内置样式)
+          Arrows  → Arrow   (直接对应)
+          其它     → Dots6   (安全回退)
+
+        本函数是纯函数, 便于 Pester 单元测试覆盖所有分支。
+        Invoke-WithProgress 用本函数把 ShellPrompt 样式名翻译成 Spectre 的 Spinner 名称。
+
+    .PARAMETER Style
+        ShellPrompt spinner 样式名 (Braille/Ascii/Blocks/Dots/Arrows)
+
+    .OUTPUTS
+        [string] Spectre.Spinner.Known 枚举名称 (例如 'Dots6', 'Ascii', 'Arrow')
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Style = 'Braille'
+    )
+
+    $map = @{
+        'Dots'    = 'Dots6'
+        'Braille' = 'Dots3'
+        'Ascii'   = 'Ascii'
+        'Blocks'  = 'Block1'
+        'Arrows'  = 'Arrow'
+    }
+    if ($map.ContainsKey($Style)) { return $map[$Style] }
+    return 'Dots6'
+}
+
+function ConvertTo-SpectrePlainText {
+    <#
+    .SYNOPSIS
+        把纯文本转义为 Spectre markup 安全字符串
+
+    .DESCRIPTION
+        Write-SpectreHost 的 -Message 参数按 Spectre markup 解析, 裸 '[' 会被当成
+        样式标记起始符(例如 "[0K" 会被解析失败或误渲染)。本函数把 '[' 双写为 '[[',
+        依据 Spectre markup 转义规则还原为字面量方括号。
+        放在 Private/ 供所有走 Write-SpectreHost 的 UI 路径共用, 是单轨改造后
+        "纯文本 vs markup" 的统一边界。
+
+    .PARAMETER Text
+        待转义的原始文本(可含 '[' 字符)
+
+    .OUTPUTS
+        [string] markup 安全字符串
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyString()]
+        [AllowNull()]
+        [string]$Text
+    )
+
+    if ([string]::IsNullOrEmpty($Text)) { return '' }
+    return $Text -replace '\[', '[['
+}
+
 function Show-ProgressSpinner {
     <#
     .SYNOPSIS
@@ -115,10 +194,16 @@ function Show-ProgressSpinner {
           }
           Show-ProgressSpinner -Done -Status Success -Message "完成"
 
+        v2.0 单轨渲染: 非 -PassThru 时统一走 Write-SpectreHost, 无 legacy ANSI 兜底。
+        Spectre.Console 没有原生的"单帧 spinner"概念(其 Spinner 是
+        Invoke-SpectreCommandWithStatus 包裹整段 ScriptBlock 的), 因此这里用
+        Write-SpectreHost 输出一行(回行首 + 清行尾), 语义等价于旧单帧写入,
+        且在 Spectre Live 渲染上下文中能被正确 Refresh() 重绘。
+
         通过 -PassThru 可跳过 console 写入, 仅返回结构化数据(测试模式)。
 
     .PARAMETER Message
-        spinner 旁边的提示文本
+        spinner 旁边的提示文本(按 Spectre markup 规则做转义, 裸 '[' 安全)
 
     .PARAMETER Frame
         帧索引(0-based, 负数回绕)
@@ -171,220 +256,50 @@ function Show-ProgressSpinner {
         [switch]$PassThru
     )
 
-    $primary = Get-CachedConfig -Section 'Colors' -Key 'FreshGreen' -Default "`e[38;2;137;209;133m"
-    $muted   = Get-CachedConfig -Section 'Colors' -Key 'MidGray'    -Default "`e[38;2;100;100;100m"
-    $errorColor = "`e[38;2;220;80;80m"  # 红色, 完成态失败
-    $rst     = Get-CachedConfig -Section 'Colors' -Key 'Rst'        -Default "`e[0m"
-
+    # ---- PassThru: 纯数据通道, 不触碰 Spectre (测试与上层编排复用) ----
     if ($Done) {
-        $glyph = $script:SpinnerDoneGlyphs[$Status]
-        $color = if ($Status -eq 'Failure') { $errorColor } else { $primary }
         $payload = [PSCustomObject]@{
-            Glyph   = $glyph
+            Glyph   = $script:SpinnerDoneGlyphs[$Status]
             Message = $Message
             Frame   = -1
             Style   = ''
             IsDone  = $true
             Status  = $Status
         }
-        if ($PassThru) { return $payload }
-        # \r 回行首, \e[K 清行尾, \n 结束本行
-        [Console]::Write("`r${color}${glyph}${rst}  ${muted}${Message}${rst}`e[K`n")
-        return
-    }
-
-    $glyph = Get-SpinnerFrame -Frame $Frame -Style $Style
-    $payload = [PSCustomObject]@{
-        Glyph   = $glyph
-        Message = $Message
-        Frame   = $Frame
-        Style   = $Style
-        IsDone  = $false
-        Status  = ''
+    } else {
+        $payload = [PSCustomObject]@{
+            Glyph   = (Get-SpinnerFrame -Frame $Frame -Style $Style)
+            Message = $Message
+            Frame   = $Frame
+            Style   = $Style
+            IsDone  = $false
+            Status  = ''
+        }
     }
     if ($PassThru) { return $payload }
-    # \r 回行首, \e[K 清行尾(避免上次输出残留)
-    [Console]::Write("`r${primary}${glyph}${rst}  ${muted}${Message}${rst}`e[K")
-}
 
-function Invoke-WithProgress {
-    <#
-    .SYNOPSIS
-        接受 ScriptBlock, 在执行期间动画显示 spinner (P2-4 封装)
+    # ---- 单轨渲染: 统一走 Write-SpectreHost ----
+    # 主题色由 Get-CachedConfig 提供, 以裸 ESC 表达(Spectre markup 的 24 位真彩语法
+    # 是 [rgb(r,g,b)], 与配置层存储的 ESC 串不同源, 保持一致避免二次转换)。
+    $colorTable = Resolve-ColorTable -Name 'Primary', 'Muted', 'Rst'
+    $primary   = $colorTable.Primary
+    $muted     = $colorTable.Muted
+    $errorColor = "$Esc[38;2;220;80;80m"
+    $rst       = $colorTable.Rst
 
-    .DESCRIPTION
-        行为约定:
-          1. 调用 -ScriptBlock 之前先打 1 帧 spinner (Frame 0)
-          2. 主循环: 轮询 -PollScript 结果 (间隔 -IntervalMs ms), 每帧刷新一次 spinner
-          3. -PollScript 返回 $true 时认作"完成", 跳出循环打 Success 完成态
-          4. -PollScript 拋异常或 -ScriptBlock 拋异常 -> 打 Failure 完成态 + 重新拋出
-          5. -TimeoutSeconds 超时 (默认 60s) -> 打 Failure + 拋 TimeoutException
-          6. 若 -SuppressConsole 置位 (用于测试 / Pester), 不写 console, 仅返回结构化对象
+    $glyph = $payload.Glyph
+    $color = if ($Status -eq 'Failure' -and $Done) { $errorColor } else { $primary }
 
-        用法 1 - 同步封装: 只在前后打一帧一状态
-          Invoke-WithProgress -Message "加载主机列表" -ScriptBlock { $hosts = Get-SshConfigHosts; return $hosts }
-        用法 2 - 轮询封装: 跨秒级 SSH 探测轮询
-          Invoke-WithProgress -Message "探测远程 tmux" `
-                              -ScriptBlock { ssh探测调用 } `
-                              -PollScript { $global:ProbeResult -ne $null } `
-                              -TimeoutSeconds 10
+    # 关键: Write-SpectreHost 的 -Message 按 Spectre markup 解析, 整行里的 '[' 会被当成
+    # 样式标记起始符(包括 ESC 段的 [38;2;...m 与清行尾的 [0K)。因此对"拼好的整行"统一
+    # 做 '[' -> '[[' 转义, Spectre 会还原为字面量 '[' 并原样写向终端, 从而让既有
+    # ESC 序列与主题色照常生效, 同时 Message 中的裸方括号(如 tmux [session]) 不会被误解析。
+    $line = "`r${color}${glyph}${rst}  ${muted}${Message}${rst}$Esc[0K"
+    $safeLine = ConvertTo-SpectrePlainText -Text $line
 
-    .PARAMETER Message
-        spinner 主提示文本
-
-    .PARAMETER ScriptBlock
-        主操作(同步执行, 返回值会作为函数输出)
-
-    .PARAMETER PollScript
-        可选轮询脚本: 返回 $true 时结束 spinner; 不传则 ScriptBlock 结束后立即完成
-
-    .PARAMETER IntervalMs
-        轮询间隔, 默认 80ms
-
-    .PARAMETER TimeoutSeconds
-        最长等待秒数, 默认 60s
-
-    .PARAMETER Style
-        spinner 样式, 默认 Braille
-
-    .PARAMETER SuccessMessage
-        成功完成时显示的提示; 不传则用 -Message + "完成"
-
-    .PARAMETER FailureMessage
-        失败时显示的提示; 不传则用 -Message + "失败"
-
-    .PARAMETER SuppressConsole
-        测试模式: 不写 console, 返回 [PSCustomObject]@{ Result, Frames, Status, ElapsedMs }
-
-    .OUTPUTS
-        不传 -SuppressConsole: void
-        传 -SuppressConsole:  [PSCustomObject]@{ Result, Frames, Status, ElapsedMs }
-    #>
-    [CmdletBinding()]
-    [OutputType([void])]
-    [OutputType([PSCustomObject])]
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Message,
-
-        [Parameter(Mandatory = $true)]
-        [scriptblock]$ScriptBlock,
-
-        [Parameter(Mandatory = $false)]
-        [scriptblock]$PollScript,
-
-        [Parameter(Mandatory = $false)]
-        [ValidateRange(20, 2000)]
-        [int]$IntervalMs = 80,
-
-        [Parameter(Mandatory = $false)]
-        [ValidateRange(1, 600)]
-        [int]$TimeoutSeconds = 60,
-
-        [Parameter(Mandatory = $false)]
-        [ValidateSet('Braille', 'Ascii', 'Blocks', 'Dots', 'Arrows')]
-        [string]$Style = 'Braille',
-
-        [Parameter(Mandatory = $false)]
-        [string]$SuccessMessage,
-
-        [Parameter(Mandatory = $false)]
-        [string]$FailureMessage,
-
-        [Parameter(Mandatory = $false)]
-        [switch]$SuppressConsole
-    )
-
-    if (-not $SuccessMessage) { $SuccessMessage = "${Message}完成" }
-    if (-not $FailureMessage) { $FailureMessage = "${Message}失败" }
-
-    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $frames = New-Object System.Collections.Generic.List[int]
-    $frameIdx = 0
-    $finalStatus = 'Success'
-    $result = $null
-    $timedOut = $false
-
-    # 推一帧作为初始状态
-    $frames.Add($frameIdx)
-    if (-not $SuppressConsole) {
-        Show-ProgressSpinner -Message $Message -Frame $frameIdx -Style $Style
-    }
-    $frameIdx++
-
-    try {
-        if ($PollScript) {
-            # 轮询模式: 在主线程同步执行 ScriptBlock 一次, 然后轮询 PollScript
-            # (调用方需保证 ScriptBlock 是"启动后返回"型的, 如 ssh 探查后台运行)
-            $result = & $ScriptBlock
-            $deadline = $stopwatch.Elapsed.TotalSeconds + $TimeoutSeconds
-            while ($true) {
-                Start-Sleep -Milliseconds $IntervalMs
-                $done = $false
-                $pollError = $null
-                try {
-                    $done = [bool](& $PollScript)
-                } catch {
-                    $pollError = $_
-                }
-                if ($null -ne $pollError) {
-                    # 重新拋出让 outer catch 统一处理 (含 SuppressConsole 模式)
-                    throw $pollError
-                }
-                $frames.Add($frameIdx)
-                if (-not $SuppressConsole) {
-                    Show-ProgressSpinner -Message $Message -Frame $frameIdx -Style $Style
-                }
-                $frameIdx++
-                if ($done) { break }
-                if ($stopwatch.Elapsed.TotalSeconds -ge $deadline) {
-                    $timedOut = $true
-                    $finalStatus = 'Failure'
-                    break
-                }
-            }
-        } else {
-            # 同步模式: ScriptBlock 本身可能耗时长, 期间用 .NET Thread 轮询控制台刷新 spinner
-            # 避免 Start-ThreadJob(仅 PS 7+), 用 [System.Threading.Thread]::SpinWait 仅
-            # 作为间隔等待, 不用额外线程
-            $result = & $ScriptBlock
-        }
-    } catch {
-        $finalStatus = 'Failure'
-        $result = $_
-        # SuppressConsole 模式也拋出原异常, 使调用方可统一 catch (与 timeout 处理一致)
-        if ($SuppressConsole) {
-            $stopwatch.Stop()
-            throw $_
-        }
-    }
-
-    $stopwatch.Stop()
-
-    if ($timedOut) {
-        if (-not $SuppressConsole) {
-            Show-ProgressSpinner -Done -Status Failure -Message $FailureMessage
-        }
-        # SuppressConsole 模式仍抛异常, 使调用方可统一 catch 测试 timeout
-        throw [System.TimeoutException]::new("Invoke-WithProgress 超时 (${TimeoutSeconds}s): $Message")
-    }
-
-    $finalMsg = if ($finalStatus -eq 'Success') { $SuccessMessage } else { $FailureMessage }
-    if (-not $SuppressConsole) {
-        Show-ProgressSpinner -Done -Status $finalStatus -Message $finalMsg
-    }
-
-    if ($SuppressConsole) {
-        return [PSCustomObject]@{
-            Result    = $result
-            Frames    = @($frames)
-            Status    = $finalStatus
-            ElapsedMs = [int]$stopwatch.ElapsedMilliseconds
-        }
-    }
-
-    # 失败时重新拋出原异常
-    if ($finalStatus -eq 'Failure' -and $result -is [System.Exception]) {
-        throw $result
+    if ($Done) {
+        Write-SpectreHost ($safeLine + "`n")
+    } else {
+        Write-SpectreHost $safeLine
     }
 }

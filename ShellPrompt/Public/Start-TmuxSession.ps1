@@ -15,10 +15,16 @@ $script:TmuxSessionPrefix = "tmux-"
 #>
 
 function New-RandomSessionName {
+    [CmdletBinding(SupportsShouldProcess = $true)]
     [OutputType([string])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
-param()
-    "$script:TmuxSessionPrefix$(Get-Random -Minimum 100000 -Maximum 999999)"
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
+    param()
+
+    # "New" 属于会改变系统状态的动词, 按 PSScriptAnalyzer 规则需支持 ShouldProcess
+    if (-not $PSCmdlet.ShouldProcess('tmux session name', 'Generate random tmux session name')) {
+        return ''
+    }
+    return "$script:TmuxSessionPrefix$(Get-Random -Minimum 100000 -Maximum 999999)"
 }
 
 <#
@@ -61,17 +67,7 @@ function Start-TmuxSession {
     }
 
     # P2-6: 入口处显示欢迎 banner, 使用与 Show-UserScoopLogo 一致的样式
-    # 预解析颜色后调用 New-WelcomeBanner(纯函数), I/O 调用方负责
-    $wbColors = @{
-        Primary = Get-CachedConfig -Section 'Colors' -Key 'FreshGreen' -Default "`e[38;2;137;209;133m"
-        Accent  = Get-CachedConfig -Section 'Colors' -Key 'SageGreen'  -Default "`e[38;2;159;177;159m"
-        Muted   = Get-CachedConfig -Section 'Colors' -Key 'MidGray'    -Default "`e[38;2;100;100;100m"
-        Border  = Get-CachedConfig -Section 'Colors' -Key 'FreshGreen' -Default "`e[38;2;137;209;133m"
-    }
-    $wbQuotesPath = Get-CachedConfig -Section 'Paths' -Key 'Quotes' -Default ''
-    $quote = Get-RandomQuote -QuotesPath $wbQuotesPath -Fallback 'SYSTEM READY'
-    $bannerLines = New-WelcomeBanner -Title 'TMUX 远程会话' -Subtitle $quote -Width 49 -Colors $wbColors
-    $bannerLines | ForEach-Object { [Console]::WriteLine($_) }
+    Write-TmuxWelcomeBanner
 
     # 主机选择: 委托 Show-HostSelector(实时过滤 + LastHost 徽章)
     if (-not $HostName) {
@@ -88,37 +84,23 @@ function Start-TmuxSession {
 
     # P2-4: SSH 探测是真正耗时的步骤(网络慢时 5-30s), spinner 是必须的
     $availInfo = Invoke-WithProgress -Message "检测远程 tmux (可能几秒)" -ScriptBlock { Get-TmuxAvailability -HostName $HostName }
-    $hasTmux = $availInfo.Available
 
     # fix(sss): 探测失败不再直接 fall through 到 ssh, 改成警告后仍进 SessionManager。
-    # 之前 `sss <host>` 在远端没 tmux(或探测失败)时会跳过 UI 直接进 SSH TTY,
-    # 违反 UI-first 原则;现在改: 菜单 header 仍显示 `tmux?` 徽章
-    # (Show-SessionManager 在 TmuxVersion='' 时已实现),用户可手动选 `Ssh` 直连、
-    # `Refresh` 重试、`Exit` 退;网络错误下 `Refresh` 还能从 30s 缓存里快速恢复。
-    if (-not $hasTmux) {
-        Write-Warning "远程主机 $HostName 未安装 tmux(或探测失败), 仍进入菜单,可选: Ssh 直连 / Refresh 重试 / Exit 退"
-        $rawErr = $availInfo.Error
-        if ($rawErr) {
-            Write-Host "     远程错误: $($rawErr.Trim())" -ForegroundColor DarkGray
-        }
-        Write-Host "     排查: 手动跑 `ssh $HostName 'command -v tmux; tmux -V'` 看输出" -ForegroundColor DarkGray
-    } else {
-        Write-Host " [OK] 远程 tmux 可用 (版本: $($availInfo.Version))" -ForegroundColor Green
-    }
-
-    # P2-5: 首次会话获取走 spinner(初次进入菜单前的预加载)。
-    # 探测失败时 SessionData.Sessions 为空列表, 菜单靠 HasSessions=$false 隐藏
-    # "附着/删除"项, 只剩 "创建新 tmux / 直接 SSH / 刷新", 与方案 A 体验一致。
-    $sessionData = Invoke-WithProgress -Message "获取远程 tmux 会话" -ScriptBlock { Get-TmuxSessions -HostName $HostName }
-    $sessions = $sessionData.Sessions
+    # 菜单 header 仍显示 `tmux?` 徽章, 用户可手动选 `Ssh` 直连 / `Refresh` 重试 / `Exit` 退。
+    Write-TmuxAvailabilityNotice -HostName $HostName -AvailabilityInfo $availInfo
 
     while ($true) {
         # 每次菜单循环重新探测远端 tmux 会话状态,确保菜单始终显示最新数据(Q6=A)
         # P2-5: 同样走 spinner 包裹, 使 SSH 刷具有统一 UX
+        # -Force: 强制跳过 Get-TmuxSessions 内部的 30s TTL 缓存, 保证"刷新"立即生效。
+        # 探测失败时 Sessions 为空列表, 菜单靠 HasSessions=$false 隐藏
+        # "附着/删除"项, 只剩 "创建新 tmux / 直接 SSH / 刷新", 与方案 A 体验一致。
         $sessionData = Invoke-WithProgress -Message "获取远程 tmux 会话" -ScriptBlock { Get-TmuxSessions -HostName $HostName -Force }
         $sessions = $sessionData.Sessions
-        $attachedCount = ($sessions | Where-Object { $_.Status -eq "attached" }).Count
-        $detachedCount = ($sessions | Where-Object { $_.Status -eq "detached" }).Count
+        # 计数口径与会话列表层共用 Get-TmuxSessionSummary, 保证标题"附 X / 分 Y"一致
+        $summary = Get-TmuxSessionSummary -Sessions $sessions
+        $attachedCount = $summary.Attached
+        $detachedCount = $summary.Detached
 
         # 动作选择: 委托 Show-SessionManager(动态帮助面板 + 状态徽章)
         $action = Show-SessionManager -HostName $HostName -TmuxVersion $availInfo.Version `
@@ -143,7 +125,7 @@ function Start-TmuxSession {
             "Refresh" {
                 # P2-5: Refresh 在菜单内部被选后, 会跳出菜单 -> while 顶部重新探测
                 # 所以不需要在 Refresh 分支重复探测; 原代码是 P1-4 前的遗留, 现仅输出提示
-                Write-Host " [OK] 下一次菜单循环会重新获取会话" -ForegroundColor DarkGray
+                Write-Host " [OK] 正在重新获取会话列表 ..." -ForegroundColor DarkGray
             }
         }
     }

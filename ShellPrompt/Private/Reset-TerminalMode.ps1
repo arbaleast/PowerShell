@@ -1,6 +1,6 @@
 # Reset-TerminalMode.ps1 - SSH/tmux 退出后恢复终端状态
-# 设计:采用【并集】实现,合并 Invoke-SshCommand (5 项 ANSI) 与
-#       Start-SshInteractive (本地控制台层) 两版不同维度的恢复;
+# 设计:采用【并集】实现,合并 SSH 命令调度 (5 项 ANSI) 与
+#       本地控制台层 两版不同维度的恢复;
 #       任何一项漏掉都会导致用户感知异常(鼠标乱码/光标不可见/编码污染)。
 # 状态源: 调用方在 try 顶部把原始值写入 $script:OriginalOutputEncoding /
 #         $script:OriginalInputEncoding / $script:OriginalTerm,本函数 finally 读取并恢复。
@@ -24,7 +24,7 @@ param()
         "`e[m"
     )
 
-    # --- B. 本地控制台层 (原 Start-SshInteractive 版) ---
+    # --- B. 本地控制台层 ---
     # B-1 恢复 Ctrl+C 中断语义 - tmux 启动时可能改为 TreatControlCAsInput=$true
     try { [Console]::TreatControlCAsInput = $false } catch {}
     # B-2 双重保险光标显示 (ANSI ?25h 已处理,此处再设一次 .NET 属性)

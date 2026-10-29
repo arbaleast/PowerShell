@@ -1,0 +1,232 @@
+<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">
+  <Obj RefId="0">
+    <TN RefId="0">
+      <T>Microsoft.PowerShell.Commands.PSRepositoryItemInfo</T>
+      <T>System.Management.Automation.PSCustomObject</T>
+      <T>System.Object</T>
+    </TN>
+    <MS>
+      <S N="Name">PwshSpectreConsole</S>
+      <Version N="Version">2.6.3</Version>
+      <S N="Type">Module</S>
+      <S N="Description">A convenient PowerShell wrapper for Spectre.Console</S>
+      <S N="Author">Shaun Lawrie</S>
+      <S N="CompanyName">ShaunLawrie</S>
+      <S N="Copyright">(c) Shaun Lawrie. All rights reserved.</S>
+      <DT N="PublishedDate">2026-03-02T18:35:40+08:00</DT>
+      <Obj N="InstalledDate" RefId="1">
+        <DT>2026-10-17T13:07:42.2633126+08:00</DT>
+        <MS>
+          <Obj N="DisplayHint" RefId="2">
+            <TN RefId="1">
+              <T>Microsoft.PowerShell.Commands.DisplayHintType</T>
+              <T>System.Enum</T>
+              <T>System.ValueType</T>
+              <T>System.Object</T>
+            </TN>
+            <ToString>DateTime</ToString>
+            <I32>2</I32>
+          </Obj>
+        </MS>
+      </Obj>
+      <Nil N="UpdatedDate" />
+      <URI N="LicenseUri">https://github.com/ShaunLawrie/PwshSpectreConsole/blob/main/LICENSE.md</URI>
+      <URI N="ProjectUri">https://github.com/ShaunLawrie/PwshSpectreConsole</URI>
+      <URI N="IconUri">https://shaunlawrie.com/images/pwshspectreconsole.png</URI>
+      <Obj N="Tags" RefId="3">
+        <TN RefId="2">
+          <T>System.Object[]</T>
+          <T>System.Array</T>
+          <T>System.Object</T>
+        </TN>
+        <LST>
+          <S>Windows</S>
+          <S>Linux</S>
+          <S>PSModule</S>
+          <S>PSEdition_Core</S>
+        </LST>
+      </Obj>
+      <Obj N="Includes" RefId="4">
+        <TN RefId="3">
+          <T>System.Collections.Hashtable</T>
+          <T>System.Object</T>
+        </TN>
+        <DCT>
+          <En>
+            <S N="Key">RoleCapability</S>
+            <Obj N="Value" RefId="5">
+              <TNRef RefId="2" />
+              <LST />
+            </Obj>
+          </En>
+          <En>
+            <S N="Key">Workflow</S>
+            <Ref N="Value" RefId="5" />
+          </En>
+          <En>
+            <S N="Key">Command</S>
+            <Obj N="Value" RefId="6">
+              <TNRef RefId="2" />
+              <LST>
+                <S>Add-SpectreJob</S>
+                <S>Format-SpectreBarChart</S>
+                <S>Format-SpectreBreakdownChart</S>
+                <S>Format-SpectrePanel</S>
+                <S>Format-SpectreTable</S>
+                <S>Format-SpectreTree</S>
+                <S>Get-SpectreEscapedText</S>
+                <S>Get-SpectreImage</S>
+                <S>Get-SpectreImageExperimental</S>
+                <S>Invoke-SpectreCommandWithProgress</S>
+                <S>Invoke-SpectreCommandWithStatus</S>
+                <S>Read-SpectreMultiSelection</S>
+                <S>Read-SpectreMultiSelectionGrouped</S>
+                <S>Read-SpectrePause</S>
+                <S>Read-SpectreSelection</S>
+                <S>Read-SpectreText</S>
+                <S>Set-SpectreColors</S>
+                <S>Start-SpectreDemo</S>
+                <S>Wait-SpectreJobs</S>
+                <S>Write-SpectreFigletText</S>
+                <S>Write-SpectreHost</S>
+                <S>Write-SpectreRule</S>
+                <S>Read-SpectreConfirm</S>
+                <S>New-SpectreChartItem</S>
+                <S>Invoke-SpectreScriptBlockQuietly</S>
+                <S>Get-SpectreDemoColors</S>
+                <S>Get-SpectreDemoEmoji</S>
+                <S>Format-SpectreJson</S>
+                <S>Write-SpectreCalendar</S>
+                <S>Start-SpectreRecording</S>
+                <S>Stop-SpectreRecording</S>
+                <S>Format-SpectreColumns</S>
+                <S>Format-SpectreRows</S>
+                <S>Format-SpectrePadded</S>
+                <S>Format-SpectreGrid</S>
+                <S>New-SpectreGridRow</S>
+                <S>Format-SpectreTextPath</S>
+                <S>New-SpectreLayout</S>
+                <S>Format-SpectreAligned</S>
+                <S>Out-SpectreHost</S>
+                <S>Add-SpectreTableRow</S>
+                <S>Invoke-SpectreLive</S>
+                <S>Format-SpectreException</S>
+                <S>Get-SpectreDemoFeatures</S>
+                <S>Get-SpectreRenderableSize</S>
+                <S>Read-SpectreSelectionGrouped</S>
+                <S>Open-PwshSpectreConsoleHelp</S>
+                <S>Get-SpectreLayoutSizes</S>
+                <S>Get-SpectreColors</S>
+              </LST>
+            </Obj>
+          </En>
+          <En>
+            <S N="Key">DscResource</S>
+            <Ref N="Value" RefId="5" />
+          </En>
+          <En>
+            <S N="Key">Function</S>
+            <Obj N="Value" RefId="7">
+              <TNRef RefId="2" />
+              <LST>
+                <S>Add-SpectreJob</S>
+                <S>Format-SpectreBarChart</S>
+                <S>Format-SpectreBreakdownChart</S>
+                <S>Format-SpectrePanel</S>
+                <S>Format-SpectreTable</S>
+                <S>Format-SpectreTree</S>
+                <S>Get-SpectreEscapedText</S>
+                <S>Get-SpectreImage</S>
+                <S>Get-SpectreImageExperimental</S>
+                <S>Invoke-SpectreCommandWithProgress</S>
+                <S>Invoke-SpectreCommandWithStatus</S>
+                <S>Read-SpectreMultiSelection</S>
+                <S>Read-SpectreMultiSelectionGrouped</S>
+                <S>Read-SpectrePause</S>
+                <S>Read-SpectreSelection</S>
+                <S>Read-SpectreText</S>
+                <S>Set-SpectreColors</S>
+                <S>Start-SpectreDemo</S>
+                <S>Wait-SpectreJobs</S>
+                <S>Write-SpectreFigletText</S>
+                <S>Write-SpectreHost</S>
+                <S>Write-SpectreRule</S>
+                <S>Read-SpectreConfirm</S>
+                <S>New-SpectreChartItem</S>
+                <S>Invoke-SpectreScriptBlockQuietly</S>
+                <S>Get-SpectreDemoColors</S>
+                <S>Get-SpectreDemoEmoji</S>
+                <S>Format-SpectreJson</S>
+                <S>Write-SpectreCalendar</S>
+                <S>Start-SpectreRecording</S>
+                <S>Stop-SpectreRecording</S>
+                <S>Format-SpectreColumns</S>
+                <S>Format-SpectreRows</S>
+                <S>Format-SpectrePadded</S>
+                <S>Format-SpectreGrid</S>
+                <S>New-SpectreGridRow</S>
+                <S>Format-SpectreTextPath</S>
+                <S>New-SpectreLayout</S>
+                <S>Format-SpectreAligned</S>
+                <S>Out-SpectreHost</S>
+                <S>Add-SpectreTableRow</S>
+                <S>Invoke-SpectreLive</S>
+                <S>Format-SpectreException</S>
+                <S>Get-SpectreDemoFeatures</S>
+                <S>Get-SpectreRenderableSize</S>
+                <S>Read-SpectreSelectionGrouped</S>
+                <S>Open-PwshSpectreConsoleHelp</S>
+                <S>Get-SpectreLayoutSizes</S>
+                <S>Get-SpectreColors</S>
+              </LST>
+            </Obj>
+          </En>
+          <En>
+            <S N="Key">Cmdlet</S>
+            <Ref N="Value" RefId="5" />
+          </En>
+        </DCT>
+      </Obj>
+      <Nil N="PowerShellGetFormatVersion" />
+      <Nil N="ReleaseNotes" />
+      <Obj N="Dependencies" RefId="8">
+        <TNRef RefId="2" />
+        <LST />
+      </Obj>
+      <S N="RepositorySourceLocation">https://www.powershellgallery.com/api/v2</S>
+      <S N="Repository">PSGallery</S>
+      <S N="PackageManagementProvider">NuGet</S>
+      <Obj N="AdditionalMetadata" RefId="9">
+        <TN RefId="4">
+          <T>System.Management.Automation.PSCustomObject</T>
+          <T>System.Object</T>
+        </TN>
+        <MS>
+          <S N="copyright">(c) Shaun Lawrie. All rights reserved.</S>
+          <S N="description">A convenient PowerShell wrapper for Spectre.Console</S>
+          <S N="requireLicenseAcceptance">False</S>
+          <S N="isLatestVersion">True</S>
+          <S N="isAbsoluteLatestVersion">False</S>
+          <S N="versionDownloadCount">27233</S>
+          <S N="downloadCount">62198</S>
+          <S N="packageSize">1341522</S>
+          <S N="published">2026/3/2 18:35:40 +08:00</S>
+          <S N="created">2026/3/2 18:35:40 +08:00</S>
+          <S N="lastUpdated">2026/10/17 2:00:01 +08:00</S>
+          <S N="tags">Windows Linux PSModule PSEdition_Core PSFunction_Add-SpectreJob PSCommand_Add-SpectreJob PSFunction_Format-SpectreBarChart PSCommand_Format-SpectreBarChart PSFunction_Format-SpectreBreakdownChart PSCommand_Format-SpectreBreakdownChart PSFunction_Format-SpectrePanel PSCommand_Format-SpectrePanel PSFunction_Format-SpectreTable PSCommand_Format-SpectreTable PSFunction_Format-SpectreTree PSCommand_Format-SpectreTree PSFunction_Get-SpectreEscapedText PSCommand_Get-SpectreEscapedText PSFunction_Get-SpectreImage PSCommand_Get-SpectreImage PSFunction_Get-SpectreImageExperimental PSCommand_Get-SpectreImageExperimental PSFunction_Invoke-SpectreCommandWithProgress PSCommand_Invoke-SpectreCommandWithProgress PSFunction_Invoke-SpectreCommandWithStatus PSCommand_Invoke-SpectreCommandWithStatus PSFunction_Read-SpectreMultiSelection PSCommand_Read-SpectreMultiSelection PSFunction_Read-SpectreMultiSelectionGrouped PSCommand_Read-SpectreMultiSelectionGrouped PSFunction_Read-SpectrePause PSCommand_Read-SpectrePause PSFunction_Read-SpectreSelection PSCommand_Read-SpectreSelection PSFunction_Read-SpectreText PSCommand_Read-SpectreText PSFunction_Set-SpectreColors PSCommand_Set-SpectreColors PSFunction_Start-SpectreDemo PSCommand_Start-SpectreDemo PSFunction_Wait-SpectreJobs PSCommand_Wait-SpectreJobs PSFunction_Write-SpectreFigletText PSCommand_Write-SpectreFigletText PSFunction_Write-SpectreHost PSCommand_Write-SpectreHost PSFunction_Write-SpectreRule PSCommand_Write-SpectreRule PSFunction_Read-SpectreConfirm PSCommand_Read-SpectreConfirm PSFunction_New-SpectreChartItem PSCommand_New-SpectreChartItem PSFunction_Invoke-SpectreScriptBlockQuietly PSCommand_Invoke-SpectreScriptBlockQuietly PSFunction_Get-SpectreDemoColors PSCommand_Get-SpectreDemoColors PSFunction_Get-SpectreDemoEmoji PSCommand_Get-SpectreDemoEmoji PSFunction_Format-SpectreJson PSCommand_Format-SpectreJson PSFunction_Write-SpectreCalendar PSCommand_Write-SpectreCalendar PSFunction_Start-SpectreRecording PSCommand_Start-SpectreRecording PSFunction_Stop-SpectreRecording PSCommand_Stop-SpectreRecording PSFunction_Format-SpectreColumns PSCommand_Format-SpectreColumns PSFunction_Format-SpectreRows PSCommand_Format-SpectreRows PSFunction_Format-SpectrePadded PSCommand_Format-SpectrePadded PSFunction_Format-SpectreGrid PSCommand_Format-SpectreGrid PSFunction_New-SpectreGridRow PSCommand_New-SpectreGridRow PSFunction_Format-SpectreTextPath PSCommand_Format-SpectreTextPath PSFunction_New-SpectreLayout PSCommand_New-SpectreLayout PSFunction_Format-SpectreAligned PSCommand_Format-SpectreAligned PSFunction_Out-SpectreHost PSCommand_Out-SpectreHost PSFunction_Add-SpectreTableRow PSCommand_Add-SpectreTableRow PSFunction_Invoke-SpectreLive PSCommand_Invoke-SpectreLive PSFunction_Format-SpectreException PSCommand_Format-SpectreException PSFunction_Get-SpectreDemoFeatures PSCommand_Get-SpectreDemoFeatures PSFunction_Get-SpectreRenderableSize PSCommand_Get-SpectreRenderableSize PSFunction_Read-SpectreSelectionGrouped PSCommand_Read-SpectreSelectionGrouped PSFunction_Open-PwshSpectreConsoleHelp PSCommand_Open-PwshSpectreConsoleHelp PSFunction_Get-SpectreLayoutSizes PSCommand_Get-SpectreLayoutSizes PSFunction_Get-SpectreColors PSCommand_Get-SpectreColors PSIncludes_Function</S>
+          <S N="developmentDependency">False</S>
+          <S N="updated">2026-10-17T02:00:01Z</S>
+          <S N="NormalizedVersion">2.6.3</S>
+          <S N="Authors">Shaun Lawrie</S>
+          <S N="IsPrerelease">false</S>
+          <S N="ItemType">Module</S>
+          <S N="FileList">PwshSpectreConsole.nuspec|smiley.png|PwshSpectreConsole.psd1|lib\SixLabors.ImageSharp.dll|lib\Spectre.Console.Testing.dll|lib\Spectre.Console.Json.dll|lib\Spectre.Console.Json.xml|lib\Spectre.Console.xml|PwshSpectreConsole.psm1|lib\Spectre.Console.dll|lib\PwshSpectreConsole.dll|lib\Spectre.Console.Testing.xml|PwshSpectreConsole.format.ps1xml</S>
+          <S N="GUID">8c5ca00d-7f0f-4179-98bf-bdaebceaebc0</S>
+          <S N="PowerShellVersion">7.4</S>
+          <S N="CompanyName">Shaun Lawrie</S>
+        </MS>
+      </Obj>
+      <S N="InstalledLocation">C:\Users\33098\Documents\PowerShell\Modules\PwshSpectreConsole\2.6.3</S>
+    </MS>
+  </Obj>
+</Objs>

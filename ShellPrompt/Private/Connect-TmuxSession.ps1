@@ -34,23 +34,16 @@ param(
         return
     }
 
-    $sessionOptions = [System.Collections.Generic.List[PSCustomObject]]::new($Sessions.Count)
-    foreach ($s in $Sessions) {
-        $icon = if ($s.Status -eq "attached") { "[A]" } else { "[D]" }
-        $sessionOptions.Add([PSCustomObject]@{
-                Label   = "$icon $($s.Name)"
-                RawName = $s.Name
-                Desc    = "状态: $($s.Status)"
-            })
-    }
-
-    $selected = Invoke-ConsoleMenu -Title "TMUX 会话列表 [$HostName]" -Options $sessionOptions -ExitLabel "返回"
+    # 菜单分发: 统一走 GridView 主轨 (PSTui 表格)。
+    # 返回对象已由 Show-TmuxSessionList 归一化, .Value 恒为纯会话名。
+    # -SessionRefresher: 列表内提供"⟳ 刷新会话列表"项, 用户选中后强制重新拉取
+    # (绕过 30s TTL 缓存)并重新弹出表格, 菜单打开期间不做定时轮询。
+    $selected = Show-TmuxSessionList -HostName $HostName -Sessions $Sessions `
+        -Title "TMUX 会话列表" -ExitLabel "返回" -ShowStateBadge `
+        -SessionRefresher { (Get-TmuxSessions -HostName $HostName -Force).Sessions }
     if ($null -eq $selected) { return }
 
-    $sessionName = $selected.RawName
-    if (-not $sessionName) {
-        $sessionName = $selected.Label -replace '^\[[AD]\]\s+', ''
-    }
+    $sessionName = $selected.Value
 
     $escapedName = "'$(ConvertTo-SshEscapedString -Value $sessionName)'"
     Invoke-SshCommand -HostName $HostName -Interactive -RemoteCommand "tmux attach -d -t $escapedName 2>/dev/null || tmux new-session -A -s $escapedName"

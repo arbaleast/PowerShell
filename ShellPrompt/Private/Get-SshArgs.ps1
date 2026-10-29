@@ -4,8 +4,8 @@ function Get-SshArgs {
         构建 SSH 命令行参数列表
 
     .DESCRIPTION
-        根据提供的连接参数统一构建 ssh.exe 的参数列表，消除 Invoke-SshCommand 与
-        Start-SshInteractive 中重复的参数构建代码。
+        根据提供的连接参数统一构建 ssh.exe 的参数列表，消除各 SSH 调用路径中
+        重复的参数构建代码。
 
     .PARAMETER HostName
         远程主机名
@@ -51,7 +51,15 @@ param(
         [switch]$SkipHostKeyCheck,
 
         [Parameter(Mandatory = $false)]
-        [switch]$CaptureOutput
+        [switch]$CaptureOutput,
+
+        # 强制双 -t (ssh -tt -t): Windows OpenSSH 客户端的 PTY 模拟在单 -t 下
+        # 不会回 tmux 期望的 u6/u7 终端响应, 导致 tmux "软启动后立刻 detach" (闪退)。
+        # 加第二个 -t 可让 ssh 把 PTY 当作强制 tty 传给远端, 绕开 isatty 路径。
+        # 探针验证 (2026-10-07): ssh -tt -t debian 'tmux attach ...' 可正常进入 tmux;
+        # 单 -t 下复现 [exited]+EXIT=0 闪退。默认关闭, 只在已知路径 (New-TmuxSession) 启用。
+        [Parameter(Mandatory = $false)]
+        [switch]$DoubleTty
     )
 
     $sshArgs = New-Object System.Collections.ArrayList
@@ -67,7 +75,15 @@ param(
     }
 
     # 如果是交互式连接，分配 PTY（-t 标志）
-    if ($Interactive) { [void]$sshArgs.Add('-t') }
+    # DoubleTty 仅在 Interactive 同时启用时生效: 输出 `-tt -t`, 强制 ssh 把 PTY
+    # 当作 tty 传给远端(绕过 tmux 的 isatty 检测, 修 Win OpenSSH 下的"软启动后
+    # 立刻 detach"问题)
+    if ($Interactive) {
+        if ($DoubleTty) {
+            [void]$sshArgs.Add('-tt')
+        }
+        [void]$sshArgs.Add('-t')
+    }
 
     # 主机名作为独立参数传递（不会被 shell 解释）
     [void]$sshArgs.Add($HostName)
