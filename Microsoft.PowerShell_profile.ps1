@@ -18,256 +18,45 @@ Stamp('P0_root')
 # 只加载欢迎语链路真正需要的脚本, 不把 tmux/SSH/GridView 等重依赖提前拉进来。
 # 该"轻量级"是有意为之, 不是历史遗留。
 #
-# 维护约定(消除"新增依赖忘记加一行 dot-source"的隐患):
-#   1) $script:StartupBannerEntries 只登记"入口文件";
-#   2) 入口文件调用到的其它 ShellPrompt 内部函数, 由下面的依赖解析器依据
-#      "函数名 -> 定义文件"静态索引自动补齐 —— 新增内部依赖**不需要**再手工
-#      加一行 dot-source(此前 Resolve-ColorTable 漏加载即为该隐患的根因);
-#   3) 任何无法满足的依赖都会在自检块中以 Write-Warning 明确报出, 绝不静默失败。
+# 维护约定:
+#   1) $script:StartupLoadOrder 登记"启动期需要的文件", 顺序 = 加载顺序,
+#      被依赖者在前。这里只登记文件, 不做自动依赖推导。
+#   2) 新增启动期依赖时, 必须把被依赖的文件一并加进本清单。
+#      漏加不会静默失败: 下面的自检会用 AST 取出这些文件里**真实调用**的命令名
+#      (注释与字符串里的函数名不算), 逐个检查在当前会话里能否解析, 解析不到就
+#      明确报出"哪个文件调用了哪个没加载的命令"。
+#   3) 自检不通过只告警、不阻断启动。
+#
+# 2026-10-29 精简: 原先这里有一套"函数名 -> 定义文件"静态索引 + AST 依赖闭包 +
+# 拓扑排序 + %LOCALAPPDATA%\ShellPrompt\startup-graph.json 缓存(约 250 行)。
+# 逐文件核对后, 实际依赖闭包只有 5 个文件(见下方清单), 显式有序清单足够表达:
+#   收益: 启动期不再扫描 Private/Public 全目录、不再读写用户目录下的 JSON;
+#         profile 从 434 行降到约 260 行, 启动链路一眼看得懂。
+#   代价: 依赖关系从"自动推导"变成"手工维护", 由上面的 AST 自检兜底。
 $script:StartupBannerDir = Join-Path $script:ActualRoot 'ShellPrompt'
-$script:StartupBannerEntries = @(
+$script:StartupLoadOrder = @(
+    # Get-CachedConfig 的定义处
     'Private\Initialize-Config.ps1'
+    # 依赖 Get-CachedConfig
+    'Private\Resolve-ColorTable.ps1'
+    # 依赖 Resolve-ColorTable
     'Private\New-WelcomeBanner.ps1'
+    # 自包含(fnm 环境初始化)
     'Private\Initialize-FnmEnvironment.ps1'
+    # 依赖 Get-CachedConfig / Get-RandomQuote / New-WelcomeBanner
     'Public\Show-UserScoopLogo.ps1'
 )
 
-# --- 1) 扫描 Private/Public 目录清单 (缓存失效判定的依据) ---
-# 只做文件系统层面的枚举, 不读文件内容。目录枚举走 [System.IO.Directory]::EnumerateFiles,
-# 避开 Get-ChildItem 的 cmdlet 开销(启动期敏感路径)。
-# 记录每个文件的 (LastWriteTimeUtc ticks, Length), 以及每个目录的文件名列表,
-# 用于判定"参与索引的文件集合"是否发生变化(新增/删除/修改)。
-$script:StartupScanFiles = [ordered]@{}   # 相对路径 -> @{ M = mtime ticks; L = 长度 }
-$script:StartupScanDirs = [ordered]@{}    # 目录名 -> @(文件名, 有序)
-foreach ($startupDir in @('Private', 'Public')) {
-    $startupDirPath = Join-Path $script:StartupBannerDir $startupDir
-    if (-not (Test-Path -LiteralPath $startupDirPath -PathType Container)) { continue }
-    $names = [System.Collections.Generic.List[string]]::new()
-    try {
-        $fullNames = @([System.IO.Directory]::EnumerateFiles($startupDirPath, '*.ps1'))
-    } catch {
-        continue
-    }
-    foreach ($full in $fullNames) {
-        $fileInfo = $null
-        try { $fileInfo = [System.IO.FileInfo]::new($full) } catch { continue }
-        $rel = Join-Path $startupDir $fileInfo.Name
-        $script:StartupScanFiles[$rel] = [PSCustomObject]@{
-            M = $fileInfo.LastWriteTimeUtc.Ticks
-            L = $fileInfo.Length
-        }
-        $names.Add($fileInfo.Name) | Out-Null
-    }
-    $namesSorted = @($names | Sort-Object)
-    $script:StartupScanDirs[$startupDir] = $namesSorted
-}
-
-# --- 1b) 依赖闭包结果缓存 ---
-# 目的: "函数名 -> 文件"索引 + AST 解析(约 130ms)在每次启动都要重做, 而结果只在
-# 相关文件变化时才会变。这里把有序加载清单缓存到用户缓存目录的 JSON, 下次启动
-# 校验所有参与索引文件的 (mtime, 长度) 未变则直接命中缓存, 跳过索引与 AST 解析。
-#
-# 缓存路径: %LOCALAPPDATA%\ShellPrompt\startup-graph.json
-# 失效判定: 任一 Private/Public 下 *.ps1 文件的 mtime 或长度变化, 或文件被新增/删除
-# 容错:     缓存损坏 / JSON 解析失败 / 并发写冲突 -> 静默回退到全量重建, 不报错不中断
-$script:StartupCachePath = Join-Path $env:LOCALAPPDATA 'ShellPrompt\startup-graph.json'
-
-function Test-StartupCacheHit {
-    <#
-    .SYNOPSIS
-        校验启动图缓存是否仍然有效 (与当前磁盘状态逐文件比对)
-    .OUTPUTS
-        [bool] 是否命中
-    #>
-    [CmdletBinding()]
-    [OutputType([bool])]
-    param(
-        [Parameter(Mandatory = $true)] $Cache,
-        [Parameter(Mandatory = $true)] $ScanFiles,
-        [Parameter(Mandatory = $true)] $ScanDirs
-    )
-
-    # 目录清单必须完全一致(覆盖新增/删除文件)
-    $cacheDirs = $Cache.dirs
-    if ($null -eq $cacheDirs) { return $false }
-    foreach ($dirName in $ScanDirs.Keys) {
-        $cached = @($cacheDirs.$dirName)
-        $current = @($ScanDirs[$dirName])
-        if ($cached.Count -ne $current.Count) { return $false }
-        for ($i = 0; $i -lt $current.Count; $i++) {
-            if ($cached[$i] -ne $current[$i]) { return $false }
-        }
-    }
-    foreach ($dirName in $cacheDirs.PSObject.Properties.Name) {
-        if (-not $ScanDirs.Contains($dirName)) { return $false }
-    }
-
-    # 文件集合 + (mtime, 长度) 必须完全一致
-    $cacheFiles = $Cache.files
-    if ($null -eq $cacheFiles) { return $false }
-    $cacheFileNames = @($cacheFiles.PSObject.Properties.Name)
-    if ($cacheFileNames.Count -ne $ScanFiles.Count) { return $false }
-    foreach ($rel in $ScanFiles.Keys) {
-        $entry = $cacheFiles.$rel
-        if ($null -eq $entry) { return $false }
-        if ([long]$entry.M -ne [long]$ScanFiles[$rel].M) { return $false }
-        if ([long]$entry.L -ne [long]$ScanFiles[$rel].L) { return $false }
-    }
-
-    # 加载清单必须存在
-    if ($null -eq $Cache.order) { return $false }
-    return $true
-}
-
-function Save-StartupCache {
-    <#
-    .SYNOPSIS
-        原子写入启动图缓存; 失败时静默忽略(不影响启动)
-    #>
-    [CmdletBinding()]
-    [OutputType([void])]
-    param(
-        [Parameter(Mandatory = $true)] [string]$Path,
-        [Parameter(Mandatory = $true)] $ScanFiles,
-        [Parameter(Mandatory = $true)] $ScanDirs,
-        [Parameter(Mandatory = $true)] [string[]]$Order
-    )
-
-    try {
-        $dir = Split-Path -Parent $Path
-        if (-not (Test-Path -LiteralPath $dir -PathType Container)) {
-            [System.IO.Directory]::CreateDirectory($dir) | Out-Null
-        }
-        $payload = [PSCustomObject]@{
-            version = 1
-            files   = $ScanFiles
-            dirs    = $ScanDirs
-            order   = @($Order)
-        }
-        $json = $payload | ConvertTo-Json -Depth 6 -Compress
-        # 原子写: 先写临时文件再 Move 覆盖, 避免并发启动读到半截 JSON
-        $tmp = "$Path.$PID.tmp"
-        [System.IO.File]::WriteAllText($tmp, $json, [System.Text.UTF8Encoding]::new($false))
-        [System.IO.File]::Copy($tmp, $Path, $true)
-        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
-    } catch {
-        # 缓存不可写(权限/只读目录)不应影响启动
-    }
-}
-
-$script:StartupCacheHit = $false
-$script:StartupOrder = $null
-
-# 尝试命中缓存
-try {
-    if (Test-Path -LiteralPath $script:StartupCachePath -PathType Leaf) {
-        $raw = [System.IO.File]::ReadAllText($script:StartupCachePath)
-        $cache = $raw | ConvertFrom-Json -ErrorAction Stop
-        if ($cache.version -eq 1 -and (Test-StartupCacheHit -Cache $cache -ScanFiles $script:StartupScanFiles -ScanDirs $script:StartupScanDirs)) {
-            $script:StartupOrder = [System.Collections.Generic.List[string]]::new()
-            foreach ($rel in @($cache.order)) { $script:StartupOrder.Add($rel) | Out-Null }
-            $script:StartupCacheHit = $true
-        }
-    }
-} catch {
-    # 缓存损坏 / JSON 解析失败 -> 静默回退到全量重建
-    $script:StartupCacheHit = $false
-    $script:StartupOrder = $null
-}
-
-# --- 2) 收集入口文件的依赖闭包 (仅在缓存未命中时执行) ---
-# 依赖识别用 PowerShell AST 精确提取"真实命令调用"(CommandAst),
-# 这样注释里提到的函数名不会造成误判, 也不会把 tmux/SSH/GridView 等
-# 与欢迎语无关的重脚本拖进启动路径 —— 保留阶段 1 的"轻量级"语义。
-$script:StartupFailedFiles = [System.Collections.Generic.List[string]]::new()
-
-if (-not $script:StartupCacheHit) {
-    # 2a) 建立"函数名 -> 定义文件"静态索引
-    # 正则只扫函数定义行(不解析调用点), 索引覆盖 Private + Public。
-    # 读文件走 [System.IO.File]::ReadAllText 直读, 避免 Get-Content 的 cmdlet 开销。
-    $script:StartupFunctionIndex = @{}
-    $script:StartupFunctionPattern = '(?m)^[ \t]*function[ \t]+([A-Za-z][\w-]*)'
-    foreach ($startupDir in @('Private', 'Public')) {
-        $startupDirPath = Join-Path $script:StartupBannerDir $startupDir
-        if (-not (Test-Path -LiteralPath $startupDirPath -PathType Container)) { continue }
-        $fileNames = @($script:StartupScanDirs[$startupDir])
-        foreach ($fileName in $fileNames) {
-            $full = Join-Path $startupDirPath $fileName
-            $rel = Join-Path $startupDir $fileName
-            try {
-                $text = [System.IO.File]::ReadAllText($full)
-            } catch {
-                continue
-            }
-            foreach ($m in [regex]::Matches($text, $script:StartupFunctionPattern)) {
-                $script:StartupFunctionIndex[$m.Groups[1].Value] = $rel
-            }
-        }
-    }
-
-    # 2b) 依赖闭包 + 拓扑排序
-    $script:StartupFileDeps = @{}   # 相对路径 -> 该文件依赖的 ShellPrompt 内部文件列表
-    $script:StartupLoadedFiles = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    $startupPending = [System.Collections.Generic.Queue[string]]::new()
-    foreach ($entry in $script:StartupBannerEntries) { $startupPending.Enqueue($entry) }
-
-    while ($startupPending.Count -gt 0) {
-        $rel = $startupPending.Dequeue()
-        if (-not $script:StartupLoadedFiles.Add($rel)) { continue }
-        $full = Join-Path $script:StartupBannerDir $rel
-        if (-not (Test-Path -LiteralPath $full)) {
-            $script:StartupFailedFiles.Add($rel)
-            continue
-        }
-
-        # AST 提取本文件中的命令调用, 命中索引的定义文件记为该文件的依赖
-        $deps = [System.Collections.Generic.List[string]]::new()
-        $parseErrors = $null
-        $ast = [System.Management.Automation.Language.Parser]::ParseFile($full, [ref]$null, [ref]$parseErrors)
-        if ($ast) {
-            $commands = $ast.FindAll({
-                    param($node)
-                    $node -is [System.Management.Automation.Language.CommandAst]
-                }, $true)
-            foreach ($cmd in $commands) {
-                $name = $cmd.GetCommandName()
-                if (-not $name) { continue }
-                $def = $script:StartupFunctionIndex[$name]
-                if (-not $def) { continue }   # 非 ShellPrompt 内部函数(如 Get-Content), 忽略
-                if (-not $deps.Contains($def)) { $deps.Add($def) }
-                if (-not $script:StartupLoadedFiles.Contains($def)) { $startupPending.Enqueue($def) }
-            }
-        }
-        $script:StartupFileDeps[$rel] = $deps
-    }
-
-    # 按依赖顺序(被依赖者在前)加载, 保证顶层语句执行时依赖已就绪
-    # 注意: dot-source 必须留在 profile 顶层执行 —— 放进函数体内时, 被定义的函数
-    # 会随函数作用域一起销毁, 反而拿不到函数。
-    $script:StartupOrder = [System.Collections.Generic.List[string]]::new()
-    $script:StartupVisited = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    function Resolve-StartupLoadOrder {
-        param([string]$Rel)
-        if (-not $script:StartupVisited.Add($Rel)) { return }
-        $deps = $script:StartupFileDeps[$Rel]
-        if ($deps) {
-            foreach ($d in $deps) { Resolve-StartupLoadOrder -Rel $d }
-        }
-        $script:StartupOrder.Add($Rel)
-    }
-    foreach ($entry in $script:StartupBannerEntries) { Resolve-StartupLoadOrder -Rel $entry }
-    Remove-Item -LiteralPath 'Function:Resolve-StartupLoadOrder' -ErrorAction SilentlyContinue
-
-    # 2c) 写回缓存 (失败静默)
-    Save-StartupCache -Path $script:StartupCachePath -ScanFiles $script:StartupScanFiles -ScanDirs $script:StartupScanDirs -Order $script:StartupOrder.ToArray()
-}
-
-# --- 3) 按依赖顺序(被依赖者在前)加载, 保证顶层语句执行时依赖已就绪 ---
+# --- 1) 按清单顺序 dot-source ---
 # 注意: dot-source 必须留在 profile 顶层执行 —— 放进函数体内时, 被定义的函数
 # 会随函数作用域一起销毁, 反而拿不到函数。
-foreach ($rel in $script:StartupOrder) {
+$script:StartupFailedFiles = [System.Collections.Generic.List[string]]::new()
+foreach ($rel in $script:StartupLoadOrder) {
     $full = Join-Path $script:StartupBannerDir $rel
-    if (-not (Test-Path -LiteralPath $full)) { continue }
+    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
+        $script:StartupFailedFiles.Add($rel)
+        continue
+    }
     try {
         . $full
     } catch {
@@ -275,28 +64,64 @@ foreach ($rel in $script:StartupOrder) {
         Write-Warning "[ShellPrompt] 欢迎语依赖脚本加载失败 ($rel): $($_.Exception.Message)"
     }
 }
-# 清理仅用于排序的临时辅助函数, 避免污染全局作用域
-Remove-Item -LiteralPath 'Function:Resolve-StartupLoadOrder' -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath 'Function:Test-StartupCacheHit' -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath 'Function:Save-StartupCache' -ErrorAction SilentlyContinue
 Stamp('P1_after_dot_source')
 
-# --- 4) 自检: 启动期 dot-source 依赖的命令必须全部可见 ---
-# 注: Initialize-FnmEnvironment / Invoke-DeferredInit 在此之前已
-# 通过阶段 1 依赖闭包加载(Initialize-FnmEnvironment)或定义于 profile 阶段 2 同步路径
-# (Invoke-DeferredInit), 此处校验面向启动期 dot-source 后的命令可见性 (欢迎语链路 + fnm 链路)。
-$script:StartupRequiredCommands = @(
-    'Get-CachedConfig'
-    'Resolve-ColorTable'
-    'Get-RandomQuote'
-    'New-WelcomeBanner'
-    'Show-UserScoopLogo'
-    'Initialize-FnmEnvironment'
-)
-$script:StartupMissingCommands = @(
-    $script:StartupRequiredCommands |
-        Where-Object { -not (Get-Command -Name $_ -CommandType Function -ErrorAction SilentlyContinue) }
-)
+# --- 2) 自检: 启动期脚本里调用到的命令必须全部可见 ---
+# 目的: 捕捉"新增了启动期依赖, 却忘记把定义文件加进 $script:StartupLoadOrder"。
+# 判定方式: AST 取出这 5 个文件里真实调用的命令名(注释/字符串里的不算),
+#           逐个检查当前会话里能否解析; 解析不到且该名字确实是 ShellPrompt
+#           内部函数(Private/Public 里有定义) -> 报出来源文件, 由维护者补进清单。
+# 两处细节:
+#   1) 用调用运算符(&)调用的命令一律跳过 —— 那是"用到时才需要"的外部工具
+#      (如 & fnm env), fnm 没装也不该在启动期报警。
+#   2) 只有真的发现解析不到的命令时, 才去扫 Private/Public 建函数索引, 把
+#      "解析不到"收敛成"确实是内部函数漏加载"; 正常启动路径不做这次全目录扫描。
+$script:StartupMissingCommands = [System.Collections.Generic.List[string]]::new()
+$startupUnresolved = [System.Collections.Generic.List[string]]::new()
+foreach ($rel in $script:StartupLoadOrder) {
+    $full = Join-Path $script:StartupBannerDir $rel
+    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
+    $parseErrors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($full, [ref]$null, [ref]$parseErrors)
+    if (-not $ast) { continue }
+    $commands = $ast.FindAll({
+            param($node)
+            $node -is [System.Management.Automation.Language.CommandAst]
+        }, $true)
+    foreach ($cmd in $commands) {
+        $name = $cmd.GetCommandName()
+        if (-not $name) { continue }
+        if ($cmd.InvocationOperator -eq [System.Management.Automation.Language.CommandInvocationOperator]::Ampersand) { continue }
+        if (Get-Command -Name $name -ErrorAction SilentlyContinue) { continue }
+        $startupUnresolved.Add("$rel|$name")
+    }
+}
+
+if ($startupUnresolved.Count -gt 0) {
+    $startupInternalIndex = @{}
+    foreach ($startupDir in @('Private', 'Public')) {
+        $dirPath = Join-Path $script:StartupBannerDir $startupDir
+        if (-not (Test-Path -LiteralPath $dirPath -PathType Container)) { continue }
+        try {
+            $startupFiles = @([System.IO.Directory]::EnumerateFiles($dirPath, '*.ps1'))
+        } catch {
+            continue
+        }
+        foreach ($file in $startupFiles) {
+            try { $text = [System.IO.File]::ReadAllText($file) } catch { continue }
+            foreach ($m in [regex]::Matches($text, '(?m)^[ \t]*function[ \t]+([A-Za-z][\w-]*)')) {
+                $startupInternalIndex[$m.Groups[1].Value] = $file
+            }
+        }
+    }
+    foreach ($entry in $startupUnresolved) {
+        $parts = $entry -split '\|', 2
+        if ($startupInternalIndex.ContainsKey($parts[1])) {
+            $script:StartupMissingCommands.Add("$($parts[0]) -> $($parts[1])")
+        }
+    }
+}
+
 if ($script:StartupMissingCommands.Count -gt 0 -or $script:StartupFailedFiles.Count -gt 0) {
     Write-Warning (
         "[ShellPrompt] 欢迎语依赖加载不完整 —— 缺失命令: {0}; 缺失文件: {1}" -f
@@ -381,8 +206,7 @@ function Invoke-DeferredInit {
     $script:DeferredInitDone = $true
 
     # Fnm — 走缓存路径: Initialize-FnmEnvironment 已由阶段 1 dot-source 注入
-    # (添加 Private\Initialize-FnmEnvironment.ps1 到 $script:StartupBannerEntries,
-    #  依赖闭包会自动解析并加载)。缓存命中则零子进程; 缓存失效则跑一次 fnm env
+    # (它在 $script:StartupLoadOrder 清单里)。缓存命中则零子进程; 缓存失效则跑一次 fnm env
     #  并写回缓存, 后续启动复用。失败时该函数内部已自动回退到子进程保底路径。
     if (Get-Command -Name 'Initialize-FnmEnvironment' -ErrorAction SilentlyContinue) {
         try { Initialize-FnmEnvironment -ErrorAction SilentlyContinue | Out-Null } catch { }
