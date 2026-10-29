@@ -5,8 +5,8 @@
 ## 测试基线
 
 - **Pester 不变量**：任何阶段后，修改都不得引入 Fail，Pass 数不得低于最近一次实测基线。
-- **最近一次实测基线**：`266 Pass / 0 Fail`（阶段 C 实测，`重构tui` 提交之前）。
-- **当前状态（2026-10-29 静态核对）**：测试文件在此之后已有改动，静态计数为 **261 个 `It` 块**（无 `-TestCases`；计数方式：`grep -cP '^\s*It\s'` 逐文件求和）；本环境无 pwsh，**尚未真机回跑**。自本日起 [CI](#持续集成ci) 会在每次 `ShellPrompt/**` / profile 变更时跑同一套件并以退出码回传结果，**首次 CI 运行结果即为准**；跑完后用实测数字刷新本节（本文件是测试基线的**唯一权威位置**）。
+- **最近一次实测基线**：`261 Pass / 0 Fail`（2026-10-29 GitHub Actions 在 `d666618` 上实测，13 个测试文件；`Invoke-Tests.ps1` 默认 Fail 即非零退出，所以"绿"本身就代表 0 Fail）。
+- **真机覆盖状态（2026-10-29 起）**：自动化基线由 [CI](#持续集成ci) 实测并持续刷新（本节是唯一权威位置）；`sss` 三类菜单交互、tmux 删除路径的 `[OK]`/警告表现、starship 渲染等**交互项仍需人工真机验证**（见下文"最小真机验证集"），CI 不覆盖它们。
 - **测试分类**:
   - **单元测试**: `Get-*` / `Set-*` / `Test-*` / `Format-*` / `Connect-*` 等纯函数或近纯函数,
     每个被测函数至少 3-5 条用例(命中、未命中、错误兜底)。
@@ -19,7 +19,7 @@
 
 - **命令**: `Invoke-ScriptAnalyzer -Path ./ShellPrompt -Recurse -Settings ./ShellPrompt/Settings.ScriptAnalyzer.psd1`
   (`-Path` 为必填参数; 配置文件与代码约定同步维护)。
-- **基线**(阶段 B 实测, 未在后续阶段重跑): **0 Error / 14 Warning / 4 Information**。
+- **基线**（最近一次 CI 实测，2026-10-29 @ `d666618`）：**0 Error / 14 Warning / 4 Information**（与阶段 B 原测一致）。
 - **红线**:
   - **不允许新增 Error**; 发现 Error 立即修, 不得用 SuppressMessage 隐藏。
   - **新增 Warning 必须有合理理由**: 在 PR 描述中说明
