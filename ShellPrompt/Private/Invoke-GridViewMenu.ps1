@@ -11,42 +11,6 @@
 #   - 不把"退出"混进表格行(会污染用户的过滤结果), 退出仅通过 ESC / Ctrl-C 表达;
 #   - 表格不支持 Disabled 渲染, 因此选中后由调用侧阻断并给出明确告警。
 
-function Write-GridViewHint {
-    <#
-    .SYNOPSIS
-        在 GridView 弹出前打印一行交互提示。
-
-    .DESCRIPTION
-        Out-ConsoleGridView 自身不提供底部快捷键帮助条, 而原 ANSI 菜单依赖底部
-        提示行告知可用按键, 因此这里在弹窗前用 Spectre 补一行提示。
-        注意: 传给 Write-SpectreHost 的文本会被 Spectre 当作 markup 解析,
-        任何字面量 '[' 都必须写成 '[[', 故本函数内部已对提示文本做转义。
-
-    .PARAMETER Text
-        提示文本(不含颜色标记, 由调用方传入纯文本)
-
-    .EXAMPLE
-        Write-GridViewHint -Text 'Tab 切换焦点 / Esc 退出'
-    #>
-    [CmdletBinding()]
-    [OutputType([void])]
-    param(
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Text
-    )
-
-    # Spectre markup 转义: '[' -> '[[', 避免被当作样式标记解析
-    # 注: 单行天气已迁至 PSTui -Title 区(窗口顶部居中显示), 提示行不再追加
-    $escaped = ([string]$Text).Replace('[', '[[')
-    try {
-        Write-SpectreHost -Message "[dim]提示: $escaped[/]"
-    } catch {
-        # Spectre 渲染失败不应影响主流程, 退回普通输出
-        Write-Warning "提示: $Text"
-    }
-}
-
 # 注: Get-WttrWeatherDescMap 已拆到 ./Get-WttrWeatherDescMap.ps1(阶段 B.2, 2026-10-19),
 #     42 条内置中英映射 + $script:Config.Weather.ExtraWeatherDescMap 用户扩展合并
 #     逻辑保留在新文件, 由 profile Phase 1 依赖闭包自动 dot-source。

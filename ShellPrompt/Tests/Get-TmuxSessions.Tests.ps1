@@ -414,7 +414,6 @@ Describe 'tmux 会话解析与刷新契约' {
     Context 'GridView 主轨语义' {
 
         It 'GridView 轨: -AllowRefresh 时追加刷新行, 且不追加时没有刷新行' {
-            Mock -CommandName Write-GridViewHint -ModuleName ShellPrompt -MockWith { }
             Mock -CommandName Invoke-GridViewPrompt -ModuleName ShellPrompt -MockWith { return $null }
 
             $sessions = @(
@@ -433,7 +432,6 @@ Describe 'tmux 会话解析与刷新契约' {
         }
 
         It 'GridView 轨: 不带 -AllowRefresh 时不存在刷新行' {
-            Mock -CommandName Write-GridViewHint -ModuleName ShellPrompt -MockWith { }
             Mock -CommandName Invoke-GridViewPrompt -ModuleName ShellPrompt -MockWith { return $null }
 
             $sessions = @([PSCustomObject]@{ Name = 'btop'; Status = 'attached' })
@@ -448,7 +446,6 @@ Describe 'tmux 会话解析与刷新契约' {
         }
 
         It 'GridView 轨: State 列文案为 ● 已附着 / ○ 已分离' {
-            Mock -CommandName Write-GridViewHint -ModuleName ShellPrompt -MockWith { }
             Mock -CommandName Invoke-GridViewPrompt -ModuleName ShellPrompt -MockWith { return $null }
 
             $sessions = @(
@@ -469,7 +466,6 @@ Describe 'tmux 会话解析与刷新契约' {
         }
 
         It 'GridView 轨: 标题包含附/分计数' {
-            Mock -CommandName Write-GridViewHint -ModuleName ShellPrompt -MockWith { }
             Mock -CommandName Invoke-GridViewPrompt -ModuleName ShellPrompt -MockWith { return $null }
 
             $sessions = @(
@@ -487,7 +483,6 @@ Describe 'tmux 会话解析与刷新契约' {
         }
 
         It '单帧视图: 刷新项存在且状态文案与表格行一致' {
-            Mock -CommandName Write-GridViewHint -ModuleName ShellPrompt -MockWith { }
             Mock -CommandName Invoke-GridViewPrompt -ModuleName ShellPrompt -MockWith { return $null }
 
             $sessions = @(
@@ -510,7 +505,6 @@ Describe 'tmux 会话解析与刷新契约' {
         }
 
         It '单帧视图: 标题包含附/分计数' {
-            Mock -CommandName Write-GridViewHint -ModuleName ShellPrompt -MockWith { }
             Mock -CommandName Invoke-GridViewPrompt -ModuleName ShellPrompt -MockWith { return $null }
 
             $sessions = @(
