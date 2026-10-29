@@ -40,7 +40,9 @@
 - `UI.Theme.Slots.Focus` / `Active` / `Highlight` 均为 **亮绿字 (`137,209,133`) + 稍亮底 (`40,40,40`)** —— 与 `Normal` (`137,209,133`/`30,30,30`) 相比仅底色亮度差 1 级, 列头与正文均为绿字, 整张表与绿主题统一; 同时保留 v2.1 的不变量"两种焦点状态下的选中行高亮一致"。
 - `UI.Theme.Slots.Editable` 为 **亮绿字 (`137,209,133`) + 近黑底 (`20,20,20`)** —— 过滤框在焦点态下用暗底承托绿字, 输入文字始终清晰可读。
 - `HotFocus` / `HotActive` (其他 View 的聚焦热区, TableView 不读取) 仍保留 v2.1 的浅色不变 —— 它们不影响 GridView 视觉, 改它们属于无收益改动。
-- 详见 [`README.md`](../../README.md) 的「GridView 配色 (Terminal.Gui `Scheme` 槽位)」与 [`ShellPrompt/CHANGELOG.md`](../../ShellPrompt/CHANGELOG.md) 的 `[Unreleased] / Changed` 条目。
+- 详见 [`README.md`](../../README.md) 的「GridView 配色 (Terminal.Gui `Scheme` 槽位)」与槽位定义源码
+  [`ShellPrompt/Private/Initialize-GridViewColorScheme.ps1`](../../ShellPrompt/Private/Initialize-GridViewColorScheme.ps1)
+  （CHANGELOG 已收拢为存根, 历史条目不作现行设计依据）。
 
 ## 启动期时序 (2026-10-18)
 
