@@ -46,6 +46,14 @@ param(
     $sessionName = $selected.Value
 
     $escapedName = "'$(ConvertTo-SshEscapedString -Value $sessionName)'"
-    Invoke-SshCommand -HostName $HostName -Interactive -RemoteCommand "tmux attach -d -t $escapedName 2>/dev/null || tmux new-session -A -s $escapedName"
+    # 先 has-session 判定再决定 attach / new: 原来的 `attach ... 2>/dev/null || new-session`
+    # 会把"attach 因别的原因失败"也吞成"新建一个会话", 且 stderr 被丢弃, 用户看不到原因。
+    # 现在 has-session 的 stderr 照常丢弃(会话不存在是正常分支), attach 的 stderr 保留。
+    $remoteCmd = "tmux has-session -t $escapedName 2>/dev/null && tmux attach -d -t $escapedName || tmux new-session -A -s $escapedName"
+    $result = Invoke-SshCommand -HostName $HostName -Interactive -RemoteCommand $remoteCmd -PassThru
+    if ($null -ne $result -and $result.ExitCode -ne 0) {
+        Write-Warning "tmux 会话操作未成功结束 (ssh 退出码: $($result.ExitCode))，请到远端确认会话状态。"
+        return
+    }
     Write-Host "`n [OK] tmux 会话已分离，回到管理菜单" -ForegroundColor Cyan
 }

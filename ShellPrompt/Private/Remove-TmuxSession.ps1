@@ -66,6 +66,12 @@ param(
 
     Write-Host " [..] 正在删除会话 '$sessionName' ..." -ForegroundColor DarkGray
     $escapedLabel = "'$(ConvertTo-SshEscapedString -Value $sessionName)'"
-    Invoke-SshCommand -HostName $HostName -RemoteCommand "tmux kill-session -t $escapedLabel"
+    # 必须拿到 ssh 退出码: 删除是不可逆操作, 失败时绝不能报成功。
+    $result = Invoke-SshCommand -HostName $HostName -RemoteCommand "tmux kill-session -t $escapedLabel" -PassThru
+    if ($null -eq $result -or $result.ExitCode -ne 0) {
+        $code = if ($null -ne $result) { $result.ExitCode } else { '未知' }
+        Write-Warning "删除会话 '$sessionName' 未成功 (ssh 退出码: $code)。请在远端确认: tmux ls"
+        return
+    }
     Write-Host " [OK] 会话 '$sessionName' 已删除" -ForegroundColor Green
 }

@@ -68,4 +68,10 @@ param(
         "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$escapedKey' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && echo DONE"
     )
     & ssh @sshArgs
+    # 必须检查退出码: 追加公钥失败时静默返回会让用户以为已配好, 实际登录仍要密码。
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "推送公钥失败 (ssh 退出码 $LASTEXITCODE)，请在远端确认 ~/.ssh/authorized_keys 是否已写入。"
+        return
+    }
+    Write-Host " [OK] 公钥已推送到 $RemoteHost" -ForegroundColor Green
 }

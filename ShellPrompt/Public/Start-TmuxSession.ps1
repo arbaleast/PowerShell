@@ -119,8 +119,12 @@ function Start-TmuxSession {
             "Remove"  { Remove-TmuxSession -HostName $HostName -Sessions $sessions }
             "Ssh"     {
                 Write-Host " [SSH] 直接连接..." -ForegroundColor Green
-                Invoke-SshCommand -HostName $HostName -Interactive
-                Write-Host "`n [OK] SSH 连接已关闭，回到管理菜单" -ForegroundColor Cyan
+                $sshResult = Invoke-SshCommand -HostName $HostName -Interactive -PassThru
+                if ($null -ne $sshResult -and $sshResult.ExitCode -ne 0) {
+                    Write-Warning "SSH 连接未正常结束 (ssh 退出码: $($sshResult.ExitCode))"
+                } else {
+                    Write-Host "`n [OK] SSH 连接已关闭，回到管理菜单" -ForegroundColor Cyan
+                }
             }
             "Refresh" {
                 # P2-5: Refresh 在菜单内部被选后, 会跳出菜单 -> while 顶部重新探测
