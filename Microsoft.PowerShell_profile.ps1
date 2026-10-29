@@ -91,7 +91,10 @@ foreach ($rel in $script:StartupLoadOrder) {
     foreach ($cmd in $commands) {
         $name = $cmd.GetCommandName()
         if (-not $name) { continue }
-        if ($cmd.InvocationOperator -eq [System.Management.Automation.Language.CommandInvocationOperator]::Ampersand) { continue }
+        # 用字符串比较判断 & 调用, 不引用 CommandInvocationOperator 枚举类型:
+        # pwsh 7.6.3 实测该类型解析报 "Unable to find type", 且每次启动刷几十条
+        # InvalidOperation (2026-10-29 真机)。InvocationOperator 对 `& cmd` 恒为 'Ampersand'。
+        if ("$($cmd.InvocationOperator)" -eq 'Ampersand') { continue }
         if (Get-Command -Name $name -ErrorAction SilentlyContinue) { continue }
         $startupUnresolved.Add("$rel|$name")
     }
