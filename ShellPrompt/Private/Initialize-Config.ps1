@@ -1,7 +1,15 @@
 # Initialize-Config.ps1 - 模块配置初始化 & 配置访问助手
-# 单一配置源: $script:Config 按域划分(Colors/Keys/Paths/SSH),
+# 单一配置源: $script:Config 按域划分(Colors/Paths/SSH/UI/Weather),
 # 读取统一走 Get-CachedConfig;热路径键值预热到 $script:ColorCache
 # 以减少菜单/Logo 渲染中的 4 段三层回退。
+#
+# 加载顺序(不可调换): 默认值 -> Get-CachedConfig -> 用户配置(config.ps1) -> 预热缓存。
+# 用户配置必须早于预热, 否则预热快照会盖掉用户覆盖(见文件末尾步骤 6/7 的说明)。
+#
+# 2026-10-29 清理: 删除无消费方的配置键(Paths.LogPath / SSH.ConnectTimeout /
+# SSH.ForceTTy / 整个 Keys 域 / Colors.LightGray|White|BgDarker|Bold|Dim)。
+# 判定依据: 这些键既不在 $script:ColorSemanticMap 里, 也没有任何直接读取点。
+# 用户若在 ~/.ShellPrompt/config.ps1 里配过它们, 现在会被忽略(不会报错)。
 
 # 统一用 `[char]27` 别名避免 PowerShell 字符串转义歧义(0x1B = ESC)
 $script:Esc = [char]27
@@ -9,19 +17,16 @@ $script:Esc = [char]27
 # 1. 模块根路径（脚本级，不暴露为全局变量）
 $script:ShellPromptRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 
-# 2. 单一来源：模块级配置对象（按域划分：Colors / Keys / SSH / Paths）
+# 2. 单一来源：模块级配置对象（按域划分：Colors / Paths / SSH / UI / Weather）
 $script:Config = [ordered]@{
     Paths  = [ordered]@{
         Quotes  = Join-Path $script:ShellPromptRoot 'data\quotes.txt'
-        LogPath = Join-Path $env:TEMP 'ShellPrompt\shellprompt.log'
     }
     Colors = [ordered]@{
         FreshGreen = "$Esc[38;2;137;209;133m"
         SageGreen  = "$Esc[38;2;159;177;159m"
         DarkGray   = "$Esc[38;2;50;50;50m"
         MidGray    = "$Esc[38;2;100;100;100m"
-        LightGray  = "$Esc[38;2;180;180;180m"
-        White      = "$Esc[38;2;255;255;255m"
         # 标题色 (Cyan): 菜单 / 标题区主色, 提升与正文色的层级差
         Cyan       = "$Esc[38;2;112;199;209m"
         # 危险项色 (Red): 删除 / 不可逆操作提示
@@ -30,25 +35,13 @@ $script:Config = [ordered]@{
         Warning    = "$Esc[38;2;220;180;80m"
         # 选中态反色背景 (Cyan 底 + 黑字): 选中项高亮
         SelectedBg = "$Esc[48;2;112;199;209;30m$Esc[38;2;20;20;20m"
-        # 危险项底色 (Danger 底 + 白字): 危险项的加强高亮(可选)
-        BgDarker   = "$Esc[48;2;40;40;40m"
         Rst        = "$Esc[0m"
-        Bold       = "$Esc[1m"
-        Dim        = "$Esc[2m"
-    }
-    Keys   = [ordered]@{
-        Up    = 38
-        Down  = 40
-        Enter = 13
-        Esc   = 27
     }
     SSH    = [ordered]@{
-        ConnectTimeout = 5
-        ForceTTy       = $true
         LastHost       = $null   # 上次使用的 SSH 主机（模块作用域，用于菜单置顶）
     }
     # Weather 域: 交互菜单底栏 wttr 单行天气的渲染配置 (2026-10-18 起)
-    # - Enabled : 总开关, $false 时 Write-GridViewHint 直接跳过天气片段拼接
+    # - Enabled : 总开关, $false 时 Get-WttrTitleSuffix 直接跳过天气后缀拼接
     # - ExtraWeatherDescMap: 用户自定义 wttr.in weatherDesc 英文 → 中文映射
     #     键 = 英文短语(会被 Get-WttrTitleSuffix 做 .ToLower().Trim() 后查表),
     #     值 = 自定义中文。同名键会覆盖模块内置映射。
@@ -167,26 +160,7 @@ try {
     Write-Verbose "初始化数据目录失败: $($_.Exception.Message)"
 }
 
-# 5. 预热热路径值到 $script 作用域,菜单/Logo 渲染时直接命中快路径,
-#    避免在每次菜单绘制时重复执行回退查询 (每次重绘约 5-10 次)。
-#    注: 仅缓存"非空字符串"键值;若用户配置在运行时被修改,请清除此缓存。
-$script:ColorCache = @{
-    'Colors|FreshGreen' = $script:Config.Colors.FreshGreen
-    'Colors|SageGreen'  = $script:Config.Colors.SageGreen
-    'Colors|MidGray'    = $script:Config.Colors.MidGray
-    'Colors|Cyan'       = $script:Config.Colors.Cyan
-    'Colors|Danger'     = $script:Config.Colors.Danger
-    'Colors|Warning'    = $script:Config.Colors.Warning
-    'Colors|SelectedBg' = $script:Config.Colors.SelectedBg
-    'Colors|Rst'        = $script:Config.Colors.Rst
-    'Keys|Up'           = $script:Config.Keys.Up
-    'Keys|Down'         = $script:Config.Keys.Down
-    'Keys|Enter'        = $script:Config.Keys.Enter
-    'Keys|Esc'          = $script:Config.Keys.Esc
-    'Paths|Quotes'      = $script:Config.Paths.Quotes
-}
-
-# 6. 统一配置读取入口: 优先命中 $script:ColorCache 预热键,
+# 5. 统一配置读取入口: 优先命中 $script:ColorCache 预热键,
 #    冷路径直接回退到 $script:Config。
 function Get-CachedConfig {
     [CmdletBinding()]
@@ -194,7 +168,7 @@ function Get-CachedConfig {
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
 param(
         [Parameter(Mandatory = $true)]
-        [ValidateSet('Paths', 'Colors', 'Keys', 'SSH', 'UI', 'Weather')]
+        [ValidateSet('Paths', 'Colors', 'SSH', 'UI', 'Weather')]
         [string]$Section,
 
         [Parameter(Mandatory = $true)]
@@ -204,7 +178,9 @@ param(
         [object]$Default
     )
     $cacheKey = "${Section}|${Key}"
-    if ($script:ColorCache.ContainsKey($cacheKey)) {
+    # 空判断: 用户配置在预热之前加载, 若配置里调用了 Get-CachedConfig, 此时
+    # $script:ColorCache 还不存在(见文件末尾步骤 6/7 的顺序说明)。
+    if ($script:ColorCache -and $script:ColorCache.ContainsKey($cacheKey)) {
         $cached = $script:ColorCache[$cacheKey]
         if ($null -ne $cached -and "$cached" -ne '') { return $cached }
     }
@@ -213,4 +189,36 @@ param(
         return $script:Config[$Section][$Key]
     }
     return $Default
+}
+
+# 6. 用户配置覆盖 ($HOME/.ShellPrompt/config.ps1)
+#    加载点必须在**预热之前**: $script:ColorCache 是"预热那一刻"的值快照, 而
+#    Get-CachedConfig 优先命中缓存 —— 用户配置若晚于预热生效, 覆盖会被缓存静默
+#    遮蔽。2026-10-29 修正: 原实现里用户配置由 ShellPrompt.psm1 在本文件**之后**
+#    加载, 于是 config.ps1 里的颜色/路径覆盖全部不生效(用户改了没反应)。
+#    收进本文件后同时修好两处: 模块内读取, 以及 profile 启动期的欢迎语渲染
+#    (profile 同样 dot-source 本文件, 拿到的是同一份已合并用户配置的值)。
+$userConfigPath = Join-Path (Join-Path $HOME '.ShellPrompt') 'config.ps1'
+if (Test-Path -LiteralPath $userConfigPath -PathType Leaf) {
+    try {
+        . $userConfigPath
+    } catch {
+        Write-Warning "[ShellPrompt] 用户配置加载失败 ($userConfigPath): $($_.Exception.Message)"
+    }
+}
+
+# 7. 预热热路径值到 $script 作用域,菜单/Logo 渲染时直接命中快路径,
+#    避免在每次菜单绘制时重复执行回退查询 (每次重绘约 5-10 次)。
+#    注: 仅缓存"非空字符串"键值;若用户配置在运行时被修改,请清除此缓存。
+#    顺序要求: 必须排在上面的用户配置加载之后(见步骤 6 的说明)。
+$script:ColorCache = @{
+    'Colors|FreshGreen' = $script:Config.Colors.FreshGreen
+    'Colors|SageGreen'  = $script:Config.Colors.SageGreen
+    'Colors|MidGray'    = $script:Config.Colors.MidGray
+    'Colors|Cyan'       = $script:Config.Colors.Cyan
+    'Colors|Danger'     = $script:Config.Colors.Danger
+    'Colors|Warning'    = $script:Config.Colors.Warning
+    'Colors|SelectedBg' = $script:Config.Colors.SelectedBg
+    'Colors|Rst'        = $script:Config.Colors.Rst
+    'Paths|Quotes'      = $script:Config.Paths.Quotes
 }

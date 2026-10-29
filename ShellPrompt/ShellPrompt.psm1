@@ -59,15 +59,10 @@ Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" | Sort-Object Name | ForEach-Ob
     }
 }
 
-# User config override
-$userConfigPath = Join-Path $HOME ".ShellPrompt\config.ps1"
-if (Test-Path $userConfigPath) {
-    try {
-        . $userConfigPath
-    } catch {
-        Write-Host "[ShellPrompt] User config failed: $($_.Exception.Message)" -ForegroundColor Yellow
-    }
-}
+# User config override 已移入 Private/Initialize-Config.ps1(步骤 6)。
+# 移入的原因: 预热缓存 $script:ColorCache 必须在用户配置**之后**生成, 否则
+# Get-CachedConfig 优先命中预热快照, config.ps1 里的覆盖会被静默忽略。
+# 放在 Initialize-Config.ps1 里还顺带让 profile 启动期的欢迎语用上同一份配置。
 
 # SSH Config auto-completion
 $sshHosts = Get-SshConfigHosts

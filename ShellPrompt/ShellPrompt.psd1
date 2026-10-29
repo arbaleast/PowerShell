@@ -27,7 +27,8 @@
         PSData = @{
             Tags       = @('PowerShell', 'Prompt', 'Tmux', 'SSH', 'Session')
             ProjectUri = 'https://github.com/arbaleast/PowerShell'
-            LicenseUri = 'https://github.com/arbaleast/PowerShell/blob/main/LICENSE'
+            # LICENSE 文件在 ShellPrompt/ 下 (仓库根没有 LICENSE), 旧路径 404
+            LicenseUri = 'https://github.com/arbaleast/PowerShell/blob/main/ShellPrompt/LICENSE'
         }
     }
 }
