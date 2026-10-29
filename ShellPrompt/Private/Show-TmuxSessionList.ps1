@@ -40,7 +40,6 @@ function ConvertTo-TmuxSessionSelection {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
@@ -95,7 +94,6 @@ function Show-TmuxSessionList {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $true)][string]$HostName,
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][array]$Sessions,
@@ -170,7 +168,6 @@ function Invoke-TmuxSessionListView {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][array]$Sessions,
         [Parameter(Mandatory = $true)][string]$HostName,

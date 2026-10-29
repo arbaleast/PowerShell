@@ -26,7 +26,6 @@ function Write-TmuxAvailabilityNotice {
     #>
     [CmdletBinding()]
     [OutputType([void])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $true)][string]$HostName,
         [Parameter(Mandatory = $true)][object]$AvailabilityInfo

@@ -29,7 +29,6 @@ function Get-GridViewColumnPlan {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Rows,
         [Parameter(Mandatory = $false)][hashtable]$HiddenColumns

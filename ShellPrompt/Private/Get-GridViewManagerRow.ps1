@@ -26,7 +26,6 @@ function Get-GridViewManagerRow {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $false)][bool]$HasSessions = $false,
         [Parameter(Mandatory = $false)][int]$AttachedCount = 0

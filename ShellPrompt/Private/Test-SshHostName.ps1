@@ -17,7 +17,6 @@ function Test-SshHostName {
     #>
     [CmdletBinding()]
     [OutputType([bool])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
 param(
         [Parameter(Mandatory = $true)]
         [string]$HostName

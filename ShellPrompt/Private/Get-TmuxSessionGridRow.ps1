@@ -30,7 +30,6 @@ function Get-TmuxSessionGridRow {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $true)]
         [AllowEmptyCollection()]

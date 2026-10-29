@@ -165,7 +165,6 @@ try {
 function Get-CachedConfig {
     [CmdletBinding()]
     [OutputType([object])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
 param(
         [Parameter(Mandatory = $true)]
         [ValidateSet('Paths', 'Colors', 'SSH', 'UI', 'Weather')]

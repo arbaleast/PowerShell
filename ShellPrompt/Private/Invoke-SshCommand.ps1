@@ -5,7 +5,6 @@
 function Invoke-SshCommand {
     [CmdletBinding()]
     [OutputType([string])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
 param(
         [Parameter(Mandatory = $true, Position = 0)]
         [ValidateNotNullOrEmpty()]

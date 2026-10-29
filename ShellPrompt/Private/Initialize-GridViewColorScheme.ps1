@@ -19,7 +19,6 @@ function Initialize-GridViewColorScheme {
     #>
     [CmdletBinding()]
     [OutputType([void])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param()
 
     try {

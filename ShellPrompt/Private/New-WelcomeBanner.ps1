@@ -1,4 +1,4 @@
-﻿# New-WelcomeBanner.ps1 - 欢迎横幅构建器
+# New-WelcomeBanner.ps1 - 欢迎横幅构建器
 # P2-2: 统一风格化的欢迎 banner, 与 GridView 表格头部视觉一致
 # 设计原则:
 # 1. 纯函数 New-WelcomeBanner 返回行数组, 便于 Pester 测试
@@ -9,7 +9,6 @@
 function Get-RandomQuote {
     [CmdletBinding(SupportsShouldProcess = $true)]
     [OutputType([string])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     <#
     .SYNOPSIS
         从语录文件读取并随机抽取一行(纯函数封装 + 缓存)

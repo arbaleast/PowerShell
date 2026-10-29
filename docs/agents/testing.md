@@ -43,13 +43,15 @@
 ## 文档同步核对
 
 - **触发条件**: 任何用户可见行为变化(Public 函数签名 / 配置键 / 默认值 / 菜单交互 / 渲染入口 / 模块加载顺序)。
-- **同步清单**: `git diff --name-only README.md docs/agents/architecture.md`
+- **同步清单**: `git diff --name-only README.md AGENTS.md docs/agents/architecture.md docs/readme/*`
   - `README.md`: 新增 / 修改 / 弃用命令必须给最小可运行示例。
   - `docs/agents/architecture.md`: 模块加载顺序 / 单轨菜单 / Phase 1 加载清单 / 启动期时序变更时必须更新。
+  - `AGENTS.md` + `docs/readme/*`: README 已拆分, 用户可见变更按主题改对应分片
+    (commands / configuration / features / architecture / gridview-menus), 不要写回 README 本体。
   - PR 描述: 新的用户可见变更写进 PR 描述(替代 CHANGELOG 条目)。
-- **CHANGELOG 政策**: `ShellPrompt/CHANGELOG.md` **已冻结为历史快照** —— 历史段曾永久丢失,
-  现存条目描述的是当时已撤销 / 已移除的实现(部分引用文件已不存在)。
-  阶段 B 起的新条目**不写入** CHANGELOG; 不可重写、回填或扩充其历史。
+- **CHANGELOG 政策**: `ShellPrompt/CHANGELOG.md` **已收拢为存根**（2026-10-29）—— 历史段曾永久丢失,
+  冻结前的条目描述的是当时已撤销 / 已移除的实现, 正文已由 git 历史替代。
+  新条目**不写入** CHANGELOG; 用户可见变更同步规则见上面两行(README / PR 描述)。
 
 ## 人工测试标记
 

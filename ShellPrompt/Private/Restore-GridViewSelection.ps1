@@ -37,7 +37,6 @@ function Restore-GridViewSelection {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $true)][object]$Selected,
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Rows,

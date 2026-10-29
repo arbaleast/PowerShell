@@ -24,7 +24,6 @@ function Get-GridViewHostRow {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Hosts,
         [Parameter(Mandatory = $false)][string]$LastHost = ""

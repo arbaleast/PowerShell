@@ -33,7 +33,6 @@ function Get-TmuxProbeCommand {
     #>
     [CmdletBinding()]
     [OutputType([string])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param()
 
     # 修 2026-06-27: 避免 `$()` 子 shell 在某些 sshd 配置(非交互式 PATH 不完整)下
@@ -64,7 +63,6 @@ function ConvertFrom-TmuxProbeOutput {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $false)]
         [AllowEmptyString()]
@@ -117,7 +115,6 @@ function ConvertFrom-TmuxSessionFormat {
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.Generic.List[PSCustomObject]])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $false)]
         [AllowEmptyCollection()]
@@ -163,7 +160,6 @@ function ConvertFrom-TmuxLsOutput {
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.Generic.List[PSCustomObject]])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $false)]
         [AllowEmptyCollection()]
@@ -213,7 +209,6 @@ function Test-TmuxNetworkError {
     #>
     [CmdletBinding()]
     [OutputType([bool])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $false)]
         [AllowEmptyString()]
@@ -255,7 +250,6 @@ function Invoke-TmuxProbe {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $true)]
         [string]$HostName,
@@ -298,7 +292,6 @@ function Get-TmuxAvailability {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $true)]
         [string]$HostName,
@@ -378,7 +371,6 @@ function Get-TmuxSessions {
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '')]
     param(
         [Parameter(Mandatory = $true)]

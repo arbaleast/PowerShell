@@ -9,7 +9,6 @@
 function Reset-TerminalMode {
     [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([void])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
 param()
 
     # --- A. 远程协议层 (原 Invoke-SshCommand 版) ---

@@ -167,7 +167,6 @@ function Invoke-GridViewHostSelector {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     # ExitLabel 由调用方作为退出提示文案传入, 渲染在提示行; 当前实现里被 GridView 之外
     # 的调用链使用(Pester/Start-TmuxSession 间接消费). 显式抑制避免 PSSA 误报.
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '')]
@@ -248,7 +247,6 @@ function Invoke-GridViewSessionManager {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '')] # ExitLabel 参见 HostSelector 注释
     param(
         [Parameter(Mandatory = $true)][string]$HostName,
@@ -317,7 +315,6 @@ function Invoke-GridViewSessionList {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '')] # ExitLabel 参见 HostSelector 注释
     param(
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][array]$Sessions,

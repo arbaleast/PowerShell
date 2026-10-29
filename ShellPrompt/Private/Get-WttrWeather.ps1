@@ -109,8 +109,7 @@ function Get-WttrHttpBody {
         return ([string]$output).TrimEnd("`r", "`n")
     }
 
-    # 回退: PowerShell 内置 HTTP 客户端
-    # 注意 PS 5.1 对 wttr.in 偶发 SNI/TLS 兼容问题,故仅作 fallback
+    # 回退: PowerShell 内置 HTTP 客户端 (curl 不在 PATH 时使用 Invoke-RestMethod 兜底)
     $response = Invoke-RestMethod -Uri $Uri -TimeoutSec $TimeoutSeconds -ErrorAction Stop
     if ($null -eq $response) { return '' }
     return ([string]$response).TrimEnd("`r", "`n")

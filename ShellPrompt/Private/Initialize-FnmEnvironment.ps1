@@ -36,7 +36,6 @@ function Initialize-FnmEnvironment {
     .OUTPUTS
         [bool] 是否成功完成初始化
     #>
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingEmptyCatchBlock', '', Justification = '缓存读取/写入失败时静默回退到子进程保底路径, 正确性优先于可见告警')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = '启动期 profile 同步路径调用, 不应交互式确认')]
     [CmdletBinding()]
@@ -109,7 +108,6 @@ function New-FnmEnvironmentCache {
     .OUTPUTS
         [PSCustomObject] 缓存对象(失败时为 $null)
     #>
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingEmptyCatchBlock', '', Justification = 'fnm 子进程失败时静默返回 $null, 让上层回退到完整 fnm env 子进程路径')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = '纯子进程读取 + JSON 组装, 无外部可观察状态变更')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingInvokeExpression', '', Justification = 'Invoke-Expression 是 fnm env --shell powershell 输出格式的必要消费方式, 不存在等价方案')]
@@ -183,7 +181,6 @@ function Set-FnmEnvironmentFromCache {
     .OUTPUTS
         [bool] 是否成功应用
     #>
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingEmptyCatchBlock', '', Justification = 'fnm env 回放失败时静默回退保底路径, 正确性优先于可见告警')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingInvokeExpression', '', Justification = 'Invoke-Expression 是回放缓存中 fnm env --shell powershell 输出的必要方式, 不存在等价方案')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = '启动期 profile 同步路径调用, 不应交互式确认')]
@@ -241,7 +238,6 @@ function Set-FnmEnvironmentByFallback {
     .OUTPUTS
         [bool] 是否成功
     #>
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingEmptyCatchBlock', '', Justification = 'fnm 子进程失败时静默返回 $false, 由 profile 自身决定是否启动回退')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingInvokeExpression', '', Justification = 'Invoke-Expression 是 fnm env --shell powershell 输出格式的必要消费方式, 不存在等价方案')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = '启动期 profile 同步路径调用, 不应交互式确认')]

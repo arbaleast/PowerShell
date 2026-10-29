@@ -22,7 +22,6 @@ function Get-TmuxRefreshedSession {
     #>
     [CmdletBinding()]
     [OutputType([object[]])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $true)]
         [scriptblock]$SessionRefresher

@@ -27,7 +27,6 @@ function ConvertTo-TmuxRefreshSelection {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param()
 
     return [PSCustomObject]@{

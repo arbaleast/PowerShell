@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     控制台 UI 后端检测 (Get-ConsoleUiBackend 及其前置检查) 的 Pester 测试
 

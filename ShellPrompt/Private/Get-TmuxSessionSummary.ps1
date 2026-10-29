@@ -25,7 +25,6 @@ function Get-TmuxSessionSummary {
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $false)]
         [AllowEmptyCollection()]

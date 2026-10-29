@@ -33,7 +33,6 @@ function Get-SshArgs {
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.ArrayList])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
 param(
         [Parameter(Mandatory = $true)]
         [string]$HostName,
@@ -85,6 +84,15 @@ param(
         [void]$sshArgs.Add('-t')
     }
 
+    # 捕获输出模式强制非交互认证
+    # (-o 选项统一放在 destination 之前: 不依赖各平台 ssh 对「destination 之后以 - 开头的
+    #  参数」的解析差异, 前置写法在所有 OpenSSH 下都解析为选项)
+    if ($CaptureOutput) {
+        [void]$sshArgs.Add('-o'); [void]$sshArgs.Add('BatchMode=yes')
+        [void]$sshArgs.Add('-o'); [void]$sshArgs.Add('PreferredAuthentications=publickey')
+        [void]$sshArgs.Add('-o'); [void]$sshArgs.Add('NumberOfPasswordPrompts=0')
+    }
+
     # 主机名作为独立参数传递（不会被 shell 解释）
     [void]$sshArgs.Add($HostName)
 
@@ -93,13 +101,6 @@ param(
         [void]$sshArgs.Add($RemoteCommand)
     }
 
-    # 捕获输出模式强制非交互认证
-    if ($CaptureOutput) {
-        [void]$sshArgs.Add('-o'); [void]$sshArgs.Add('BatchMode=yes')
-        [void]$sshArgs.Add('-o'); [void]$sshArgs.Add('PreferredAuthentications=publickey')
-        [void]$sshArgs.Add('-o'); [void]$sshArgs.Add('NumberOfPasswordPrompts=0')
-    }
-
-    # 用 -NoEnumerate 写入输出流，防止 PS 5.1 捕获时自动解包 ArrayList
+    # 用 -NoEnumerate 写入输出流，防止单元素数组被管道逐项展开
     Write-Output -NoEnumerate $sshArgs
 }

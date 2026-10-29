@@ -9,7 +9,6 @@ $script:SshHostsCacheMtime = [DateTime]::MinValue
 function Get-SshConfigHosts {
     [CmdletBinding()]
     [OutputType([string[]])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
 param()
     try {
         $sshConfig = Join-Path $HOME ".ssh\config"

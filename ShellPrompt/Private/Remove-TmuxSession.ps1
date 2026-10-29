@@ -23,7 +23,6 @@ function Remove-TmuxSession {
     #>
     [CmdletBinding(SupportsShouldProcess=$true)]
     [OutputType([void])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
 param(
         [Parameter(Mandatory = $true)]
         [string]$HostName,

@@ -17,7 +17,6 @@ $script:TmuxSessionPrefix = "tmux-"
 function New-RandomSessionName {
     [CmdletBinding(SupportsShouldProcess = $true)]
     [OutputType([string])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param()
 
     # "New" 属于会改变系统状态的动词, 按 PSScriptAnalyzer 规则需支持 ShouldProcess

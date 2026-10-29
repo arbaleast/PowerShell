@@ -7,8 +7,8 @@
 后快速应用更改,不必重启 PowerShell。
 
 设计选择: 走"全量重载"路径(Remove-Module + dot-source $PROFILE),而不是 FileSystemWatcher 自动重载 —
-后者在 PS 5.1 EventManager + ThreadPool + 跨 runspace SessionState 链路上需要 ~150 行复杂代码,远超
-本项目"小而深"模块边界,且 Pester 测试覆盖虚高(PSScriptAnalyzer 抑制属性误用导致整个 watcher 早退)。
+后者要维护 watcher 生命周期 + 跨 runspace reload 调用链,复杂度远超本项目"小而深"模块边界,
+且这类 watcher 的 Pester 测试覆盖虚高(PSScriptAnalyzer 抑制属性误用导致整个 watcher 早退)。
 
 .EXAMPLE
 Invoke-Reload

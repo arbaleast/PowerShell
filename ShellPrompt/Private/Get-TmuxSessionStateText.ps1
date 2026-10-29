@@ -38,7 +38,6 @@ function Get-TmuxSessionStateText {
     #>
     [CmdletBinding()]
     [OutputType([string])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param(
         [Parameter(Mandatory = $false)]
         [AllowEmptyString()]

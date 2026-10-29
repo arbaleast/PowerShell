@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Terminal.Gui 配色装配 (Set-TgColorScheme 及其辅助函数) 的 Pester 测试
 

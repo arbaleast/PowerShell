@@ -28,7 +28,6 @@ function Invoke-SshCaptureOutput {
     #>
     [CmdletBinding()]
     [OutputType([string])]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
 param(
         [Parameter(Mandatory = $true)]
         [array]$ArgumentList,
@@ -41,7 +40,7 @@ param(
     )
 
     # 手动按 CommandLineToArgvW 规则引号包裹每个参数
-    # (WinPS 5.1 跑 .NET Framework 4.x, 没有 ArgumentList 集合)
+    # (ProcessStartInfo.Arguments 需要单条命令行字符串, 参数间转义规则自行维护)
     $escaped = $ArgumentList | ForEach-Object {
         $a = [string]$_
         if ($a -match '\s|"') {

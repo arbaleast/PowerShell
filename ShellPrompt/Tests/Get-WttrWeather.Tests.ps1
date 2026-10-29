@@ -1,4 +1,4 @@
-﻿# Get-WttrWeather Pester 测试套件
+# Get-WttrWeather Pester 测试套件
 # 目标运行时: Pester v5+/v6 (当前环境 Pester 6.2.0 / PowerShell 7.6.3)
 # 迁移要点 (由 Pester v3 语法演进而来):
 #   - 断言统一改为 v5+ 连字符算子: Should -Be / -Match / -BeGreaterThan

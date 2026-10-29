@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     ShellPrompt 模块 Pester 测试套件 (由 Pester v3 旧断言语法最小迁移而来)
 .DESCRIPTION

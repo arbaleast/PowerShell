@@ -18,7 +18,6 @@ function Write-TmuxWelcomeBanner {
     #>
     [CmdletBinding()]
     [OutputType([void])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseBOMForUnicodeEncodedFile', '')]
     param()
 
     # 颜色预解析: 统一走 Resolve-ColorTable(Border 跟随 Primary, 与 New-WelcomeBanner 语义一致)
