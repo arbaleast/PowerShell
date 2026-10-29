@@ -1,4 +1,4 @@
-﻿# Invoke-Tests.ps1 - 固定测试入口
+# Invoke-Tests.ps1 - 固定测试入口
 #
 # 为什么需要这个入口:
 #   本仓库测试套件已迁移到 Pester **v5+/v6 语法** (`Should -Be` / `Should -Invoke`),
@@ -9,7 +9,7 @@
 # 用法 (pwsh 7.6+):
 #   pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Tests.ps1
 #   pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Tests.ps1 -Path 'ShellPrompt/Tests/Get-WttrWeather.Tests.ps1'
-#   pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Tests.ps1 -EnableExit  (CI 用: 以退出码反映结果)
+#   pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Tests.ps1 -NoExit   (交互会话内调用时关闭 exit)
 
 [CmdletBinding()]
 [OutputType([void])]
@@ -22,9 +22,11 @@ param(
     [Parameter(Mandatory = $false)]
     [hashtable]$PesterArgs,
 
-    # 跑完后以退出码反映通过与否 (CI 场景)
+    # 跑完后是否用退出码反映结果。
+    # 默认开启(失败即非零退出) —— CI 与人工检查都需要它; 交互会话里用 `&` 调用本脚本时
+    # 传 -NoExit, 否则 exit 会把当前会话一起结束。
     [Parameter(Mandatory = $false)]
-    [switch]$EnableExit
+    [switch]$NoExit
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,8 +56,8 @@ else {
 
 Import-Module $pesterPath -Force -ErrorAction Stop
 $pesterVersion = (Get-Module Pester | Sort-Object Version -Descending | Select-Object -First 1).Version.ToString()
-if ($pesterVersion -notmatch '^[5-9]\.' -and $pesterVersion -notmatch '^\d+\.') {
-    throw "Pester 版本校验失败: 实际 $pesterVersion"
+if ($pesterVersion -notmatch '^[5-9]\.') {
+    throw "Pester 版本校验失败: 实际 $pesterVersion (要求 5+)"
 }
 Write-Host "Pester 已加载: $pesterVersion" -ForegroundColor DarkGray
 
@@ -90,6 +92,6 @@ if ($result.FailedCount -gt 0) {
 }
 Write-Host ('=' * 60) -ForegroundColor DarkGray
 
-if ($EnableExit) {
+if (-not $NoExit) {
     exit ([int]($result.FailedCount -gt 0))
 }

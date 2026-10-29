@@ -1,0 +1,152 @@
+name: CI
+
+# 触发条件: 只在代码 / 测试 / 静态分析配置 / 本 workflow 变更时跑。
+# 文档改动不触发 (docs/ 不在 paths 里), 避免无谓的 runner 消耗。
+on:
+  push:
+    paths:
+      - 'ShellPrompt/**'
+      - 'Microsoft.PowerShell_profile.ps1'
+      - '.github/workflows/test.yml'
+  pull_request:
+    paths:
+      - 'ShellPrompt/**'
+      - 'Microsoft.PowerShell_profile.ps1'
+      - '.github/workflows/test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Pester
+    # windows-latest: 当前模块与测试套件面向 Windows (硬编码 ssh.exe / LOCALAPPDATA /
+    # TEMP / USERPROFILE), 迁到 ubuntu 需要先补跨平台地基 (见审计报告 P1-1)。
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure PowerShell 7.6+
+        # ShellPrompt.psd1 声明 PowerShellVersion = '7.6', runner 与清单必须一致。
+        # 托管镜像自带版本可能偏低, 不足时从官方 release 装一份并写回 PATH。
+        shell: pwsh
+        run: |
+          $required = [version]'7.6'
+          if ($PSVersionTable.PSVersion -ge $required) {
+            Write-Host "Using preinstalled pwsh $($PSVersionTable.PSVersion)"
+            exit 0
+          }
+          $ver = '7.6.0'
+          $dir = Join-Path $env:RUNNER_TEMP "pwsh-$ver"
+          $zip = Join-Path $env:RUNNER_TEMP "pwsh-$ver.zip"
+          $url = "https://github.com/PowerShell/PowerShell/releases/download/v$ver/powershell-$ver-win-x64.zip"
+          Write-Host "Preinstalled pwsh is $($PSVersionTable.PSVersion) (< $required); downloading $ver"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          Add-Content -Path $env:GITHUB_PATH -Value $dir
+
+      - name: Install Pester 5+
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+          if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
+            Install-PSResource -Name Pester -Repository PSGallery -Scope CurrentUser -TrustRepository -ErrorAction Stop
+          }
+          $pester = Get-Module -ListAvailable Pester |
+            Where-Object { $_.Version.Major -ge 5 } |
+            Sort-Object Version -Descending | Select-Object -First 1
+          if (-not $pester) {
+            Write-Host 'Install-PSResource 未落地, 回退到 Install-Module'
+            Install-Module -Name Pester -MinimumVersion 5.0 -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+            $pester = Get-Module -ListAvailable Pester |
+              Where-Object { $_.Version.Major -ge 5 } |
+              Sort-Object Version -Descending | Select-Object -First 1
+          }
+          if (-not $pester) { throw 'Pester 5+ 不可用' }
+          Write-Host "Pester $($pester.Version) -> $($pester.Path)"
+
+      - name: Run Pester suite
+        # Invoke-Tests.ps1 默认在失败时以非零退出码结束; 套件不联网、不连真实
+        # ssh/tmux 主机、不加载用户 profile。
+        # 用子进程 pwsh 跑, 这样脚本里的 exit 只结束子进程, 退出码经 $LASTEXITCODE
+        # 传给本 step, 同时把完整输出落到 .agent_cache/pester.txt (仓库约定)。
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .agent_cache | Out-Null
+          pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Tests.ps1 2>&1 |
+            Tee-Object -FilePath .agent_cache/pester.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pester-log
+          path: .agent_cache/pester.txt
+          if-no-files-found: ignore
+
+  lint:
+    name: PSScriptAnalyzer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure PowerShell 7.6+
+        shell: pwsh
+        run: |
+          $required = [version]'7.6'
+          if ($PSVersionTable.PSVersion -ge $required) {
+            Write-Host "Using preinstalled pwsh $($PSVersionTable.PSVersion)"
+            exit 0
+          }
+          $ver = '7.6.0'
+          $dir = Join-Path $env:RUNNER_TEMP "pwsh-$ver"
+          $zip = Join-Path $env:RUNNER_TEMP "pwsh-$ver.zip"
+          $url = "https://github.com/PowerShell/PowerShell/releases/download/v$ver/powershell-$ver-win-x64.zip"
+          Write-Host "Preinstalled pwsh is $($PSVersionTable.PSVersion) (< $required); downloading $ver"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          Add-Content -Path $env:GITHUB_PATH -Value $dir
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
+            Install-PSResource -Name PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -TrustRepository -ErrorAction Stop
+          } else {
+            Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+          }
+
+      - name: Run PSScriptAnalyzer
+        # 红线与 docs/agents/testing.md 一致: 不允许新增 Error; Warning 允许,
+        # 但需在 PR 描述里说明理由。报告落 .agent_cache/ (仓库约定)。
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .agent_cache | Out-Null
+          $results = @(Invoke-ScriptAnalyzer -Path ./ShellPrompt -Recurse -Settings ./ShellPrompt/Settings.ScriptAnalyzer.psd1)
+          $results |
+            Select-Object Severity, RuleName, ScriptName, Line, Message |
+            Format-Table -AutoSize |
+            Out-String -Width 200 |
+            Set-Content -Path .agent_cache/pssa.txt
+          $errors   = @($results | Where-Object { $_.Severity -eq 'Error' })
+          $warnings = @($results | Where-Object { $_.Severity -eq 'Warning' })
+          $infos    = @($results | Where-Object { $_.Severity -eq 'Information' })
+          Write-Host ("PSSA: {0} Error / {1} Warning / {2} Information" -f $errors.Count, $warnings.Count, $infos.Count)
+          if ($errors.Count -gt 0) {
+            $errors | Format-List RuleName, ScriptName, Line, Message | Out-String | Write-Host
+            exit 1
+          }
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pssa-report
+          path: .agent_cache/pssa.txt
+          if-no-files-found: ignore
