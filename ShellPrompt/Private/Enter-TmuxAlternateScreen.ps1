@@ -8,11 +8,14 @@
 #
 # 修复语义 (严格管理备用屏幕生命周期):
 #   - Enter-TmuxAlternateScreen: 主循环开始前写 \e[?1049h 切到备用屏幕
-#     (备用屏初始为空, 之前的 Shell 内容被完整保存在主缓冲);
+#     + \e[2J\e[H 硬清屏归位(第五轮修复: 每次进入/恢复都从左上角开始);
 #   - Exit-TmuxAlternateScreen: finally 中写 \e[?1049l 恢复原屏幕,
 #     try 块无论正常结束还是抛异常/Ctrl-C 都会执行到 finally;
-#   - 幂等: 两侧都由 $script:TmuxAltScreenActive 状态位守护, 重复 Enter/Exit
-#     不会写出多余的协议序列 (避免与 PSTui -FullScreen 自己的缓冲交换错位)。
+#   - Clear-TmuxScreen: 第五轮修复新增 —— 主事件循环**每一次迭代开头**
+#     强制全量重绘前的绝对清屏(绝对的全量重绘机制), 消除状态切换后的
+#     残影/双底栏/输入光标残留;
+#   - 幂等: Enter/Exit 由 $script:TmuxAltScreenActive 状态位守护, 重复
+#     Enter/Exit 不会写出多余的协议序列。
 #   - 全屏交互子动作(tmux attach / 新建并附着 / 直连 SSH)执行前后由调用方
 #     显式 Exit -> 执行 -> Enter 暂停/恢复管理器屏幕, 保证 tmux 拿到的是
 #     干净的主屏幕, detach 后再回到管理器备用屏重新绘制。
@@ -31,6 +34,8 @@ function Enter-TmuxAlternateScreen {
             Enter-TmuxAlternateScreen
             try { ...主循环... } finally { Exit-TmuxAlternateScreen }
 
+        切换后追发 \e[2J\e[H —— 备用屏从左上角开屏, 不基于当前光标位置。
+
     .EXAMPLE
         Enter-TmuxAlternateScreen
     #>
@@ -40,9 +45,8 @@ function Enter-TmuxAlternateScreen {
 
     if ($script:TmuxAltScreenActive) { return }
     Write-Host -NoNewline "`e[?1049h"
-    # 硬清屏 + 光标归位(2026-10-30 第四轮修复, 防御性): 1049h 切换本身会给
-    # 空备用屏, 这里再显式 \e[2J\e[H 一次 —— 保证恢复/重入时(attach 返回、
-    # 异常路径残留光标位置)界面从左上角开始渲染, 不基于当前光标位置下沉。
+    # 硬清屏 + 光标归位: 1049h 本身给空备用屏, 这里再显式一次 —— 重入时
+    # (attach 返回、异常路径残留光标位置)也保证从 (0,0) 开始渲染。
     Write-Host -NoNewline "`e[2J`e[H"
     $script:TmuxAltScreenActive = $true
 }
@@ -67,4 +71,33 @@ function Exit-TmuxAlternateScreen {
     if (-not $script:TmuxAltScreenActive) { return }
     Write-Host -NoNewline "`e[?1049l"
     $script:TmuxAltScreenActive = $false
+}
+
+function Clear-TmuxScreen {
+    <#
+    .SYNOPSIS
+        全量重绘前的绝对清屏(\e[2J\e[H): 清空可见区并把光标归位 (0,0)。
+
+    .DESCRIPTION
+        第五轮修复(2026-10-30): 主事件循环 while 的每一次迭代开头调用,
+        保证任何状态切换(Normal -> Input / Input -> Normal / 附着返回)之后
+        下一次渲染都从一张干净的整屏开始 —— 残影、双底栏、输入光标残留
+        "> n" 全部是"不清屏直接续画"的产物。
+        渲染层随后用**绝对坐标**布局: 标题 Y=0, 输入区 Y=$h-5 附近,
+        底部状态栏 Y=$h-1($h = [Console]::WindowHeight)。
+
+        注意: PSTui 全屏弹窗(-FullScreen)独占渲染期间由它自己管理屏幕,
+        本函数只在弹窗之外的常驻画面(动作条 / 输入区)与迭代开头生效。
+
+    .EXAMPLE
+        while ($true) {
+            Clear-TmuxScreen
+            ...渲染与交互...
+        }
+    #>
+    [CmdletBinding()]
+    [OutputType([void])]
+    param()
+
+    Write-Host -NoNewline "`e[2J`e[H"
 }

@@ -716,3 +716,30 @@ t1  主线程渲染标题时先 Receive-WttrPrefetch：   ││
 `\e[2J\e[H` 保证每次重入从左上角开始。配置开关：`UI.DashboardFullScreen`
 （默认 `$true`，仅仪表盘），`UI.GridViewFullScreen`（默认 `$false`，轻量菜单）。
 `UI.GridViewMinUI` 与 `Get-GridViewMinUiEnabled` 已随本轮撤回移除。
+
+### 6.4 绝对的常驻画面重绘（第五轮修复：状态切换残影）
+
+第四轮之后真终端再暴露：Input 态按 `Esc` 返回时出现"输入框残影 + 历史输出 +
+双底栏 + `> n` 输入光标残留"。根因：主事件循环在状态切换后只续画不清屏，
+常驻画面（动作条/输入区）跟着旧光标位置流式下沉。
+
+修复分三层，仍不突破单轨 PSTui 约束（全屏弹窗期间由 PSTui 独占渲染）：
+
+1. **绝对的全量重绘**：新增 `Clear-TmuxScreen`（`\e[2J\e[H`）——
+   `Start-TmuxSession` 主循环**每一次迭代开头**强制清屏归位；
+   `Enter-TmuxAlternateScreen` 进入/恢复时同样先清屏归位。
+2. **绝对坐标布局**：常驻画面不再跟随光标——底部动作条由
+   `Show-TmuxActionBar` 钉在 `Y = $h - 1`（`$h = [Console]::WindowHeight`，
+   `SetCursorPosition(0, $h - 1)`，重定向控制台降级为流式输出）；
+   新建会话的 Input 态 HUD（`New-TmuxSession`）改为
+   提示语 `Y = $h - 6`、输入行 `> 缓冲区` `Y = $h - 5`、
+   Input 底栏 `[Enter] 确认  [Esc] 取消` `Y = $h - 1`
+   （状态机渲染分支：Input 态不显示 Normal 态动作条，反之亦然）。
+3. **状态切换后的恢复**：Input 态 `Esc` 提交/取消都会 `\e[J` 清掉输入区
+   与 Input 底栏（含 `> n` 残留），由主循环下一轮迭代开头
+   `Clear-TmuxScreen` + PSTui 全屏弹窗瞬间恢复干净的画面。
+
+注：全屏弹窗内的 `Rows: n | Enter Accept | Esc Close` 是 PSTui 状态条，
+它只在弹窗期间显示、回到常驻画面即被 `Clear-TmuxScreen` 清掉，不与动作条
+同屏共存；若要改/去它，仍受"PSTui 无反射"边界约束，不在本仓库可控范围。
+

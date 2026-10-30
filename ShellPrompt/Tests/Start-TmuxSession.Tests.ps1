@@ -29,9 +29,10 @@ Describe 'Start-TmuxSession (单主视图 + 单行动作条)' {
         Mock -CommandName Write-Warning -ModuleName ShellPrompt -MockWith { }
         Mock -CommandName Write-TmuxWelcomeBanner -ModuleName ShellPrompt -MockWith { }
         Mock -CommandName Submit-WttrPrefetch -ModuleName ShellPrompt -MockWith { return $null }
-        # 备用屏幕生命周期: 写终端协议序列在测试里静音, 各用例按需断言调用次数
+        # 备用屏幕生命周期 / 全量重绘: 写终端协议序列在测试里静音, 各用例按需断言调用次数
         Mock -CommandName Enter-TmuxAlternateScreen -ModuleName ShellPrompt -MockWith { }
         Mock -CommandName Exit-TmuxAlternateScreen -ModuleName ShellPrompt -MockWith { }
+        Mock -CommandName Clear-TmuxScreen -ModuleName ShellPrompt -MockWith { }
 
         # 所有会话级 UI / 操作默认拒绝执行, 由各用例按需打桩
         Mock -CommandName Show-TmuxSessionDashboard -ModuleName ShellPrompt -MockWith { return $null }
@@ -108,6 +109,8 @@ Describe 'Start-TmuxSession (单主视图 + 单行动作条)' {
             # 备用屏幕生命周期: 进入恰好一次, ESC 退出时 finally 恢复恰好一次
             Should -Invoke -CommandName Enter-TmuxAlternateScreen -ModuleName ShellPrompt -Exactly 1
             Should -Invoke -CommandName Exit-TmuxAlternateScreen -ModuleName ShellPrompt -Exactly 1
+            # 绝对的全量重绘: 每次迭代开头一次 Clear-TmuxScreen(单轮循环 = 恰好一次)
+            Should -Invoke -CommandName Clear-TmuxScreen -ModuleName ShellPrompt -Exactly 1
         }
 
         It '刷新后行序保持稳定: 远端返回顺序变化时, 主视图仍按上一轮顺序展示' {

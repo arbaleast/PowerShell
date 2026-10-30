@@ -62,3 +62,44 @@ Describe '备用屏幕生命周期 (Enter/Exit-TmuxAlternateScreen)' {
             -ParameterFilter { $NoNewline -and $Object -match '\[\?1049l' }
     }
 }
+
+Describe '绝对的全量重绘 (Clear-TmuxScreen)' {
+
+    BeforeAll {
+        $moduleRoot = Split-Path -Path $PSScriptRoot -Parent
+        $manifestPath = Join-Path -Path $moduleRoot -ChildPath 'ShellPrompt.psd1'
+        Import-Module -Name $manifestPath -Force -ErrorAction Stop
+        $script:mod = Get-Module -Name 'ShellPrompt'
+    }
+
+    BeforeEach {
+        # 捕获式断言: 记录真实序列内容与顺序, 比 ParameterFilter 稳(上一版
+        # 在过滤器里用 .Contains([char]27) 于部分宿主下求值异常, 计数归 0)。
+        # 前缀 'N'/'+' 标记是否符合 -NoNewline 调用(信息略带, 顺带消耗参数
+        # 以免 PSSA PSReviewUnusedParameter 误报)。
+        $script:seen = [System.Collections.Generic.List[string]]::new()
+        Mock -CommandName Write-Host -ModuleName ShellPrompt -MockWith {
+            param($Object, $NoNewline)
+            $prefix = if ($NoNewline) { 'N' } else { '+' }
+            $script:seen.Add("$prefix$( [string]$Object )")
+        }
+    }
+
+    It '写出 \e[2J\e[H(清屏 + 光标归位 0,0), 单次调用' {
+        & $script:mod { Clear-TmuxScreen }
+
+        $script:seen.Count | Should -Be 1
+        $script:seen[0] | Should -Match '\[2J'
+        $script:seen[0] | Should -Match '\[H'
+    }
+
+    It '迭代开头清屏与备用屏切换成同一次调用的合法组合(先 1049h, 后 2J/H)' {
+        # Enter-TmuxAlternateScreen = 1049h + 2J/H; Clear-TmuxScreen = 2J/H
+        & $script:mod { Enter-TmuxAlternateScreen; Clear-TmuxScreen }
+
+        $script:seen.Count | Should -Be 3
+        $script:seen[0] | Should -Match '\[\?1049h'
+        $script:seen[1] | Should -Match '\[2J'
+        $script:seen[2] | Should -Match '\[2J'
+    }
+}

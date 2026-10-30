@@ -117,7 +117,12 @@ function Start-TmuxSession {
     Enter-TmuxAlternateScreen
     try {
         while ($true) {
-        if ($null -eq $state) {
+            # 绝对的全量重绘(2026-10-30 第五轮修复): 每次迭代开头强制
+            # \e[2J\e[H 清屏归位 —— 无论上一轮发生了什么(附着返回/输入态
+            # Esc 取消/弹窗关闭), 状态切换后的残影与错位底栏由清屏一刀切掉,
+            # 本轮渲染全部走绝对坐标(动作条 Y=$h-1、输入区 Y=$h-5 附近)。
+            Clear-TmuxScreen
+            if ($null -eq $state) {
             # 取数: 后台线程执行 SSH 探测(失败自动退回同步路径)
             $raw = Invoke-TmuxSessionFetch -HostName $HostName
             $fetched = @()
@@ -218,8 +223,8 @@ function Start-TmuxSession {
                 # 兜底: 动作条只返回登记过的动作, 未知取值一律不执行
                 Write-Warning "未知的操作: $($action.Value), 已跳过。"
             }
+            }
         }
-        } # while
     } finally {
         # 正常退出 / 异常 / Ctrl-C 都会执行到这里: 恢复进入前的主屏幕现场
         Exit-TmuxAlternateScreen

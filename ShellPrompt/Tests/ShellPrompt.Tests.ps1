@@ -107,7 +107,9 @@ Describe 'Command Export' {
             # 2026-10-30 第三轮 TUI 修复: Input 态输入机 / 备用屏幕生命周期
             # 2026-10-30 第四轮修复: MinUI 撤回(Get-GridViewMinUiEnabled 已删),
             #   改为 UI.DashboardFullScreen 显式全屏
-            'Read-TmuxConsoleLine', 'Enter-TmuxAlternateScreen', 'Exit-TmuxAlternateScreen'
+            # 2026-10-30 第五轮修复: Clear-TmuxScreen(绝对的全量重绘原语)
+            'Read-TmuxConsoleLine', 'Enter-TmuxAlternateScreen', 'Exit-TmuxAlternateScreen',
+            'Clear-TmuxScreen'
         )
         $exported = @(Get-Command -Module ShellPrompt | Select-Object -ExpandProperty Name)
         foreach ($name in $privateNames) {

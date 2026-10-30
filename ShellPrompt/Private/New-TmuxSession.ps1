@@ -24,10 +24,19 @@ param(
     )
     if ($PSCmdlet.ShouldProcess("tmux session on $HostName", "Perform New-TmuxSession")) { } else { return  }
 
-    # 菜单布局：1空行 + 3行header + N选项 + 1EXIT + 2分隔 + 1描述 + 1| + 1底边 + 2底部空行
-    $optCount = 5
-    $descRow = 8 + $optCount
-    $inputRow = $descRow + 1
+    # ---- 绝对坐标布局(2026-10-30 第五轮修复) ----
+    # 主循环每次迭代开头已 Clear-TmuxScreen(\e[2J\e[H), 此处屏幕是干净的,
+    # 全部渲染走 [Console]::WindowHeight 推导的绝对坐标, 不基于旧光标位置:
+    #   Y = $h - 6  提示语(输入会话名称...)
+    #   Y = $h - 5  "> <输入缓冲区>"
+    #   Y = $h - 1  Input 态底栏 [Enter] 确认  [Esc] 取消
+    # (旧实现用 8 + optCount 的固定行号, 屏幕上半部分随上游内容漂移。)
+    $height = 0
+    try { $height = [Console]::WindowHeight } catch { $height = 0 }
+    if ($height -lt 12) { $height = 40 }   # 重定向控制台取不到高度: 保守回退
+    $descRow  = $height - 6
+    $inputRow = $height - 5
+    $inputBarRow = $height - 1
 
     # 颜色预解析: 统一走 Resolve-ColorTable(预热缓存 -> 配置层默认值)
     $colorTable = Resolve-ColorTable -Name 'Primary', 'Muted', 'Accent', 'Rst'
@@ -36,16 +45,11 @@ param(
     $ca  = $colorTable.Accent
     $rst = $colorTable.Rst
 
-    $clearEndRow = $descRow + 6
-    for ($r = $descRow; $r -le $clearEndRow; $r++) {
-        [Console]::Write("`e[${r};1H`e[K")
-    }
-
+    [Console]::Write("`e[2;1H  ${cm}TMUX 管理器 - 新建会话 - 主机 ${cp}${HostName}${rst}")
     [Console]::Write("`e[$($descRow);1H  ${cp}|${rst}  ${cm}-- 输入会话名称（直接回车使用随机名称）${rst}")
     [Console]::Write("`e[$($inputRow);1H  ${cp}|${rst}  ${ca}>${rst} ")
-
-    [Console]::CursorTop = $inputRow - 1
-    [Console]::CursorLeft = 7
+    # Input 态底栏(状态机渲染分支): 与 Normal 态动作条互斥, 键位提示只呈现本模式可用的键
+    [Console]::Write("`e[$($inputBarRow);1H`e[K  ${cm}[Enter] 确认  [Esc] 取消${rst}")
 
     # Input 态(2026-10-30 第三轮 TUI 修复): 不再用 [Console]::ReadLine —— 行编辑
     # 行为不受我们控制, 且旁边的键位循环会把打字过程刷成 "未识别的按键 ''"。
@@ -57,9 +61,10 @@ param(
         $newName = $null
     }
 
-    [Console]::Write("`e[$($inputRow + 1);1H`r`e[K")
+    # 提交/取消都清掉输入区与 Input 底栏(含 "> n" 残留), 交还主循环重绘
+    [Console]::Write("`e[$($descRow);1H`e[J")
     if ($null -eq $newName) {
-        # Esc = 取消创建: 清掉输入行残影直接回主视图, 不发 SSH
+        # Esc = 取消创建: 回到主循环, 下一轮迭代 Clear-TmuxScreen + 绝对重绘恢复画面
         return
     }
     if ([string]::IsNullOrWhiteSpace($newName)) {

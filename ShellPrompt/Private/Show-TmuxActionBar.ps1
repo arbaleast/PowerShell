@@ -69,6 +69,20 @@ function Show-TmuxActionBar {
 
     $toolbar = Format-TmuxToolbarText -HasSessions $HasSessions -Context $Context -HighlightDanger
 
+    # 绝对坐标底栏(2026-10-30 第五轮修复): 底栏恒定渲染在屏幕最后一行
+    # (Y = $h - 1, $h = [Console]::WindowHeight), 不再"从当前光标位置往下画"
+    # —— 那是状态切换后残影/双底栏的直接成因。主循环迭代开头有
+    # Clear-TmuxScreen(\e[2J\e[H) 全量重绘, 此处再把光标钉到底行。
+    try {
+        $height = [Console]::WindowHeight
+        if ($height -gt 1) {
+            [Console]::SetCursorPosition(0, ($height - 1))
+        }
+    } catch {
+        # 重定向控制台(测试/管道)不支持 SetCursorPosition: 退化为流式输出
+        Write-Verbose "[Show-TmuxActionBar] SetCursorPosition 不可用: $($_.Exception.Message)"
+    }
+
     # 状态栏只打印一次; 未识别按键的提示就地追加, 避免刷屏
     Write-Host "[TMUX] $toolbar > " -NoNewline -ForegroundColor Cyan
 
