@@ -73,9 +73,13 @@ Describe '用户配置覆盖与预热缓存' {
             $initConfig = $script:initConfigPath
             $inline = ". '$initConfig'; " +
                       "Get-CachedConfig -Section 'Colors' -Key 'FreshGreen' -Default 'NO-VALUE'"
+            # Linux 上子 pwsh 的 $HOME 由 $env:HOME 派生 (Windows 由 $env:USERPROFILE),
+            # 两个环境变量都指到假 home, 同一断言才在两个平台都成立 (只影响测试夹具, 不弱化断言)。
             $oldUserProfile = $env:USERPROFILE
+            $oldHome = $env:HOME
             try {
                 $env:USERPROFILE = $fakeHome
+                $env:HOME = $fakeHome
                 $output = & pwsh -NoProfile -NoLogo -Command $inline
             }
             finally {
@@ -84,6 +88,12 @@ Describe '用户配置覆盖与预热缓存' {
                 }
                 else {
                     $env:USERPROFILE = $oldUserProfile
+                }
+                if ($null -eq $oldHome) {
+                    Remove-Item 'Env:HOME' -ErrorAction SilentlyContinue
+                }
+                else {
+                    $env:HOME = $oldHome
                 }
             }
             @($output | Select-Object -Last 1) | Should -Be 'SP-SENTINEL-GREEN'
