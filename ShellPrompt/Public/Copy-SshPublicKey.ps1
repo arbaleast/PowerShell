@@ -33,6 +33,14 @@ function Copy-SshPublicKey {
     [OutputType([void])]
 param(
         [Parameter(Mandatory = $true, Position = 0)]
+        [ValidateScript({
+                # 白名单校验: 目标地址不得以 '-' 开头, 否则会被 ssh 的 getopt 当成选项
+                # (如 -oProxyCommand=... 会在本机执行命令)。详见 Test-SshHostName。
+                if (-not (Test-SshHostName -HostName $_ -AllowUserPrefix)) {
+                    throw "远程主机地址包含非法字符，仅允许字母、数字、点、短横线和下划线，可选 user@ 前缀"
+                }
+                return $true
+            })]
         [string]$RemoteHost,
         [string]$IdentityFile,
         [int]$Port = 22

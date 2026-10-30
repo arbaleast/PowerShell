@@ -41,9 +41,20 @@ param(
     # 与 kill-session 逻辑 —— 它才是防误删的唯一屏障。
     # -SessionRefresher: 删除前允许用户在列表内重新拉取会话(强制绕过 TTL 缓存),
     # 避免基于过期列表误删; 刷新不改变任何删除语义, 二次确认仍然必经。
+    # 刷新失败口径(2026-10-29 审计, 与 Start-TmuxSession / Connect 侧统一):
+    #   探测命令以 `; true` 结尾, 远端退出码恒为 0; 退出码非 0 必然是 SSH 连接/传输层
+    #   失败。命中"退出码非 0 或网络错误模式"即抛异常, 由 Show-TmuxSessionList 捕获 ->
+    #   警告 + 保留原列表 + 允许重试; 不命中则返回会话数组(可能为空数组, 那是
+    #   "确实没有会话"而非失败)。这样"查询失败"与"查询成功但没有会话"不再混为一谈。
     $selected = Show-TmuxSessionList -HostName $HostName -Sessions $Sessions `
         -Title "删除 TMUX 会话" -ExitLabel "取消" -ShowStateBadge `
-        -SessionRefresher { (Get-TmuxSessions -HostName $HostName -Force).Sessions }
+        -SessionRefresher {
+            $refreshedData = Get-TmuxSessions -HostName $HostName -Force
+            if ($refreshedData.ExitCode -ne 0 -or $refreshedData.NetworkError) {
+                throw "未能获取 $HostName 的 tmux 会话列表 (ssh 退出码: $($refreshedData.ExitCode))"
+            }
+            $refreshedData.Sessions
+        }
     if ($null -eq $selected) { return }
 
     # 不可逆操作二次确认：默认答案为 n，用户必须显式输入 y 才会继续。
@@ -66,7 +77,14 @@ param(
     Write-Host " [..] 正在删除会话 '$sessionName' ..." -ForegroundColor DarkGray
     $escapedLabel = "'$(ConvertTo-SshEscapedString -Value $sessionName)'"
     # 必须拿到 ssh 退出码: 删除是不可逆操作, 失败时绝不能报成功。
-    $result = Invoke-SshCommand -HostName $HostName -RemoteCommand "tmux kill-session -t $escapedLabel" -PassThru
+    # ssh 启动失败(未安装 OpenSSH 客户端 / ssh.exe 不在 PATH)时 Invoke-SshCommand 会抛异常;
+    # 这里降级为警告并返回, 让管理器回到主循环由用户重试, 而不是让整个 SSS 流程带异常中断。
+    try {
+        $result = Invoke-SshCommand -HostName $HostName -RemoteCommand "tmux kill-session -t $escapedLabel" -PassThru
+    } catch {
+        Write-Warning "无法执行 ssh, 删除未开始: $($_.Exception.Message)"
+        return
+    }
     if ($null -eq $result -or $result.ExitCode -ne 0) {
         $code = if ($null -ne $result) { $result.ExitCode } else { '未知' }
         Write-Warning "删除会话 '$sessionName' 未成功 (ssh 退出码: $code)。请在远端确认: tmux ls"

@@ -1,6 +1,6 @@
 # 🎛️ 交互菜单后端（PSTui GridView 单轨）
 
-`sss`（[`Start-TmuxSession`](../../ShellPrompt/Public/Start-TmuxSession.ps1)）里的**三个交互菜单（主机选择 / 会话管理 / 会话列表）**是**单轨**的：唯一渲染实现是 [`Modules/PSTui`](../../Modules/PSTui/1.0.5/README.md) 的 `Out-ConsoleGridView` 表格视图（[`Invoke-GridViewMenu.ps1`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1)）。自研 ANSI 降级轨（`AnsiFallback`）已于 2026-10-18 整体移除。
+`sss`（[`Start-TmuxSession`](../../ShellPrompt/Public/Start-TmuxSession.ps1)）里的**三个交互菜单（主机选择 / 全局操作菜单 / 会话列表）**是**单轨**的：唯一渲染实现是 [`Modules/PSTui`](../../Modules/PSTui/1.0.5/README.md) 的 `Out-ConsoleGridView` 表格视图（[`Invoke-GridViewMenu.ps1`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1)）。自研 ANSI 降级轨（`AnsiFallback`）已于 2026-10-18 整体移除；方案 A（2026-10-29）起，tmux 管理器以**真实会话列表为主界面**，全局操作菜单是其 Esc 后的轻量外层（见下文「交互流程」）。
 
 主轨可用性检测由 [`Get-ConsoleUiBackend`](../../ShellPrompt/Private/Get-ConsoleUiBackend.ps1) 提供（`PSTui` 可发现性 / 同名命令冲突 / `Terminal.Gui` 主版本争用 / 交互式宿主），其中 `Backend` **恒为** `'GridView'`。
 
@@ -36,21 +36,29 @@
 
 [`Show-HostSelector`](../../ShellPrompt/Private/Show-HostSelector.ps1) / [`Show-SessionManager`](../../ShellPrompt/Private/Show-SessionManager.ps1) / [`Show-TmuxSessionList`](../../ShellPrompt/Private/Show-TmuxSessionList.ps1) 是纯分发器，返回 `PSCustomObject`（`.Value` 为选中值，`$null` 表示用户取消）。调用方无需感知渲染实现细节。
 
-## 会话管理菜单文案（Action ↔ Value）
+## 交互流程（方案 A, 2026-10-29 起）
 
-会话管理菜单只有 **Action**（可见文案）与 **State**（状态徽章）两列，外加隐藏列 `Disabled` / `Value`。
+`sss` 进入主机后，**tmux 管理器主界面 = 真实会话列表**（`Show-TmuxSessionList`，标题「TMUX 管理器」）：
+
+- **Enter** 选中某个会话 → 立即对该会话执行附着/恢复（远端 `tmux has-session … && tmux attach -d … || tmux new-session -A …`，统一由 [`Invoke-TmuxAttach.ps1`](../../ShellPrompt/Private/Invoke-TmuxAttach.ps1) 执行）。
+- **Esc** 从会话列表进入**轻量全局操作菜单**（删除 / 创建 / 直连 SSH / 刷新）；全局操作菜单的 **Esc** 才是退出管理器。
+- 无会话或 tmux 探测失败时**不弹空表格**：先给出明确提示（区分"没有会话"与"数据获取失败"），再直接进入全局操作菜单。
+- "附着/恢复"不再是独立菜单动作——它只能针对列表中明确选中的会话执行。
+
+## 全局操作菜单文案（Action ↔ Value）
+
+全局操作菜单只有 **Action**（可见文案）与 **State**（状态徽章）两列，外加隐藏列 `Disabled` / `Value`。
 
 > **说明列（Desc）已于 2026-10-19 删除**（与 Action 重复，释放约 16 字宽度）。文档中不再出现 Desc 列。
 
 | Action（可见文案） | Value（隐藏列，选中返回值） | State 徽章 |
 |--------|-------|------|
-| `附着/恢复 tmux 会话` | `Attach` | `● 已附着 N`（N>0 时） |
 | `删除 tmux 会话` | `Remove` | `⚠ 危险` |
 | `创建新 tmux 会话` | `New` | — |
 | `直接 SSH 登录` | `Ssh` | `⚠ 备选` |
 | `刷新会话列表` | `Refresh` | — |
 
-> 仅有会话时才出现「附着/恢复」「删除」两行；无会话时菜单只含「创建」「SSH 登录」「刷新」。菜单实现见 [`Invoke-GridViewMenu.ps1`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1)，行构造见 [`Get-GridViewManagerRow.ps1`](../../ShellPrompt/Private/Get-GridViewManagerRow.ps1)。修改文案时在 `Get-GridViewManagerRow.ps1` 内调整。
+> 仅在有会话时才出现「删除」一行（无会话时菜单只含「创建」「SSH 登录」「刷新」）；附着操作**不在**此菜单。菜单实现见 [`Invoke-GridViewMenu.ps1`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1)，行构造见 [`Get-GridViewManagerRow.ps1`](../../ShellPrompt/Private/Get-GridViewManagerRow.ps1)。修改文案时在 `Get-GridViewManagerRow.ps1` 内调整。
 
 ## 会话列表的「已附着 / 已分离」状态
 
@@ -73,25 +81,27 @@
 
 ## 「刷新会话列表」的使用时机
 
-因为列表是打开时的快照，若状态与实际不符（例如刚在别的终端 attach 过），可在列表里手动触发一次刷新。
+因为列表是打开时的快照，若状态与实际不符（例如刚在别的终端 attach 过），可手动触发一次刷新。
 
 | 刷新入口 | 表现 |
 |---------|------|
-| 表格最后一行 `⟳ 刷新会话列表` | 选中后**原地重绘**整张表，仍停留在会话列表 |
+| 全局操作菜单的 `刷新会话列表`（方案 A 起的主流程） | 选中后重拉会话并**重新弹出会话列表**（每次弹出都取最新快照） |
+| 删除流程列表最后一行的 `⟳ 刷新会话列表` | 删除前**原地重绘**，避免基于过期列表误删 |
 
 刷新语义：
 
 - **仅由用户手动触发**。菜单打开期间**没有任何定时器 / 后台轮询**，不占用额外进程或线程，也不会在后台悄悄刷新。
 - 刷新会**重新执行一次 `tmux` 查询**，拿到最新的附着状态与窗口数，并据此重算「附 N / 分 M」。
-- 刷新是**原地重绘**，不会退出菜单、不会回到上一级菜单、不需要重新输入主机名。
-- 刷新后若已经没有可用会话，会给出告警并返回上一层（等价于「无可选会话」）。
+- 方案 A 起，tmux 管理器主界面的会话表格**不内嵌刷新行**（刷新属于全局操作，不伪装成会话数据行），刷新从 **Esc 后的全局操作菜单**进入；每次动作执行完毕回到循环顶部时也会自动重拉一次。
+- 删除流程的列表仍保留表格内 `⟳ 刷新会话列表` 行（删除危险操作前强制看最新列表，语义与二次确认独立）。
+- 刷新后若已经没有可用会话，会给出告警（等价于「无可选会话」）。
 - **对外契约不变**：仍返回带 `.Value` 的 `PSCustomObject` 或 `$null`；刷新项通过独立的刷新标记（`.IsRefresh` / 内部哨兵值）区分，不会与真实会话名混淆。
 
 典型使用场景：
 
-- 你在另一个终端标签页 `tmux attach` 了某个会话 → 回到本终端打开会话列表 → 选 `⟳ 刷新会话列表` → State 列与「附 N / 分 M」立即更新。
+- 你在另一个终端标签页 `tmux attach` 了某个会话 → 回到本终端打开会话列表 → Esc 进全局菜单选 `刷新会话列表` → State 列与「附 N / 分 M」立即更新。
 - 刚用 `tmux kill-session` 删掉了会话，但列表还显示旧记录 → 刷新一次即可看到最新结果。
-- 在列表里误选了某行并进入会话 → 退出后重新打开列表即取新快照，无需手动刷新。
+- 方案 A 的主流程里每次附着/创造/删除/直连结束都会**自动重拉**并重新弹出会话列表，多数情况下无需手动刷新。
 
 ## 查看主轨检测结果（调试用）
 

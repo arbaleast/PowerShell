@@ -5,9 +5,9 @@
 | 命令 | 说明 | 关键参数 | 依赖 | 源文件 |
 |------|------|----------|------|--------|
 | `Show-UserScoopLogo` | 显示 ANSI 欢迎 Banner 及随机语录(委托 `New-WelcomeBanner` + `Get-RandomQuote`,带 mtime 缓存) | `-QuotesPath`、`-ColorPrimary`、`-ColorAccent`、`-ColorMuted`、`-BorderColor` | — | [`Show-UserScoopLogo.ps1`](../../ShellPrompt/Public/Show-UserScoopLogo.ps1) |
-| `Start-TmuxSession` | 远程 tmux 会话交互式管理(进入后展示欢迎 banner + SSH 探测 / 会话刷新期间 spin 动画 + 超时控制) | `-HostName` | ssh、tmux | [`Start-TmuxSession.ps1`](../../ShellPrompt/Public/Start-TmuxSession.ps1) |
+| `Start-TmuxSession` | 远程 tmux 会话交互式管理(进入后展示欢迎 banner + SSH 探测 / 会话刷新期间 spin 动画 + 超时控制) | `-HostName`（白名单校验：仅字母、数字、点、短横线、下划线） | ssh、tmux | [`Start-TmuxSession.ps1`](../../ShellPrompt/Public/Start-TmuxSession.ps1) |
 | `Update-Weather` | **绕过缓存**强制拉取一次 wttr 短格式(`?format=3`)并 `Write-Host` 输出单行天气, 用于手动验证 wttr.in 可达性(结果会覆盖模块单槽缓存, 下次开菜单会重新拉取) | — | curl.exe / `Invoke-RestMethod` | [`Update-Weather.ps1`](../../ShellPrompt/Public/Update-Weather.ps1) |
-| `Copy-SshPublicKey` | 一键推送 SSH 公钥到远程主机 | `-RemoteHost`、`-IdentityFile`、`-Port` | ssh | [`Copy-SshPublicKey.ps1`](../../ShellPrompt/Public/Copy-SshPublicKey.ps1) |
+| `Copy-SshPublicKey` | 一键推送 SSH 公钥到远程主机（`-RemoteHost` 经白名单校验：仅字母、数字、点、短横线、下划线，可选 `user@` 前缀） | `-RemoteHost`、`-IdentityFile`、`-Port` | ssh | [`Copy-SshPublicKey.ps1`](../../ShellPrompt/Public/Copy-SshPublicKey.ps1) |
 | `Invoke-Reload` | 一键重载 PowerShell 配置 | `-Quiet`（脚本/管道场景静默） | — | [`Invoke-Reload.ps1`](../../ShellPrompt/Public/Invoke-Reload.ps1) |
 
 ## 内部封装（不通过 `FunctionsToExport` 暴露）

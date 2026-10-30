@@ -6,10 +6,12 @@
 # 会话选择结果统一由 ConvertTo-TmuxSessionSelection 归一化为同一返回形状,
 # 调用方(Connect-TmuxSession / Remove-TmuxSession)无需感知实现差异。
 #
-# 刷新语义(2026-10-18 补齐):
+# 刷新语义(2026-10-18 补齐, 2026-10-29 审计补强):
 #   - 菜单打开期间不做定时轮询, 刷新完全由用户触发(列表中的"⟳ 刷新会话列表"项);
 #   - 触发后重新拉取会话, 并重新弹出 GridView 表格(不改变主菜单结构);
-#   - 刷新项通过哨兵值识别, 对调用方仍表现为"要么选中一个会话, 要么返回 $null"。
+#   - 刷新项通过哨兵值识别, 对调用方仍表现为"要么选中一个会话, 要么返回 $null";
+#   - 刷新结果按上一次展示顺序重排(Merge-TmuxSessionOrder), 行位置保持稳定;
+#   - 刷新脚本块抛异常时保留原列表并警告(可重试), 不折叠成"没有会话"。
 
 function ConvertTo-TmuxSessionSelection {
     <#
@@ -122,11 +124,31 @@ function Show-TmuxSessionList {
         # 用户触发的刷新: 重新拉取会话, 然后重新弹出 GridView 表格。
         # 不引入定时器/后台轮询, 刷新时机完全由用户决定。
         # 注: GridView 每次以独立弹窗渲染, 无需 ANSI 轨那样的清屏重绘。
-        $current = Get-TmuxRefreshedSession -SessionRefresher $SessionRefresher
-        if ($current.Count -eq 0) {
+        $previous = $current
+        try {
+            $refreshed = Get-TmuxRefreshedSession -SessionRefresher $SessionRefresher
+        } catch {
+            # 2026-10-29 审计: 刷新失败(SSH 断开等)不得被折叠成"没有会话"而退出列表。
+            # 保留原列表继续循环, 用户可以重试刷新或 ESC 返回, 数据不丢失也不误判。
+            Write-Warning "刷新会话列表失败: $($_.Exception.Message)。已保留原列表, 可重试刷新。"
+            continue
+        }
+        if ($refreshed.Count -eq 0) {
             Write-Warning "没有可用的 tmux 会话"
             return $null
         }
+        # 2026-10-29 审计: 刷新后原会话可能已被其他进程删除, 明确列出消失的会话名,
+        # 而不是让用户在新列表里自行发现(避免后续 Enter/删除指向错误目标)。
+        $refreshedNames = @($refreshed | ForEach-Object { [string]$_.Name })
+        $vanished = @($previous | ForEach-Object { [string]$_.Name } |
+            Where-Object { $refreshedNames -cnotcontains $_ })
+        if ($vanished.Count -gt 0) {
+            Write-Warning ("以下会话在刷新后已不存在: {0}" -f ($vanished -join ', '))
+        }
+        # 2026-10-29 审计: 行序稳定。Out-ConsoleGridView 无预选行参数, 刷新后光标回到
+        # 第一行; 若刷新结果顺序变化, 同一行位置会指向别的会话 -> 误附着/误删风险。
+        # 按上一次展示顺序重排: 幸存会话保持原相对位置, 新会话追加到末尾。
+        $current = Merge-TmuxSessionOrder -Previous $previous -Refreshed $refreshed
     }
 }
 

@@ -209,11 +209,14 @@ function Invoke-GridViewHostSelector {
 function Invoke-GridViewSessionManager {
     <#
     .SYNOPSIS
-        tmux 会话动作选择菜单的 GridView 主轨实现。
+        tmux 全局操作菜单的 GridView 主轨实现(方案 A 轻量外层菜单)。
 
     .DESCRIPTION
-        以表格列出 附着/创建/删除/直连/刷新 五类动作。
-        会话为空时隐藏"附着"与"删除"行(与原 ANSI 菜单一致)。
+        方案 A (2026-10-29): tmux 管理器主界面改为真实会话列表
+        (Invoke-GridViewSessionList), 本视图降阶为全局操作菜单:
+        只列出 删除 / 创建 / 直连 / 刷新 四类全局动作, 不再提供"附着"项 --
+        附着必须针对会话列表中明确选中的会话执行, 不能脱离真实会话选择。
+        会话为空时隐藏"删除"行(只对真实选中的会话生效)。
         因 PSTui 无行级配色, 删除动作的危险语义改由 State 列的 ⚠ 符号表达,
         并且真正的二次确认由 Remove-TmuxSession 用 Read-SpectreConfirm 阻断。
 
@@ -233,13 +236,13 @@ function Invoke-GridViewSessionManager {
         已分离会话数
 
     .PARAMETER HasSessions
-        会话列表是否非空(为 $false 时隐藏"附着/删除")
+        会话列表是否非空(为 $false 时隐藏"删除")
 
     .PARAMETER ExitLabel
         退出提示文案
 
     .OUTPUTS
-        选中的行 PSCustomObject(.Value = Attach/New/Remove/Ssh/Refresh), 或 $null
+        选中的行 PSCustomObject(.Value = New/Remove/Ssh/Refresh), 或 $null
 
     .EXAMPLE
         $action = Invoke-GridViewSessionManager -HostName 'debian' -TmuxVersion '3.3a' `
@@ -258,10 +261,10 @@ function Invoke-GridViewSessionManager {
         [Parameter(Mandatory = $false)][string]$ExitLabel = "断开连接"
     )
 
-    $rows = @(Get-GridViewManagerRow -HasSessions $HasSessions -AttachedCount $AttachedCount)
+    $rows = @(Get-GridViewManagerRow -HasSessions $HasSessions)
 
     $versionText = if ($TmuxVersion) { "tmux $TmuxVersion" } else { 'tmux?' }
-    $tableTitle = "TMUX 管理器 [$HostName] - $versionText - 会话 $SessionCount (附 $AttachedCount / 分 $DetachedCount)"
+    $tableTitle = "TMUX 全局操作 [$HostName] - $versionText - 会话 $SessionCount (附 $AttachedCount / 分 $DetachedCount)"
 
     # 草案 A.2 撤回: banner/hint 在 alternate screen 下不可见, Title `\n` 被 Terminal.Gui 单行截断
     # Title 区追加单行天气(顶部居中), 端点选择与清洗细节封装在 Get-WttrTitleSuffix 内

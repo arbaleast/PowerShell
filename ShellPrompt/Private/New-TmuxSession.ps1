@@ -69,7 +69,14 @@ param(
     # DoubleTty: Win OpenSSH 下 `ssh -t` 的 PTY 不会回 tmux 期望的 u6/u7 响应,
     # tmux 走 "软启动后立刻 detach" 闪退路径。加 -tt -t 可强制 ssh 把 PTY 当作
     # tty 传给远端, 绕过 isatty 检测。raw 探针 2026-10-07 验证可修。
-    $result = Invoke-SshCommand -HostName $HostName -Interactive -DoubleTty -RemoteCommand $remoteCmd -PassThru
+    # ssh 启动失败(未安装 OpenSSH 客户端 / ssh.exe 不在 PATH 等)时 Invoke-SshCommand 会抛异常。
+    # 这里降级为警告并返回, 让管理器回到主循环由用户重试, 而不是让整个 SSS 流程带异常中断。
+    try {
+        $result = Invoke-SshCommand -HostName $HostName -Interactive -DoubleTty -RemoteCommand $remoteCmd -PassThru
+    } catch {
+        Write-Warning "无法执行 ssh: $($_.Exception.Message)"
+        return
+    }
     if ($null -ne $result -and $result.ExitCode -ne 0) {
         Write-Warning "tmux 新建/附加会话未成功结束 (ssh 退出码: $($result.ExitCode))，请到远端确认会话状态。"
         return

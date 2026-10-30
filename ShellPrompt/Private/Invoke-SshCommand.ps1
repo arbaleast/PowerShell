@@ -36,7 +36,8 @@ param(
         # 强制双 -t: 详见 Get-SshArgs -DoubleTty 说明。默认关闭。
         [switch]$DoubleTty,
 
-        # PassThru: 在 CaptureOutput 模式下，返回包含 Output 和 ExitCode 的对象
+        # PassThru: 返回包含 Output/Error/ExitCode/TimedOut 的对象
+        # (非捕获路径无超时机制, TimedOut 恒为 $false, 与捕获路径同形状返回, 调用方无需分支)
         [switch]$PassThru
     )
 
@@ -54,14 +55,21 @@ param(
     # 非捕获路径: 直接运行，输出显示在终端
     Save-OriginalTerminalState
     try {
-        # 使用 @() 确保数组传递，避免 PS 5.1 模块作用域下 ArrayList 被解包为 String
-        $argArray = @($sshArgs)
+        # 2026-10-29 修复 (SSH 可靠性审计): 原来把 $sshArgs 数组直接交给 Start-Process,
+        # PowerShell 会把数组用单个空格拼接且不加引号 —— 远端命令里的双引号会被本地参数
+        # 解析器吃掉 (tmux kill-session -t 'a"b' 会打到 'ab' 会话上, 删除路径不可逆, 必须修)。
+        # 改为先用共享纯函数拼成一条已按 CRT 规则转义的命令行, 再以单元素传入,
+        # 保证远端命令原样到达 ssh.exe (与捕获路径 Invoke-SshCaptureOutput 同一份转义逻辑)。
+        $argumentLine = ConvertTo-SshArgumentLine -Argument $sshArgs
+        # 用 @() 确保以"单元素数组"传递, Start-Process 对该元素原样透传
+        $argArray = @($argumentLine)
         if ($PassThru) {
             $process = Start-Process -FilePath 'ssh.exe' -ArgumentList $argArray -NoNewWindow -Wait -PassThru
             return [PSCustomObject]@{
                 Output   = ''
                 Error    = ''
                 ExitCode = $process.ExitCode
+                TimedOut = $false
             }
         }
         Start-Process -FilePath 'ssh.exe' -ArgumentList $argArray -NoNewWindow -Wait

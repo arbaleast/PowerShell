@@ -264,10 +264,12 @@ function Invoke-TmuxProbe {
             -ConnectTimeout $ConnectTimeout -PassThru
     } catch {
         # 降级: 异常转成探测失败结果, 由上层按"无可用会话"处理
+        # (TimedOut=$false: 异常路径是启动失败等, 不是等待超时; 超时由正常返回路径携带)
         return [PSCustomObject]@{
             Output   = ''
             Error    = $_.Exception.Message
             ExitCode = -1
+            TimedOut = $false
         }
     }
 }
@@ -286,7 +288,7 @@ function Get-TmuxAvailability {
     .PARAMETER Force
         跳过 TTL 缓存, 强制重新探测
     .OUTPUTS
-        PSCustomObject(.Available/.Version/.RawLs/.RawSessions/.ExitCode/.Error/.NetworkError/.CheckedAt)
+        PSCustomObject(.Available/.Version/.RawLs/.RawSessions/.ExitCode/.Error/.NetworkError/.TimedOut/.CheckedAt)
     .EXAMPLE
         Get-TmuxAvailability -HostName 'debian'
     #>
@@ -333,6 +335,12 @@ function Get-TmuxAvailability {
 
     $isNetworkError = Test-TmuxNetworkError -ErrorText $errorOut
 
+    # TimedOut(2026-10-29 契约扩展): SSH 等待超时(被 Kill)与"远端命令失败"是两回事,
+    # 上层据此给出不同提示。旧缓存条目无此字段时按 $false 处理。
+    $timedOut = if ($result -and $null -ne $result.PSObject.Properties['TimedOut']) {
+        [bool]$result.TimedOut
+    } else { $false }
+
     $info = [PSCustomObject]@{
         Available    = if ($isNetworkError) { $false } else { -not [string]::IsNullOrEmpty($version) }
         Version      = $version
@@ -341,6 +349,7 @@ function Get-TmuxAvailability {
         ExitCode     = $exitCode
         Error        = $errorOut
         NetworkError = $isNetworkError
+        TimedOut     = $timedOut
         CheckedAt    = [DateTime]::UtcNow
     }
 
@@ -358,6 +367,9 @@ function Get-TmuxSessions {
     .DESCRIPTION
         解析顺序: 机器可读 list-sessions -F 优先, 解析不到任何会话时回退 tmux ls 容错解析。
         远端无 tmux / 输出为空 / 输出异常时返回空集合, 不抛异常。
+        契约扩展(2026-10-29 审计): 返回值同时携带探测结果(Available/Error/ExitCode/
+        NetworkError), 让调用方能区分"查询成功但确实没有会话"与"查询失败被折叠成空集合";
+        原有键(Sessions/RawOutput/Version)保持不变, 向后兼容。
     .PARAMETER HostName
         远程主机名
     .PARAMETER ConnectTimeout
@@ -365,7 +377,7 @@ function Get-TmuxSessions {
     .PARAMETER Force
         跳过 TTL 缓存, 强制重新探测
     .OUTPUTS
-        hashtable(.Sessions/.RawOutput/.Version)
+        hashtable(.Sessions/.RawOutput/.Version/.Available/.Error/.ExitCode/.NetworkError/.TimedOut)
     .EXAMPLE
         Get-TmuxSessions -HostName 'debian'
     #>
@@ -405,5 +417,13 @@ function Get-TmuxSessions {
         Sessions  = $sessionList
         RawOutput = $info.RawLs
         Version   = $info.Version
+        # 契约扩展(2026-10-29 审计): 携带同一次探测的结果, 供调用方区分
+        # "查询成功但没有会话"(Available=$true 且 Sessions 为空)与
+        # "查询失败被折叠成空集合"(Available=$false)。只追加, 不影响旧调用方。
+        Available    = $info.Available
+        Error        = $info.Error
+        ExitCode     = $info.ExitCode
+        NetworkError = $info.NetworkError
+        TimedOut     = $info.TimedOut
     }
 }

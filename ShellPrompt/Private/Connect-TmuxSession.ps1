@@ -37,22 +37,21 @@ param(
     # 返回对象已由 Show-TmuxSessionList 归一化, .Value 恒为纯会话名。
     # -SessionRefresher: 列表内提供"⟳ 刷新会话列表"项, 用户选中后强制重新拉取
     # (绕过 30s TTL 缓存)并重新弹出表格, 菜单打开期间不做定时轮询。
+    # 刷新失败口径(2026-10-29 审计, 与 Remove/Start 侧统一): 探测命令以 `; true` 结尾,
+    # 远端退出码恒为 0; 退出码非 0 必然是 SSH 连接/传输层失败 -> 抛异常, 由列表层捕获
+    # -> 警告 + 保留原列表 + 允许重试; 不命中则返回会话数组(可能为空数组, 那是
+    # "确实没有会话"而非失败)。
     $selected = Show-TmuxSessionList -HostName $HostName -Sessions $Sessions `
         -Title "TMUX 会话列表" -ExitLabel "返回" -ShowStateBadge `
-        -SessionRefresher { (Get-TmuxSessions -HostName $HostName -Force).Sessions }
+        -SessionRefresher {
+            $refreshedData = Get-TmuxSessions -HostName $HostName -Force
+            if ($refreshedData.ExitCode -ne 0 -or $refreshedData.NetworkError) {
+                throw "未能获取 $HostName 的 tmux 会话列表 (ssh 退出码: $($refreshedData.ExitCode))"
+            }
+            $refreshedData.Sessions
+        }
     if ($null -eq $selected) { return }
 
-    $sessionName = $selected.Value
-
-    $escapedName = "'$(ConvertTo-SshEscapedString -Value $sessionName)'"
-    # 先 has-session 判定再决定 attach / new: 原来的 `attach ... 2>/dev/null || new-session`
-    # 会把"attach 因别的原因失败"也吞成"新建一个会话", 且 stderr 被丢弃, 用户看不到原因。
-    # 现在 has-session 的 stderr 照常丢弃(会话不存在是正常分支), attach 的 stderr 保留。
-    $remoteCmd = "tmux has-session -t $escapedName 2>/dev/null && tmux attach -d -t $escapedName || tmux new-session -A -s $escapedName"
-    $result = Invoke-SshCommand -HostName $HostName -Interactive -RemoteCommand $remoteCmd -PassThru
-    if ($null -ne $result -and $result.ExitCode -ne 0) {
-        Write-Warning "tmux 会话操作未成功结束 (ssh 退出码: $($result.ExitCode))，请到远端确认会话状态。"
-        return
-    }
-    Write-Host "`n [OK] tmux 会话已分离，回到管理菜单" -ForegroundColor Cyan
+    # 附着执行统一走 Invoke-TmuxAttach(与 Start-TmuxSession 主界面附着共用同一段语义)。
+    Invoke-TmuxAttach -HostName $HostName -SessionName $selected.Value
 }

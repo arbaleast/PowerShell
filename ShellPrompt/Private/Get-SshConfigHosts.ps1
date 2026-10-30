@@ -30,7 +30,9 @@ param()
                 # SSH config 支持多模式: Host myserver *.example.com
                 # 只取第一个别名作为有效主机名（后续模式含通配符应忽略）
                 $alias = ($matches[1] -split '\s+')[0]
-                if ($alias -and $alias -notmatch '[*?]') {
+                # 通配符别名不是具体目标; 非法形态 (以 '-' 开头、含 '=' 等) 一律过滤 ——
+                # 别名会经主机选择菜单直接进入 ssh 参数, 过滤掉才能断掉注入路径。
+                if ($alias -and $alias -notmatch '[*?]' -and (Test-SshHostName -HostName $alias)) {
                     $hosts += $alias
                 }
             }

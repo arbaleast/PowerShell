@@ -22,6 +22,7 @@
   - 检测自身的实现成本也已优化: 模块可发现性用目录级查找 (`Get-ConsoleUiModuleOnDisk`) 替代 `Get-Module -ListAvailable`, 同名命令来源用 `Get-Command -ListAvailable` (去掉 `-All`, 避免全量模块元数据装载) —— 四项诊断语义保持不变。
   - **Phase 1 加载清单是显式有序的** (2026-10-29 改): 原先的"函数名 -> 定义文件"静态索引 + AST 依赖闭包 + 拓扑排序 + `$env:LOCALAPPDATA\ShellPrompt\startup-graph.json` 缓存已删除。实际依赖闭包只有 5 个文件 (`Private/Initialize-Config.ps1` → `Private/Resolve-ColorTable.ps1` → `Private/New-WelcomeBanner.ps1`, 另加自包含的 `Private/Initialize-FnmEnvironment.ps1` 与 `Public/Show-UserScoopLogo.ps1`), 用 `$script:StartupLoadOrder` 显式列出即可。**收益**: 启动期不再扫描 Private/Public 全目录、不再向用户目录写 JSON; **代价**: 依赖从"自动推导"变成"手工维护", 由自检兜底 —— 自检用 AST 取出这 5 个文件里真实调用的命令名逐个检查可见性, 缺失时 `Write-Warning` 报出"哪个文件缺哪个命令"。
   - `Show-HostSelector` / `Show-SessionManager` / `Show-TmuxSessionList` 是纯分发器, 调用实现前统一执行 `Assert-ConsoleUiReady -Feature <功能名>`。
+  - **方案 A (2026-10-29)**: `Start-TmuxSession` 以**真实 tmux 会话列表为主界面** — Enter 选中会话即附着/恢复 (`Private/Invoke-TmuxAttach.ps1` 统一执行; 空会话/探测失败不弹空表格); Esc 从列表进入轻量**全局操作菜单** (`Show-SessionManager`, 只含 删除/创建/直连 SSH/刷新, 无附着项), 再按 Esc 退出管理器。
   - `PSTui` 缺失 / 版本冲突 / `Terminal.Gui` 主版本争用 / stdin 被重定向 → `Assert-ConsoleUiReady` 抛出**可定位的终止错误** (含功能名与原因), **不再静默降级到其它渲染实现**。
   - 调用方 (如 `Start-TmuxSession`) 不感知渲染实现差异, 分发器已无 `-Backend` 参数。
 
@@ -52,7 +53,7 @@ profile 加载分为 3 个阶段, 各阶段目标与耗时归因:
 |---|---|---|---|
 | 阶段 1 (欢迎语) | dot-source 5 个启动期文件 + AST 自检 | ~50ms (估) | 2026-10-29 去掉启动图缓存, 改为显式有序清单 |
 | 阶段 2 (延迟初始化同步路径) | Invoke-DeferredInit: fnm (走缓存) + starship (同步 init, `-join "``n"` 后 iex) + PSReadLine import + set options | ~520ms + ~365~453ms (starship init 子进程) | starship init 是 profile 期最大单一开销 (回退到 P3 优化前的同步路径; PS 7.6+ 下 `&` 捕获的多行输出必须先 join 成单字符串再 `Invoke-Expression`, 否则参数绑定器拒收, 详见 profile 阶段 2 代码内注释) |
-| 阶段 3 (首次调用 `sss` / `ssh-copy-id` 触发**懒加载** `Import-Module ShellPrompt`) | dot-source 全部 Private (2026-10-29 核对共 41 个 .ps1; `Initialize-Config` 由 psm1 先单独加载并守卫) + 加载 PwshSpectreConsole (+ 用户配置, 由 `Private/Initialize-Config.ps1` 加载) | ~960ms (估) | **架构级不变量, 改动前先在本文件核实设计**。注意: profile 启动期**不会**导入模块, 模块加载只发生在首次调用公开命令时 |
+| 阶段 3 (首次调用 `sss` / `ssh-copy-id` 触发**懒加载** `Import-Module ShellPrompt`) | dot-source 全部 Private (2026-10-29 核对共 42 个 .ps1; `Initialize-Config` 由 psm1 先单独加载并守卫) + 加载 PwshSpectreConsole (+ 用户配置, 由 `Private/Initialize-Config.ps1` 加载) | ~960ms (估) | **架构级不变量, 改动前先在本文件核实设计**。注意: profile 启动期**不会**导入模块, 模块加载只发生在首次调用公开命令时 |
 
 **Starship 同步 init**: 阶段 2 `Invoke-DeferredInit` 同步执行 `starship init powershell --print-full-init` (约 365~453ms 子进程), 由 starship 自身替换 `Function:prompt` 完成接管. 历史 P3 优化方案 (由 `Register-WttrPromptWrapper` wrapper 惰性触发 `Initialize-StarshipLazy`) 已随方案 B 部分回退一并移除 (该撤销未记入 CHANGELOG, 以源码与本文件为准).
 

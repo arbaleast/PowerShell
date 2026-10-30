@@ -61,6 +61,12 @@ param(
         [switch]$DoubleTty
     )
 
+    # 目标地址白名单校验 (结构保证: 无论调用方是谁, 目标地址都不会是以 '-' 开头的选项形态,
+    # 也就不会被 ssh 的 getopt 解析成 -o / -F 等选项 —— 见 Test-SshHostName)。
+    if (-not (Test-SshHostName -HostName $HostName)) {
+        throw "非法的主机名: '$HostName'。仅允许字母、数字、点、短横线和下划线, 且不得以 '-' 开头。"
+    }
+
     $sshArgs = New-Object System.Collections.ArrayList
 
     # 基础连接参数

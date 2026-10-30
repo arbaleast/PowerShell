@@ -94,7 +94,8 @@ Describe 'Command Export' {
             'Get-GridViewColumnPlan', 'Get-GridViewHostRow', 'Get-GridViewManagerRow',
             'Get-TmuxSessionGridRow', 'Get-TmuxSessionStateText', 'Get-TmuxSessionSummary',
             'Restore-GridViewSelection', 'ConvertTo-TmuxRefreshSelection',
-            'Get-TmuxRefreshedSession', 'Get-ConsoleUiBackend', 'Assert-ConsoleUiReady'
+            'Get-TmuxRefreshedSession', 'Get-ConsoleUiBackend', 'Assert-ConsoleUiReady',
+            'Invoke-TmuxAttach', 'Invoke-TmuxSessionListView', 'ConvertTo-TmuxSessionSelection'
         )
         $exported = @(Get-Command -Module ShellPrompt | Select-Object -ExpandProperty Name)
         foreach ($name in $privateNames) {
@@ -408,8 +409,9 @@ Describe 'Get-GridViewHostRow (主机选择表格行)' {
     }
 }
 
-Describe 'Get-GridViewManagerRow (tmux 动作菜单表格行)' {
+Describe 'Get-GridViewManagerRow (tmux 全局操作菜单表格行)' {
 
+    # 方案 A: 附着不再是菜单动作, 全局操作菜单只含 删除/创建/直连/刷新
     It '无会话时只应保留 创建/直连/刷新 三行' {
         $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $false }
         $rows.Count | Should -Be 3
@@ -418,10 +420,10 @@ Describe 'Get-GridViewManagerRow (tmux 动作菜单表格行)' {
         $rows.Value | Should -Contain 'New'
     }
 
-    It '有会话时应包含 附着/删除/创建/直连/刷新 五行' {
-        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true -AttachedCount 1 }
-        $rows.Count | Should -Be 5
-        $rows.Value | Should -Contain 'Attach'
+    It '有会话时应包含 删除/创建/直连/刷新 四行, 且不再提供附着项' {
+        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true }
+        $rows.Count | Should -Be 4
+        $rows.Value | Should -Not -Contain 'Attach'
         $rows.Value | Should -Contain 'Remove'
         $rows.Value | Should -Contain 'New'
         $rows.Value | Should -Contain 'Ssh'
@@ -444,18 +446,6 @@ Describe 'Get-GridViewManagerRow (tmux 动作菜单表格行)' {
         # P1.3: 备选文字现在包裹 Colors.Warning ANSI 码, 用 -Match 兼容
         $ssh.State | Should -Match '⚠ 备选'
         $ssh.State | Should -Match '\[38;2;220;180;80m'
-    }
-
-    It '附着动作应标注已附着数量' {
-        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true -AttachedCount 3 }
-        $attach = @($rows | Where-Object { $_.Value -eq 'Attach' })[0]
-        $attach.State | Should -Be '● 已附着 3'
-    }
-
-    It '无已附着会话时附着行 State 应为空' {
-        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true -AttachedCount 0 }
-        $attach = @($rows | Where-Object { $_.Value -eq 'Attach' })[0]
-        $attach.State | Should -Be ''
     }
 }
 
@@ -515,6 +505,23 @@ Describe 'Get-TmuxSessionGridRow (会话列表表格行)' {
         $rows.Count | Should -Be 2
         $rows[1].Session | Should -Be '⟳ 刷新会话列表'
         $rows[1].Value | Should -Be $signal
+    }
+
+    It 'Windows 列应承载窗口数量, 缺失字段时置空(不伪装成 0/1)' {
+        $rows = & $script:mod {
+            Get-TmuxSessionGridRow -Sessions @(
+                [PSCustomObject]@{ Name = 'a'; Status = 'attached'; Windows = 3 }
+                [PSCustomObject]@{ Name = 'b'; Status = 'detached' }
+            )
+        }
+        $rows[0].Windows | Should -Be '3'
+        $rows[1].Windows | Should -BeNullOrEmpty
+        # 刷新行同样携带 Windows 字段, 保证整表行形状一致
+        $refreshRows = & $script:mod {
+            Get-TmuxSessionGridRow -Sessions @([PSCustomObject]@{ Name = 'a'; Status = 'detached'; Windows = 1 }) -AllowRefresh
+        }
+        $refreshRows[0].Windows | Should -Be '1'
+        $refreshRows[1].Windows | Should -Be ''
     }
 }
 
