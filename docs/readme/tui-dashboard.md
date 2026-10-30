@@ -696,11 +696,23 @@ t1  主线程渲染标题时先 Receive-WttrPrefetch：   ││
   主讲干净画面，detach 后回到管理器备用屏重新绘制主视图。
 - `Reset-TerminalMode`（编码/鼠标/光标恢复）与备用屏幕交换**正交**，各管各的。
 
-### 6.3 极简渲染（`UI.GridViewMinUI`，默认 `$true`）
+### 6.3 渲染策略（第四轮修复：MinUI 撤回，改走 FullScreen）
 
-- PSTui `Out-ConsoleGridView` 的 `-MinUI`（帮助原文：*no window frame, filter
-  box, or status bar*）会**连标题一起去掉**，因此 tmux 仪表盘启用 MinUI 时，
-  标题行（主机名/状态摘要/单行工具条/天气）由 `Show-TmuxSessionDashboard`
-  自行渲染在表格上方一行；底部状态条与顶部工具条不再重复。
-- 配置 `$false` 可回退完整边框 + 底部状态栏渲染。其余菜单
-  （主机选择器 / 会话列表）**未**传 `-MinUI`，保持原渲染。
+第三轮曾尝试「PSTui `-MinUI` + 自绘标题」，真终端实测暴露三重回归：
+**标题重复**（PSTui 的 OCGV `-MinUI` 仍渲染 Window.Title，叠加自绘行）、
+**界面随循环下沉**（内联渲染基于当前光标位置，逐轮累计下移）、
+**底部提示消失**（`-MinUI` 去掉了状态条，而自绘动作条只在表格关闭后出现）。
+
+第四轮改为统一交给 `Show-TmuxSessionDashboard` → PSTui 此 `-FullScreen`
+（Terminal.Gui 全屏备用屏），由它负责：
+
+- 每次弹出整屏重绘：清屏 + 光标归位（即目标中的 `\e[2J\e[H` 语义）；
+- 视图从 Y=0 锚定，与标题只渲染一次（删除了自绘标题行）；
+- 监听终端尺寸变化自动重排（自动适配 resize）；
+- 底部状态条（`Rows: n | Enter Accept | Esc Close`）定位在最后一行。
+
+自绘备用屏包络（`Enter/Exit-TmuxAlternateScreen`，`\e[?1049h/l`）保留，用于
+**弹窗之外**的画面（动作条/输入框/attach 前后），并在 `\e[?1049h` 后追发
+`\e[2J\e[H` 保证每次重入从左上角开始。配置开关：`UI.DashboardFullScreen`
+（默认 `$true`，仅仪表盘），`UI.GridViewFullScreen`（默认 `$false`，轻量菜单）。
+`UI.GridViewMinUI` 与 `Get-GridViewMinUiEnabled` 已随本轮撤回移除。

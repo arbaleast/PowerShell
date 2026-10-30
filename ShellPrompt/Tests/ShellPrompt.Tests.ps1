@@ -104,9 +104,10 @@ Describe 'Command Export' {
             'Get-TmuxSessionState', 'Get-TmuxErrorCode', 'Get-TmuxPlaceholderRow',
             'Submit-TmuxBackgroundTask', 'Receive-TmuxBackgroundTask',
             'Invoke-TmuxSessionFetch', 'Submit-WttrPrefetch', 'Receive-WttrPrefetch',
-            # 2026-10-30 第三轮 TUI 修复: Input 态输入机 / 备用屏幕生命周期 / MinUI 开关
-            'Read-TmuxConsoleLine', 'Enter-TmuxAlternateScreen', 'Exit-TmuxAlternateScreen',
-            'Get-GridViewMinUiEnabled'
+            # 2026-10-30 第三轮 TUI 修复: Input 态输入机 / 备用屏幕生命周期
+            # 2026-10-30 第四轮修复: MinUI 撤回(Get-GridViewMinUiEnabled 已删),
+            #   改为 UI.DashboardFullScreen 显式全屏
+            'Read-TmuxConsoleLine', 'Enter-TmuxAlternateScreen', 'Exit-TmuxAlternateScreen'
         )
         $exported = @(Get-Command -Module ShellPrompt | Select-Object -ExpandProperty Name)
         foreach ($name in $privateNames) {
@@ -143,6 +144,9 @@ Describe 'Config Access' {
         $keys = & $script:mod { @($script:Config.UI.Keys) }
         $keys | Should -Contain 'GridViewFocus'
         $keys | Should -Contain 'GridViewFullScreen'
+        # 2026-10-30 第四轮修复: GridViewMinUI 撤回, 换成仪表盘显式全屏开关
+        $keys | Should -Not -Contain 'GridViewMinUI'
+        $keys | Should -Contain 'DashboardFullScreen'
     }
 
     It 'UI 域不应再提供 Backend 后端选择项' {
@@ -468,6 +472,13 @@ Describe 'Get-GridViewRenderParam (渲染参数装配)' {
                 $script:Config.UI.GridViewFullScreen = $original
             }
         }
+        $params['FullScreen'] | Should -BeTrue
+    }
+
+    It '显式 -FullScreen 开关不经全局配置也生效(仪表盘路径)' {
+        # 2026-10-30 第四轮修复: 仪表盘经 UI.DashboardFullScreen(默认 $true)传开关,
+        # 全局 GridViewFullScreen(默认 $false)此时不生效
+        $params = & $script:mod { Get-GridViewRenderParam -Title 'T' -FullScreen }
         $params['FullScreen'] | Should -BeTrue
     }
 }

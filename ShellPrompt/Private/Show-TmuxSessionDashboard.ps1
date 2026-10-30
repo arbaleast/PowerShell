@@ -76,12 +76,18 @@ function Show-TmuxSessionDashboard {
     # 标题区天气(失败时静默跳过, 绝不影响主视图)
     $wttrSuffix = Get-WttrTitleSuffix
 
-    # MinUI (2026-10-30 第三轮 TUI 修复): 极简渲染会去掉窗口边框/过滤框/
-    # 底部状态栏(Rows: n | Enter Accept | Esc Close), 标题也随之消失 ——
-    # 标题行(主机名/状态摘要/单行工具条/天气)改由我们自己渲染在表格上方一行,
-    # 键位提示依然常显, 但底部冗余状态条不再与顶部工具条重复。
-    if (Get-GridViewMinUiEnabled) {
-        [Console]::Write("`e[2K`r  " + $tableTitle + $wttrSuffix + "`n")
+    # ---- 第四轮修复 (2026-10-30): 全屏渲染, 取代上一轮的 MinUI + 自绘标题 ----
+    # 真终端回归: MinUI + 自绘标题产生"标题重复/界面下沉/无底部提示/循环下拉"。
+    # 现在统一交给 PSTui 的 -FullScreen(Terminal.Gui 全屏备用屏):
+    #   - 每次弹出即整屏重绘(清屏 + 光标归位 Y=0), 不基于当前光标位置;
+    #   - 折叠/展开/resize 由 Terminal.Gui 监听尺寸变化自动重排;
+    #   - 底部状态条(Rows/Enter/Esc)由 PSTui 定位在最后一行, 不再与我们打架。
+    # 标题只渲染一次(就是 PSTui 的 Window.Title), 自绘标题已删除。
+    # 仪表盘是否全屏由 UI.DashboardFullScreen 控制(默认 $true);
+    # 轻量菜单(主机选择器等)仍走内联, 不受影响。
+    $dashFullScreen = $true
+    if ($script:Config -and $script:Config.UI -and $script:Config.UI.PSObject.Properties['DashboardFullScreen']) {
+        $dashFullScreen = [bool]$script:Config.UI.DashboardFullScreen
     }
 
     $rows = if ($hasSessions) {
@@ -91,7 +97,7 @@ function Show-TmuxSessionDashboard {
     }
 
     $selected = Invoke-GridViewPrompt -Rows $rows -Title ($tableTitle + $wttrSuffix) `
-        -HiddenColumns @{ Disabled = $false; Value = ''; Status = '' } -MinUI
+        -HiddenColumns @{ Disabled = $false; Value = ''; Status = '' } -FullScreen:$dashFullScreen
     if ($null -eq $selected) {
         return $null
     }

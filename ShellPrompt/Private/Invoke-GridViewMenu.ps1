@@ -131,11 +131,14 @@ function Get-GridViewRenderParam {
     param(
         [Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()][string]$Title,
 
-        # -MinUI: 申请极简渲染(去窗口边框/过滤框/底部状态栏)。
-        # 最终生效与否由配置层 $script:Config.UI.GridViewMinUI 总控($false = 强制完整渲染)。
-        # 启用时标题不再由 PSTui 渲染, 调用方(如 Show-TmuxSessionDashboard)需自行
-        # 在表格上方一行绘制标题(快捷键工具条/计数/天气), 否则键位提示消失。
-        [Parameter(Mandatory = $false)][switch]$MinUI
+        # -FullScreen: 显式申请全屏渲染(Terminal.Gui 自己切备用屏, 从 Y=0 锚定,
+        # 且监听尺寸变化自动重绘)。轻量菜单不传本开关、走全局配置
+        # UI.GridViewFullScreen(默认 $false); tmux 仪表盘这类整屏视图经
+        # UI.DashboardFullScreen(默认 $true)显式传入。
+        # (2026-10-30 第四轮修复: 上一轮的 -MinUI + 自绘标题在真终端产生
+        # "标题重复 + 界面下沉 + 无底部提示"三连回归, 全部由本开关取代 ——
+        # MinUI 撤回, 自绘标题删除, 底部状态条回到 PSTui 自己手里。)
+        [Parameter(Mandatory = $false)][switch]$FullScreen
     )
 
     $gvParams = @{
@@ -143,40 +146,13 @@ function Get-GridViewRenderParam {
         OutputMode = 'Single'
         Focus      = Get-GridViewFocus
     }
-    if ($MinUI) {
-        $minUiEnabled = Get-GridViewMinUiEnabled
-        if ($minUiEnabled) { $gvParams['MinUI'] = $true }
+    if ($FullScreen) {
+        $gvParams['FullScreen'] = $true
     }
     if ($script:Config -and $script:Config.UI -and $script:Config.UI.GridViewFullScreen) {
         $gvParams['FullScreen'] = $true
     }
     return $gvParams
-}
-
-function Get-GridViewMinUiEnabled {
-    <#
-    .SYNOPSIS
-        读取 GridView 极简渲染(-MinUI)的配置开关。
-
-    .DESCRIPTION
-        取 $script:Config.UI.GridViewMinUI; 缺省(键不存在/配置未加载)视为启用。
-        配置定义为 $false = $false 时禁用极简渲染, 回到带窗口边框 + 过滤框 +
-        底部状态栏(Rows: n | Enter Accept | Esc Close)的完整 Out-ConsoleGridView。
-
-    .OUTPUTS
-        [bool] 极简渲染是否启用
-
-    .EXAMPLE
-        if (Get-GridViewMinUiEnabled) { [Console]::WriteLine($titleLine) }
-    #>
-    [CmdletBinding()]
-    [OutputType([bool])]
-    param()
-
-    if ($script:Config -and $script:Config.UI -and $script:Config.UI.PSObject.Properties['GridViewMinUI']) {
-        return [bool]$script:Config.UI.GridViewMinUI
-    }
-    return $true
 }
 
 function Invoke-GridViewPrompt {
@@ -215,8 +191,8 @@ function Invoke-GridViewPrompt {
         [Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()][string]$Title,
         [Parameter(Mandatory = $false)][hashtable]$HiddenColumns,
 
-        # 透传 Get-GridViewRenderParam 的 -MinUI 申请(仍由 UI.GridViewMinUI 配置总控)
-        [Parameter(Mandatory = $false)][switch]$MinUI
+        # 透传 Get-GridViewRenderParam 的显式 -FullScreen 申请
+        [Parameter(Mandatory = $false)][switch]$FullScreen
     )
 
     if (-not $Rows -or $Rows.Count -eq 0) {
@@ -238,7 +214,7 @@ function Invoke-GridViewPrompt {
     # 属性(Action/State/Value)。改用管道传参后, 数组元素逐个流入, 行为正确。
     # 注: Desc 列已于 2026-10-19 删除(与 Action / Host 重复), 行对象的列集合为
     #     Action/Host/State/No/Session 这类"用户可见键", 内部字段则走 -HiddenColumns。
-    $gvParams = Get-GridViewRenderParam -Title $Title -MinUI:$MinUI
+    $gvParams = Get-GridViewRenderParam -Title $Title -FullScreen:$FullScreen
 
     # 配色属于纯视觉增强, 失败只告警一次并继续弹菜单(细节见 Initialize-GridViewColorScheme)
     Initialize-GridViewColorScheme

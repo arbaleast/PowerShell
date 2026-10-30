@@ -40,6 +40,10 @@ function Enter-TmuxAlternateScreen {
 
     if ($script:TmuxAltScreenActive) { return }
     Write-Host -NoNewline "`e[?1049h"
+    # 硬清屏 + 光标归位(2026-10-30 第四轮修复, 防御性): 1049h 切换本身会给
+    # 空备用屏, 这里再显式 \e[2J\e[H 一次 —— 保证恢复/重入时(attach 返回、
+    # 异常路径残留光标位置)界面从左上角开始渲染, 不基于当前光标位置下沉。
+    Write-Host -NoNewline "`e[2J`e[H"
     $script:TmuxAltScreenActive = $true
 }
 
