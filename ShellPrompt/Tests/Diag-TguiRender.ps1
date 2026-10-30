@@ -29,12 +29,12 @@ $diag = & $mod {
     $appType = $tg.Types.Application
     $initM = $appType.GetMethods($static) | Where-Object { $_.Name -eq 'Init' } | Select-Object -First 1
     $shutM = $appType.GetMethod('Shutdown', $static)
-    $runGeneric = $appType.GetMethods($static) |
+    $runInstance = $appType.GetMethods($static) |
         Where-Object { $_.Name -eq 'Run' -and -not $_.IsGenericMethodDefinition -and
                        $_.GetParameters().Count -eq 2 -and
                        $_.GetParameters()[0].ParameterType.IsAssignableFrom($tg.Types.Window) } |
         Select-Object -First 1
-    if ($null -eq $runGeneric) {
+    if ($null -eq $runInstance) {
         $out.Add('run.error=缺少 Run(IRunnable, Func) 重载')
         return $out
     }
@@ -188,7 +188,7 @@ $diag = & $mod {
         $runArgs = [object[]]::CreateInstance([System.Object], 2)
         $runArgs[0] = $result.Window
         $runArgs[1] = $errHandler
-        [void]$runGeneric.Invoke($null, $runArgs)
+        [void]$runInstance.Invoke($null, $runArgs)
     } catch {
         $out.Add("run.error=$($_.Exception.Message)")
     } finally {
