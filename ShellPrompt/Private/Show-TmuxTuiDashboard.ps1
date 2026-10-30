@@ -250,6 +250,33 @@ function Show-TmuxTuiDashboard {
             $global:TguiRequestStopMethod = $stopMethod
             $global:TguiWindowRef = $result.Window
 
+            # ---- 取消双保险: TableView.KeyDown 直判 Esc / Ctrl+C(2026-10-31 真机修复) ----
+            # 真机取证(Diag-TguiKeys, Windows Terminal + a692909): 其它 Shortcut 键
+            # 正常, 唯 Esc/Ctrl+C 无反应; 日志显示两键都**到达**焦点 TableView
+            # (VIEW KeyDown: Esc / C,CtrlMask), 但 2.4.10 应用级命令绑定在视图处理
+            # 之后才轮到, TableView 消费了 Esc 便永远到不了 Quit; Ctrl+C 在 TG 无
+            # Quit 绑定(p22 事实)。按主机选择器 FilterField 同一契约("取消必须
+            # 随时可达")在视图处理之前兜底: 直接置 Quit + RequestStop。
+            # RequestStop 幂等, 与 TG 内建 Esc->Quit 双路径重入无害。
+            $result.Table.add_KeyDown({
+                    try {
+                        $kArg = $args[1]
+                        if ($null -eq $kArg) { return }
+                        $keyCode = [string]$kArg.KeyCode
+                        if ($keyCode -eq 'Esc' -or
+                            ($keyCode -eq 'C' -and [bool]$kArg.IsCtrl)) {
+                            $global:TguiPendingAction = 'Quit'
+                            if ($global:TguiWindowRef -and $global:TguiRequestStopMethod) {
+                                $stopArgs = [object[]]::CreateInstance([System.Object], 1)
+                                $stopArgs[0] = $global:TguiWindowRef
+                                [void]$global:TguiRequestStopMethod.Invoke($null, $stopArgs)
+                            }
+                        }
+                    } catch {
+                        Write-Verbose "[Show-TmuxTuiDashboard] Table KeyDown 取消兜底失败: $($_.Exception.Message)"
+                    }
+                })
+
             # ---- 缩放监听: ScreenChanged -> 标记 + RequestStop(重建整窗) ----
             # 探针实测: PowerShell 的 add_<Event> 语法**能**把脚本块转成
             # Terminal.Gui 的 ALC 泛型委托(EventHandler<EventArgs<Rectangle>>),

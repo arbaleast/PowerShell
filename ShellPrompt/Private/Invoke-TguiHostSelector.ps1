@@ -248,6 +248,29 @@ function Invoke-TguiHostSelector {
                     }
                 })
 
+            # ---- Table.KeyDown 同一取消防线(2026-10-31 真机取证补) ----
+            # 真机日志(Diag-TguiKeys)证明 Esc 会到达焦点 TableView, 但视图处理阶段
+            # 可能消费掉 Esc(TG 应用级 Quit 绑定在视图处理之后才轮到, 见仪表盘
+            # Esc/Ctrl+C 无反应根因) —— Tab 聚焦表格后取消同样必须随时可达。
+            $result.Table.add_KeyDown({
+                    try {
+                        $keyArg = $args[1]
+                        if ($null -eq $keyArg) { return }
+                        $keyCode = [string]$keyArg.KeyCode
+                        if ($keyCode -eq 'Esc' -or
+                            ($keyCode -eq 'C' -and [bool]$keyArg.IsCtrl)) {
+                            $global:TguiHostSelPendingAction = 'Quit'
+                            if ($global:TguiHostSelWindowRef -and $global:TguiHostSelStopMethod) {
+                                $stopArgs = [object[]]::CreateInstance([System.Object], 1)
+                                $stopArgs[0] = $global:TguiHostSelWindowRef
+                                [void]$global:TguiHostSelStopMethod.Invoke($null, $stopArgs)
+                            }
+                        }
+                    } catch {
+                        Write-Verbose "[Invoke-TguiHostSelector] Table KeyDown 回调失败: $($_.Exception.Message)"
+                    }
+                })
+
             # ---- 缩放监听(ScreenChanged → 报数 + 单次 RequestStop) ----
             if ($global:TguiHostSelSubscribedApp -ne $appInstance) {
                 try {
