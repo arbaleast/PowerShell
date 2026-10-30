@@ -64,6 +64,14 @@ function Read-TmuxActionKey {
     if ($info.Key -eq [ConsoleKey]::Backspace) { return 'BACKSPACE' }
 
     $char = [string]$info.KeyChar
-    if ([string]::IsNullOrEmpty($char)) { return '' }
+    if ([string]::IsNullOrEmpty($char)) { return 'IGNORE' }
+
+    # 控制字符(\x00-\x1F)与 DEL(0x7F): 归一为 'IGNORE' 而不是参与分发 ——
+    # 调用方(Show-TmuxActionBar)对 'IGNORE' 静默继续, 绝不打印 "未识别的按键" 错误。
+    # (2026-10-30 第三轮 TUI 修复: previously 返回 NUL 字符本身, 事件循环对
+    # 不可见 token 反复刷 "未识别的按键 ''"。)
+    $code = [int][char]$char
+    if ($code -lt 0x20 -or $code -eq 0x7F) { return 'IGNORE' }
+
     return $char.ToLowerInvariant()
 }

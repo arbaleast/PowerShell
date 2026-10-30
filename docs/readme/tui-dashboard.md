@@ -664,3 +664,43 @@ t1  主线程渲染标题时先 Receive-WttrPrefetch：   ││
 - [架构](architecture.md) —— 模块目录树与加载流程
 - [命令一览](commands.md) —— 公开命令与交互流程
 - [`docs/agents/architecture.md`](../agents/architecture.md) —— 架构不变量与 tmux 管理器交互契约
+
+---
+
+## 六、第三轮修复（2026-10-30）：输入态状态机 / 备用屏幕生命周期 / MinUI
+
+真终端截图暴露的三类缺陷（文本框打字刷出 `未识别的按键 ''`、退出后 TMUX 残影
+与 Shell 历史叠加、底部 `Rows: n | Enter Accept | Esc Close` 与顶部工具条重复），
+按"状态机 + 备用屏幕生命周期 + 极简渲染"修复：
+
+### 6.1 输入模式状态机（Normal / Input）
+
+- **Normal 态**（底部动作条 `Show-TmuxActionBar`）：维持单键直达。
+  `Read-TmuxActionKey` 把控制字符（`\x00-\x1F`）/ DEL / 无 `KeyChar` 功能键
+  归一为 **`'IGNORE'`** 哨兵；动作条对 `IGNORE` **静默 continue —— 绝不打印
+  "未识别的按键" 错误**（之前的空 token 刷屏根因）。
+- **Input 态**（新会话名称输入 `Read-TmuxConsoleLine`）：取代 `Console::ReadLine`。
+  只处理 `Enter`（提交）/ `Esc`（取消，返回 `$null` → 不创建会话）/
+  `Backspace`（删末字符，空缓冲静默忽略）；可见字符（`\x20-\x7E` 与 `\xA0`
+  以上的 BMP）追加缓冲并重绘（`\e[<行>;<列>H` 定位 + `\e[K` 清尾残影）；
+  其余按键一律静默忽略。Esc/取消与提交/随机名（空回车）语义见注释。
+
+### 6.2 备用屏幕生命周期（Alternate Screen）
+
+- `Enter-TmuxAlternateScreen` / `Exit-TmuxAlternateScreen`（幂等，状态位
+  `$script:TmuxAltScreenActive` 守护）：主循环进 `\e[?1049h` 的备用屏幕，
+  `try...finally` 包裹 **`Start-TmuxSession` 整个 while 主循环**，
+  `finally` 恒发 `\e[?1049l`——退出管理器 / 异常 / Ctrl-C 都还原 Shell 现场。
+- **全屏子动作暂停/恢复**：attach（选中即附着）、`n` 新建、`s` 直连 SSH 三个
+  会接入全屏 tmux / ssh 的路径在执行前 `Exit` → 执行后 `Enter`，让 tmux 拿到
+  主讲干净画面，detach 后回到管理器备用屏重新绘制主视图。
+- `Reset-TerminalMode`（编码/鼠标/光标恢复）与备用屏幕交换**正交**，各管各的。
+
+### 6.3 极简渲染（`UI.GridViewMinUI`，默认 `$true`）
+
+- PSTui `Out-ConsoleGridView` 的 `-MinUI`（帮助原文：*no window frame, filter
+  box, or status bar*）会**连标题一起去掉**，因此 tmux 仪表盘启用 MinUI 时，
+  标题行（主机名/状态摘要/单行工具条/天气）由 `Show-TmuxSessionDashboard`
+  自行渲染在表格上方一行；底部状态条与顶部工具条不再重复。
+- 配置 `$false` 可回退完整边框 + 底部状态栏渲染。其余菜单
+  （主机选择器 / 会话列表）**未**传 `-MinUI`，保持原渲染。

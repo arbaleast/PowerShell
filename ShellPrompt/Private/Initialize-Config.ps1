@@ -62,6 +62,12 @@ $script:Config = [ordered]@{
         # -Width/-Height 尺寸参数(README 实测), 关闭全屏即天然紧凑弹窗。
         # 需要"沉浸式铺满"的用户可在 $HOME/.ShellPrompt/config.ps1 里改回 $true。
         GridViewFullScreen = $false
+        # GridView 极简渲染 (PSTui -MinUI): 去掉窗口边框/过滤框/底部状态栏
+        # (Rows: n | Enter Accept | Esc Close), 只留表格。标题行由调用方
+        # (Show-TmuxSessionDashboard)自行渲染在表格上方, 快捷键提示不丢失。
+        # 2026-10-30 第三轮 TUI 修复: 用户截屏反馈底部状态栏与顶部工具条信息重复。
+        # 改回 $false 可恢复完整边框 + 底部状态栏渲染。
+        GridViewMinUI = $true
         # GridView (Terminal.Gui v2) 配色
         Theme   = [ordered]@{
             # 总开关: $false 时 Set-TgColorScheme 直接返回, 不碰 Terminal.Gui 静态 API

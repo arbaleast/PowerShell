@@ -110,7 +110,13 @@ function Start-TmuxSession {
     # 上一轮展示过的会话(用于跨轮保持行序稳定); 首轮为 $null, 表示"还没有基线"
     $previousSessions = $null
 
-    while ($true) {
+    # 备用屏幕生命周期 (2026-10-30 第三轮 TUI 修复):
+    # 主循环整体搬进终端备用屏 (\e[?1049h), finally 中 \e[?1049l 恢复。
+    # 无论正常退出还是异常/Ctrl-C, 原来的 Shell 现场(历史输出)都完整还原,
+    # 不再出现"TMUX 残影叠加在 Shell 历史上"的画面割裂。
+    Enter-TmuxAlternateScreen
+    try {
+        while ($true) {
         if ($null -eq $state) {
             # 取数: 后台线程执行 SSH 探测(失败自动退回同步路径)
             $raw = Invoke-TmuxSessionFetch -HostName $HostName
@@ -134,8 +140,12 @@ function Start-TmuxSession {
         # ---------- 唯一主视图: 会话表格 / 失败占位面板 ----------
         $selected = Show-TmuxSessionDashboard -HostName $HostName -State $state
         if ($null -ne $selected) {
-            # 选中会话 -> 立即附着/恢复(.Value 恒为纯会话名, 由列表层归一化)
+            # 选中会话 -> 立即附着/恢复(.Value 恒为纯会话名, 由列表层归一化)。
+            # 暂停备用屏幕: tmux 是全屏程序, 必须拿到主讲干净的画面; detach
+            # 键出主屏幕后, 再回到管理器备用屏重新绘制(2026-10-30 屏幕生命周期)。
+            Exit-TmuxAlternateScreen
             Invoke-TmuxAttach -HostName $HostName -SessionName $selected.Value
+            Enter-TmuxAlternateScreen
             # 附着会改变远端状态, 下一轮重新取数
             $state = $null
             continue
@@ -156,7 +166,10 @@ function Start-TmuxSession {
                 continue
             }
             'New' {
+                # 暂停管理器备用屏: 创建走交互输入 + 全屏 tmux, 需要主讲画面
+                Exit-TmuxAlternateScreen
                 New-TmuxSession -HostName $HostName
+                Enter-TmuxAlternateScreen
                 $state = $null
             }
             'Refresh' {
@@ -177,15 +190,19 @@ function Start-TmuxSession {
             }
             'Ssh' {
                 Write-Host " [SSH] 直接连接..." -ForegroundColor Green
+                # 暂停管理器备用屏: SSH 直连是全屏交互会话, 拿主讲画面
+                Exit-TmuxAlternateScreen
                 # ssh 启动失败(未安装 OpenSSH 客户端 / ssh.exe 不在 PATH)时 Invoke-SshCommand 会抛异常;
                 # 降级为警告并回到主循环, 而不是让整个 SSS 流程带异常中断。
                 try {
                     $sshResult = Invoke-SshCommand -HostName $HostName -Interactive -PassThru
                 } catch {
                     Write-Warning "无法执行 ssh: $($_.Exception.Message)"
+                    Enter-TmuxAlternateScreen
                     $state = $null
                     continue
                 }
+                Enter-TmuxAlternateScreen
                 if ($null -ne $sshResult -and $sshResult.ExitCode -ne 0) {
                     Write-Warning "SSH 连接未正常结束 (ssh 退出码: $($sshResult.ExitCode))"
                 } else {
@@ -202,5 +219,9 @@ function Start-TmuxSession {
                 Write-Warning "未知的操作: $($action.Value), 已跳过。"
             }
         }
+        } # while
+    } finally {
+        # 正常退出 / 异常 / Ctrl-C 都会执行到这里: 恢复进入前的主屏幕现场
+        Exit-TmuxAlternateScreen
     }
 }

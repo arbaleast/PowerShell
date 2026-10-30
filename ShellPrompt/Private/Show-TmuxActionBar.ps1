@@ -87,6 +87,12 @@ function Show-TmuxActionBar {
             return $null
         }
 
+        # 控制键/无 KeyChar 功能键: 静默忽略 (Input 态同样不会再被这里误吃)。
+        # 2026-10-30 第三轮 TUI 修复: 之前控制字符会把 "未识别的按键 ''" 刷屏。
+        if ($token -eq 'IGNORE') {
+            continue
+        }
+
         $action = Resolve-TmuxActionKey -Key $token -HasSessions $HasSessions -Context $Context
         if ($action) {
             Write-Host $token

@@ -103,7 +103,10 @@ Describe 'Command Export' {
             'Resolve-TmuxActionKey', 'Read-TmuxActionKey',
             'Get-TmuxSessionState', 'Get-TmuxErrorCode', 'Get-TmuxPlaceholderRow',
             'Submit-TmuxBackgroundTask', 'Receive-TmuxBackgroundTask',
-            'Invoke-TmuxSessionFetch', 'Submit-WttrPrefetch', 'Receive-WttrPrefetch'
+            'Invoke-TmuxSessionFetch', 'Submit-WttrPrefetch', 'Receive-WttrPrefetch',
+            # 2026-10-30 第三轮 TUI 修复: Input 态输入机 / 备用屏幕生命周期 / MinUI 开关
+            'Read-TmuxConsoleLine', 'Enter-TmuxAlternateScreen', 'Exit-TmuxAlternateScreen',
+            'Get-GridViewMinUiEnabled'
         )
         $exported = @(Get-Command -Module ShellPrompt | Select-Object -ExpandProperty Name)
         foreach ($name in $privateNames) {

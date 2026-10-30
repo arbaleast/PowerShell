@@ -47,17 +47,24 @@ param(
     [Console]::CursorTop = $inputRow - 1
     [Console]::CursorLeft = 7
 
+    # Input 态(2026-10-30 第三轮 TUI 修复): 不再用 [Console]::ReadLine —— 行编辑
+    # 行为不受我们控制, 且旁边的键位循环会把打字过程刷成 "未识别的按键 ''"。
+    # Read-TmuxConsoleLine 是状态机 Input 态: Enter 提交 / Esc 取消($null) /
+    # Backspace 删字符 / 可见字符入缓冲 / 其余控制键**静默忽略**。
     try {
-        $newName = [Console]::ReadLine()
+        $newName = Read-TmuxConsoleLine -Row $inputRow -Column 7
     } catch {
         $newName = $null
     }
 
+    [Console]::Write("`e[$($inputRow + 1);1H`r`e[K")
+    if ($null -eq $newName) {
+        # Esc = 取消创建: 清掉输入行残影直接回主视图, 不发 SSH
+        return
+    }
     if ([string]::IsNullOrWhiteSpace($newName)) {
         $newName = New-RandomSessionName
     }
-
-    [Console]::Write("`e[$($inputRow + 1);1H`r`e[K")
     $escapedName = "'$(ConvertTo-SshEscapedString -Value $newName)'"
     # fix(2026-10-07): 原来 `tmux new-session -A -s $name 2>/dev/null || exec sh` 在
     # Win OpenSSH `-t` 强制 PTY 下会"软启动后立刻 detach",用户看到闪退。

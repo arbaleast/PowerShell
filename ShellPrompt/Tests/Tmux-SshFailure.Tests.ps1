@@ -101,6 +101,8 @@ Describe 'tmux 编排层对 ssh 失败的降级处理' {
         }
 
         It 'New-TmuxSession 在 ssh 启动失败时降级为警告, 不冒泡' {
+            # 输入态读取器注入空串(= 随机名称路径), 不触碰真实控制台
+            Mock -CommandName Read-TmuxConsoleLine -ModuleName ShellPrompt -MockWith { return '' }
             Mock -CommandName Invoke-SshCommand -ModuleName ShellPrompt -MockWith {
                 throw '启动 ssh.exe 失败 (进程未能创建, 与远端命令失败无关)'
             }

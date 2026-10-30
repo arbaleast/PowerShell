@@ -76,6 +76,14 @@ function Show-TmuxSessionDashboard {
     # 标题区天气(失败时静默跳过, 绝不影响主视图)
     $wttrSuffix = Get-WttrTitleSuffix
 
+    # MinUI (2026-10-30 第三轮 TUI 修复): 极简渲染会去掉窗口边框/过滤框/
+    # 底部状态栏(Rows: n | Enter Accept | Esc Close), 标题也随之消失 ——
+    # 标题行(主机名/状态摘要/单行工具条/天气)改由我们自己渲染在表格上方一行,
+    # 键位提示依然常显, 但底部冗余状态条不再与顶部工具条重复。
+    if (Get-GridViewMinUiEnabled) {
+        [Console]::Write("`e[2K`r  " + $tableTitle + $wttrSuffix + "`n")
+    }
+
     $rows = if ($hasSessions) {
         @(Get-TmuxSessionGridRow -Sessions $sessions -ShowStateBadge)
     } else {
@@ -83,7 +91,7 @@ function Show-TmuxSessionDashboard {
     }
 
     $selected = Invoke-GridViewPrompt -Rows $rows -Title ($tableTitle + $wttrSuffix) `
-        -HiddenColumns @{ Disabled = $false; Value = ''; Status = '' }
+        -HiddenColumns @{ Disabled = $false; Value = ''; Status = '' } -MinUI
     if ($null -eq $selected) {
         return $null
     }
