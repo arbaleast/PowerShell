@@ -32,11 +32,23 @@ function Read-TmuxConsoleLine {
         .Key/.KeyChar 在真实与注入路径下都按同形状对象读取:
         真实路径是 [ConsoleKeyInfo], 注入路径是 PSCustomObject{Key/KeyChar}。
 
+        -Inline 开关切换重绘方式(2026-10-30 TGUI 迁移):
+          - 默认(绝对定位): \e[<Row>;<Col+1>H 定位 -> 写缓冲 -> \e[K 清到行尾。
+            只适用于"本模块持有全屏备用屏"的场景, 可以把输入行画在屏幕任意行。
+          - -Inline(就地重绘): \r 回行首 -> 写缓冲 -> \e[K 清到行尾, 完全不做
+            绝对定位。适用于终端是普通屏的场景(TGUI 仪表盘路径): 绝对定位会写到
+            任意位置并留下残影, 内联重绘只在当前行内自我清理。
+            前提: 调用方保证输入区起点在行首(列 0), 否则 \r 会覆盖提示语。
+
     .PARAMETER Row
-        输入行在终端的 1 基行号(重绘用)
+        输入行在终端的 1 基行号(重绘用; -Inline 模式下不使用)
 
     .PARAMETER Column
-        缓冲区文本起始的 .NET CursorLeft(0 基), 默认 7(与 New-TmuxSession HUD 对齐)
+        缓冲区文本起始的 .NET CursorLeft(0 基), 默认 7(与 New-TmuxSession HUD 对齐;
+        -Inline 模式下不使用)
+
+    .PARAMETER Inline
+        就地重绘模式: 不发绝对定位序列, 只在当前行内 \r + 缓冲 + \e[K 重画。
 
     .PARAMETER KeyReader
         可选按键注入器(测试用): 每次调用返回一个含 .Key/.KeyChar 的对象,
@@ -47,11 +59,15 @@ function Read-TmuxConsoleLine {
 
     .EXAMPLE
         $name = Read-TmuxConsoleLine -Row 14 -Column 7
+
+    .EXAMPLE
+        $name = Read-TmuxConsoleLine -Row 1 -Inline
     #>
-    # Row/Column 在 $redraw scriptblock 闭包内使用; PSSA 的参数静态分析识别不了
+    # Row/Column/Inline 在 $redraw scriptblock 闭包内使用; PSSA 的参数静态分析识别不了
     # scriptblock 内的使用, 显式抑制(与其他 Private 文件同处理)。
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Row')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Column')]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Inline')]
     [CmdletBinding()]
     [OutputType([string])]
     param(
@@ -64,14 +80,22 @@ function Read-TmuxConsoleLine {
         [int]$Column = 7,
 
         [Parameter(Mandatory = $false)]
+        [switch]$Inline,
+
+        [Parameter(Mandatory = $false)]
         [scriptblock]$KeyReader
     )
 
-    # 清行重绘: \e[<Row>;<Col>H 定位 -> 写缓冲 -> \e[K 清到行尾。
+    # 清行重绘: 绝对定位模式 \e[<Row>;<Col>H 定位 -> 写缓冲 -> \e[K 清到行尾;
+    # 内联模式 \r 回行首 -> 写缓冲 -> \e[K 清到行尾(不定位, 只在当前行内自清理)。
     # 光标自然落在缓冲文本末尾(协议保证), 不用 .NET 的 CursorLeft/CursorVisible ——
     # 那两个 setter 在重定向控制台下会抛 IOException, 测试环境/管道场景直接翻车。
     $redraw = {
-        [Console]::Write("`e[${Row};$(($Column + 1))H" + $buffer + "`e[K")
+        if ($Inline) {
+            [Console]::Write("`r" + $buffer + "`e[K")
+        } else {
+            [Console]::Write("`e[${Row};$(($Column + 1))H" + $buffer + "`e[K")
+        }
     }
 
     $buffer = ''
