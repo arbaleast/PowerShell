@@ -135,6 +135,11 @@ function Show-TmuxTuiDashboard {
     $previousSelected = $InitialSelected
     $selected = $null
 
+    # ScreenChanged 事件报数(0 = 还没有有效报数, 建窗回退 Post-Init Screen 读取)。
+    # 跨 Init 周期保留: 终端真实尺寸不会因 TG 周期翻转而变化。
+    $global:TguiScreenW = 0
+    $global:TguiScreenH = 0
+
     # 终端所有者: TG 分支期间让 Enter/Exit-TmuxAlternateScreen 静音,
     # 保证"备用屏只有一个所有者"(Goal 四: 禁止重复嵌套备用屏幕)。
     $previousOwner = $script:TmuxTerminalOwner
@@ -146,14 +151,20 @@ function Show-TmuxTuiDashboard {
     try {
         while ($true) {
             # ---- 取数(业务层, 失败自动降级到 Error 视图模型) ----
-            try {
-                $raw = Invoke-TmuxSessionFetch -HostName $HostName
-                $merged = @()
-                if ($raw) { $merged = @($raw.Sessions | Where-Object { $null -ne $_ }) }
-                $state = Get-TmuxSessionState -SessionData $raw -Sessions $merged
-            } catch {
-                $raw = $null
-                $state = $null
+            # ★ 只在"状态失效"时取数(2026-10-30 真机风暴修复):
+            #   之前每轮循环开头**无条件**重新 SSH 取数 —— 纯缩放重建也会重打
+            #   "获取远程 tmux 会话"动画; 与 legacy 轨的"$state 为空才取数"不一致。
+            #   纯缩放(continue 到循环顶)复用上一轮 $state, 不打网络。
+            if ($null -eq $state) {
+                try {
+                    $raw = Invoke-TmuxSessionFetch -HostName $HostName
+                    $merged = @()
+                    if ($raw) { $merged = @($raw.Sessions | Where-Object { $null -ne $_ }) }
+                    $state = Get-TmuxSessionState -SessionData $raw -Sessions $merged
+                } catch {
+                    $raw = $null
+                    $state = $null
+                }
             }
 
             # ---- 视图模型 ----
@@ -201,15 +212,26 @@ function Show-TmuxTuiDashboard {
             }
 
             $appInstance = $instanceProperty.GetValue($null)
-            $screen = $screenProperty.GetValue($null)
+            # ---- 记账值: **优先用上一轮 ScreenChanged 的报数**(2026-10-30 风暴修复) ----
+            # Post-Init 的 Screen 读取在某些宿主上是 0/陈旧值(真机风暴根因): 记账值
+            # 与事件报数必然错位 => 每个 ScreenChanged 都触发整窗重建 => 配合旧
+            # "每轮无条件取数"就是取数风暴。现在事件报数(>0 才有效)是第一手数据:
+            # 建窗尺寸优先取它; 记账值(TguiLayoutWidth/Height)恒等于**本轮建窗尺寸**,
+            # 事件逐轮对齐后 mismatch 消失 —— 真实缩放仍按"报数 != 建窗尺寸"触发单次重建。
             $screenWidth = 120
             $screenHeight = 35
-            if ($null -ne $screen) {
-                try {
-                    $screenWidth = [int]$screen.Width
-                    $screenHeight = [int]$screen.Height
-                } catch {
-                    Write-Verbose "[Show-TmuxTuiDashboard] 读取屏幕尺寸失败(用默认值): $($_.Exception.Message)"
+            if ($global:TguiScreenW -gt 0 -and $global:TguiScreenH -gt 0) {
+                $screenWidth = [int]$global:TguiScreenW
+                $screenHeight = [int]$global:TguiScreenH
+            } else {
+                $screen = $screenProperty.GetValue($null)
+                if ($null -ne $screen) {
+                    try {
+                        $screenWidth = [int]$screen.Width
+                        $screenHeight = [int]$screen.Height
+                    } catch {
+                        Write-Verbose "[Show-TmuxTuiDashboard] 读取屏幕尺寸失败(用默认值): $($_.Exception.Message)"
+                    }
                 }
             }
             if ($screenWidth -lt 40) { $screenWidth = 40 }
@@ -248,13 +270,24 @@ function Show-TmuxTuiDashboard {
                                 # 重建风暴(ScreenChanged 只在下轮循环用到,
                                 # 0 尺寸不是有效缩放), 待真实尺寸到来再重建。
                                 if ($w -le 0 -or $h -le 0) { return }
-                                if ($w -ne $global:TguiLayoutWidth -or $h -ne $global:TguiLayoutHeight) {
-                                    $global:TguiResizeDetected = $true
-                                    if ($global:TguiWindowRef -and $global:TguiRequestStopMethod) {
-                                        $stopArgs = [object[]]::CreateInstance([System.Object], 1)
-                                        $stopArgs[0] = $global:TguiWindowRef
-                                        [void]$global:TguiRequestStopMethod.Invoke($null, $stopArgs)
-                                    }
+                                # ★ 事件报数是第一手数据(2026-10-30 风暴修复):
+                                #   存进 TguiScreenW/H, 下一轮建窗优先取它(而非
+                                #   Post-Init 可能 0/陈旧的 Screen 读取)。
+                                $global:TguiScreenW = $w
+                                $global:TguiScreenH = $h
+                                # mismatch 判定恒对比**本轮建窗尺寸**(记账值);
+                                # 且每个循环轮次只放行**一次**重建(stop 已发出后,
+                                # 同一尺寸的后续事件不再 RequestStop) —— 真缩放
+                                # 重建一次, 防御同轮事件风叠造成风暴。
+                                if ($w -eq $global:TguiLayoutWidth -and $h -eq $global:TguiLayoutHeight) {
+                                    return
+                                }
+                                if ($global:TguiResizeDetected) { return }
+                                $global:TguiResizeDetected = $true
+                                if ($global:TguiWindowRef -and $global:TguiRequestStopMethod) {
+                                    $stopArgs = [object[]]::CreateInstance([System.Object], 1)
+                                    $stopArgs[0] = $global:TguiWindowRef
+                                    [void]$global:TguiRequestStopMethod.Invoke($null, $stopArgs)
                                 }
                             } catch {
                                 # 缩放监听失败不影响主流程, 只记日志
@@ -357,5 +390,9 @@ function Show-TmuxTuiDashboard {
         $global:TguiPendingAction = $null
         $global:TguiAppInstance = $null
         $global:TguiSubscribedApp = $null
+        # 事件报数归零: 下一次进入仪表盘重新按"Screen 读取 -> 事件对齐"起步,
+        # 不携带上一次会话的陈旧报数(编排契约: 本函数无跨调用会话状态)。
+        $global:TguiScreenW = 0
+        $global:TguiScreenH = 0
     }
 }

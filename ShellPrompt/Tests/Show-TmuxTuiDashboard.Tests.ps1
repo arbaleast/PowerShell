@@ -595,6 +595,41 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
         }
     }
 
+    # ------------------------------- 取数风暴护栏(2026-10-30 真机复验回归)
+    # 真机现象: `sss debian` 在 Windows Terminal 反复"获取远程 tmux 会话"、仪表盘从不上屏。
+    # 两个结构性缺陷(均已修, 本组用例锁死):
+    #   1. 主循环每轮**无条件**重新取数 => 任何 Run 立即返回都会重打 SSH spinner
+    #      (legacy 轨契约是"$state 为空才取数", 纯缩放重建不应碰网络);
+    #   2. 尺寸记账来自 Post-Init Screen 读取(某些宿主是 0/陈旧值) => 记账值与
+    #      ScreenChanged 报数必然错位 => 每个事件都触发整窗重建闭环。
+    Context '取数风暴护栏(2026-10-30 真机复验回归)' {
+
+        It '取数受 $state 守护: 纯缩放重建(continue)不重新 SSH 取数' {
+            $source = Get-Content -Raw -Path (Join-Path -Path $moduleRoot -ChildPath 'Private/Show-TmuxTuiDashboard.ps1')
+            # 循环顶的取数必须包在 `if ($null -eq $state)` 里 —— 与 legacy 轨同一契约
+            $source | Should -Match '(?s)if \(\$null -eq \$state\) \{.*?\$raw = Invoke-TmuxSessionFetch'
+            # 旧结构(try 紧跟 while, 即"每轮无条件取数")必须不存在
+            $source | Should -Not -Match '(?s)while \(\$true\) \{\s*try \{'
+        }
+
+        It 'ScreenChanged 回调先记报数再判 mismatch, 且每轮只放行一次重建' {
+            $source = Get-Content -Raw -Path (Join-Path -Path $moduleRoot -ChildPath 'Private/Show-TmuxTuiDashboard.ps1')
+            # 事件报数是第一手数据(0/陈旧 Screen 读取的兜底互斥)
+            $source | Should -Match '\$global:TguiScreenW\s*=\s*0'
+            # 同一尺寸的同轮重复事件不得再次 RequestStop(风暴闸)
+            $source | Should -Match 'if \(\$global:TguiResizeDetected\) \{ return \}'
+            # mismatch 判定对比的是本轮建窗尺寸(记账值 = 建窗值)
+            $source | Should -Match '\$global:TguiLayoutWidth\s*=\s*\$screenWidth'
+        }
+
+        It '建窗尺寸优先取事件报数, 0/读取失败才回退 Post-Init Screen' {
+            $source = Get-Content -Raw -Path (Join-Path -Path $moduleRoot -ChildPath 'Private/Show-TmuxTuiDashboard.ps1')
+            $source | Should -Match '(?s)if \(\$global:TguiScreenW -gt 0 -and \$global:TguiScreenH -gt 0\) \{[^}]*(\$screenWidth = \[int\]\$global:TguiScreenW)'
+            # 退出时报数归零: 下一次进入重新起步, 不携带上一调用会话的陈旧报数
+            $source | Should -Match '(?s)finally \{.*?\$global:TguiScreenW\s*=\s*0'
+        }
+    }
+
     # ---------------------------------------------------------- 生命周期护栏
     Context '生命周期与终端还原' {
 
