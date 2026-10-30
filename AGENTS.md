@@ -31,3 +31,4 @@ PowerShell 终端环境增强仓库（Windows 取向；Linux / WSL 部分能力�
 | 写 commit message 或 PR 标题 | [`docs/agents/commit-convention.md`](docs/agents/commit-convention.md) |
 | 在本机执行 `pwsh` / 准备本地运行环境（版本要求与安装方式） | [`docs/agents/environment.md`](docs/agents/environment.md) |
 | 改菜单标题区天气 / `Weather.*` 配置 | [`docs/agents/wttr.md`](docs/agents/wttr.md) |
+| 改 `sss`(tmux 管理器)仪表盘结构 / 键位 / 备用屏契约 | [`docs/readme/tui-dashboard.md`](docs/readme/tui-dashboard.md) |

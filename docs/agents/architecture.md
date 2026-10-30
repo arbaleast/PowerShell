@@ -26,6 +26,16 @@
   - `PSTui` 缺失 / 版本冲突 / `Terminal.Gui` 主版本争用 / stdin 被重定向 → `Assert-ConsoleUiReady` 抛出**可定位的终止错误** (含功能名与原因), **不再静默降级到其它渲染实现**。
   - 调用方 (如 `Start-TmuxSession`) 不感知渲染实现差异, 分发器已无 `-Backend` 参数。
 
+### sss 仪表盘双轨与终端所有权 (2026-10-30 TGUI 迁移)
+
+- `sss` (`Start-TmuxSession`) 的仪表盘有**两条渲染轨**, 由 `UI.DashboardTuiEnabled` 分发 (默认 `$true`, 见 `Private/Initialize-Config.ps1`):
+  - **Terminal.Gui 轨** (默认主线): 独立 TG v2 应用 `Private/Show-TmuxTuiDashboard.ps1`, 布局/表格/键盘/缩放/备用屏全部由 TG 自管; 结构与键位契约见 [`docs/readme/tui-dashboard.md`](../readme/tui-dashboard.md)。
+  - **PSTui GridView 轨** (回退轨, 保留到真机验收通过): 原单视图 + 单行动作条链路, 完整契约见 `Start-TmuxSession.Tests.ps1`。
+- **终端所有权不变量**: `$script:TmuxTerminalOwner` 标记当前谁在管终端 ('Legacy' 默认 / 'Tgui' = TG 独占)。
+  - 'Tgui' 下 `Enter-TmuxAlternateScreen` / `Exit-TmuxAlternateScreen` / `Clear-TmuxScreen` **整体静音** —— 不发 `\e[?1049h/l`、不做 `[Console]::Clear`、不改 `$script:TmuxAltScreenActive`, 备用屏生命周期由 TG 的 `Init/Run/Shutdown` 独占 (禁止双层嵌套, 契约测试在 `Enter-TmuxAlternateScreen.Tests.ps1` / `Show-TmuxTuiDashboard.Tests.ps1`)。
+  - 业务动作 (附着/新建/SSH/删除) 只在 `Run` 已返回 + `Shutdown` 已交还终端之后, 于主屏幕执行。
+- 主机选择 (`Show-HostSelector`) **先于**渲染分支: 无 `-HostName` 时先选主机, 取消选择不进任何仪表盘 (`Start-TmuxSession.TuiDispatch.Tests.ps1`)。
+
 ### PSTui TableView 留白约束 (P1.7, 2026-10-19 记录)
 
 - 真机截图观察到的"表格下方大量黑色留白" + 底部状态栏 ("Rows: N | Enter Accept | Esc Close") + 出格式节奏 `Rows.Count < 终端高 - 标题/状态条占用` 的场景下, PSTui `Out-ConsoleGridView` (底层 TG v2 `TableView`) **默认填满分配高度, 不按行数收缩**。
