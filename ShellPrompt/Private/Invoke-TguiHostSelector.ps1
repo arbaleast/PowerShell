@@ -222,6 +222,32 @@ function Invoke-TguiHostSelector {
                     }
                 })
 
+            # ---- FilterField.KeyDown: Esc / Ctrl+C 的取消保障 ----
+            # 应用级键表默认有 Esc -> Quit(TG 内建), 但焦点在 TextField 时该键
+            # 可能先被视图消费(2.4.10 TextField 自带 Esc 历史命令绑定) —— 仪表盘
+            # 轨在 TableView 焦点下验证过 Esc 可退出, 本轨初始焦点是 TextField,
+            # 依"取消必须随时可达"契约在此双保险: 直接标记 Quit + RequestStop。
+            # 两路(视图消费/内建 Quit)都结束 Run, 编排层按无 Select 动作判定取消,
+            # 不会产生双重结果。
+            $result.FilterField.add_KeyDown({
+                    try {
+                        $keyArg = $args[1]
+                        if ($null -eq $keyArg) { return }
+                        $keyCode = [string]$keyArg.KeyCode
+                        if ($keyCode -eq 'Esc' -or
+                            ($keyCode -eq 'C' -and [bool]$keyArg.IsCtrl)) {
+                            $global:TguiHostSelPendingAction = 'Quit'
+                            if ($global:TguiHostSelWindowRef -and $global:TguiHostSelStopMethod) {
+                                $stopArgs = [object[]]::CreateInstance([System.Object], 1)
+                                $stopArgs[0] = $global:TguiHostSelWindowRef
+                                [void]$global:TguiHostSelStopMethod.Invoke($null, $stopArgs)
+                            }
+                        }
+                    } catch {
+                        Write-Verbose "[Invoke-TguiHostSelector] KeyDown 回调失败: $($_.Exception.Message)"
+                    }
+                })
+
             # ---- 缩放监听(ScreenChanged → 报数 + 单次 RequestStop) ----
             if ($global:TguiHostSelSubscribedApp -ne $appInstance) {
                 try {
