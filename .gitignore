@@ -14,3 +14,11 @@ plans/
 
 # Agent cache (auto-generated, do not commit)
 .agent_cache/
+
+# PowerShell 运行时产物 (auto-generated, do not commit)
+# StartupProfileData-*: pwsh 7.6 自身写入的遥测/启动性能数据, 落在
+#   $XDG_CACHE_HOME/powershell/ (默认 ~/.cache/powershell/)。当 HOME 指向
+#   仓库根时它会落到仓库根, 与本仓库代码无关。
+StartupProfileData-*
+# core.*: pwsh 崩溃转储 (core dump), 仅供事后排查, 可再生。
+core.*
