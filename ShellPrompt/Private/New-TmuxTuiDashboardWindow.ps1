@@ -226,6 +226,41 @@ function New-TmuxTuiDashboardWindow {
         [void]$window.Add($view)
     }
 
+    # ---- 主题配色 + 方案绑定(2026-10-30 真机验收补修) ----
+    # 真机现象: 仪表盘只剩边框、内容全无。根因(探针 p51 实测):
+    #   TG 内置 'Base' 方案 Normal = fg(255,255,255) bg(255,255,255) —— **白对白**,
+    #   文字与背景同色 ⇒ 完全隐形; 仪表盘轨从未套用仓库主题(主题只在 PSTui
+    #   默认上下文那条轨生效), 而 'ansi' 驱动不做终端颜色探测, Base 永远白对白。
+    # 另: Set-TgColorScheme 经 Add-Type 走**默认加载上下文**, 与本 ALC 的
+    #   Terminal.Gui 是"同名类型两套身份" —— 跨程序集赋值抛
+    #   "Cannot convert ... Scheme to ... Scheme"。故必须用 ALC 原生的
+    #   Set-TguiTheme(同配置、同幂等契约)覆写槽位。
+    # 绑定策略: 主体(窗口/状态行/表格)取 'Base', 快捷键栏取 'Menu'
+    #   —— 与仓库配色契约一致(表格主体取 Base, 底部状态栏取 Menu);
+    #   且绑定前用 Test-TguiSchemeVisible 过滤"前景=背景"的不可见方案。
+    try {
+        [void](Set-TguiTheme -Tgui $tg)
+    } catch {
+        Write-Verbose "[New-TmuxTuiDashboardWindow] ALC 主题配色失败(继续 TG 默认): $($_.Exception.Message)"
+    }
+    $bodyScheme = Resolve-TguiScheme -Tgui $tg -Names @('Base', 'Menu', 'Dialog')
+    $barScheme = Resolve-TguiScheme -Tgui $tg -Names @('Menu', 'Base', 'Dialog')
+    foreach ($view in @($window, $lt1, $lt2, $lt3, $table.Table)) {
+        if ($null -eq $bodyScheme) { continue }
+        try {
+            [void]$view.SetScheme($bodyScheme)
+        } catch {
+            Write-Verbose "[New-TmuxTuiDashboardWindow] 子视图 SetScheme 失败: $($_.Exception.Message)"
+        }
+    }
+    if ($null -ne $barScheme) {
+        try {
+            [void]$statusBar.SetScheme($barScheme)
+        } catch {
+            Write-Verbose "[New-TmuxTuiDashboardWindow] 快捷键栏 SetScheme 失败: $($_.Exception.Message)"
+        }
+    }
+
     return [PSCustomObject]@{
         Window      = $window
         Table       = $table.Table

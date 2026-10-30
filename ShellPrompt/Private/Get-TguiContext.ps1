@@ -143,7 +143,15 @@ function Get-TguiContext {
             @{ key = 'Pos';             fullName = 'Terminal.Gui.ViewBase.Pos' },
             @{ key = 'Shortcut';        fullName = 'Terminal.Gui.Views.Shortcut' },
             @{ key = 'TableSelection';  fullName = 'Terminal.Gui.Views.TableSelection' },
-            @{ key = 'AppModel';        fullName = 'Terminal.Gui.App.AppModel' }
+            @{ key = 'AppModel';        fullName = 'Terminal.Gui.App.AppModel' },
+            # 配色链路(TGUI 自带主题装配, 不再借 Add-Type 的默认上下文副本):
+            #   SchemeManager = 方案字典; Scheme = 单个方案(10 槽位); Color/Attribute = 结构体。
+            # ★ 2026-10-30 真机教训: 同名类型跨程序集(Add-Type 默认上下文 vs 本 ALC)
+            #   互不兼容 —— TGUI 的视图与 scheme 必须同源本 ALC。
+            @{ key = 'SchemeManager';   fullName = 'Terminal.Gui.Configuration.SchemeManager' },
+            @{ key = 'Scheme';          fullName = 'Terminal.Gui.Drawing.Scheme' },
+            @{ key = 'Color';           fullName = 'Terminal.Gui.Drawing.Color' },
+            @{ key = 'Attribute';       fullName = 'Terminal.Gui.Drawing.Attribute' }
         )) {
         $known = $assembly.GetType($t.fullName)
         if ($null -eq $known) {

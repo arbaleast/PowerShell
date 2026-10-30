@@ -124,6 +124,24 @@ Terminal.Gui 2.4.10 上踩过并固化的三条规则：
 
 输入或输出被重定向（管道 / CI）时，Terminal.Gui 的 `Init` **不会抛异常**，但事件循环会永久阻塞。因此仪表盘在触碰 TG 之前先判定 `[Console]::IsInputRedirected` / `[Console]::IsOutputRedirected`，命中则直接跳过并返回。
 
+### 2.9 配色契约（ALC 原生主题）
+
+**Terminal.Gui 轨必须自带一套主题装配**，不能沿用 PSTui 轨的 `Set-TgColorScheme`：
+
+| 事项 | 事实 |
+|------|------|
+| 载入方式不同 | PSTui 轨经 `Add-Type` 走**默认加载上下文**；仪表盘轨走**独立 ALC**（§2.1）。同名类型跨程序集是**两套类型身份**，互相赋值抛 `Cannot convert ... Scheme to ... Scheme` |
+| 内置 `Base` 方案不可见 | 实测 `SchemeManager.GetScheme('Base').Normal` = 前景 `(255,255,255)` / 背景 `(255,255,255)` —— **白对白，文字隐形**；`'ansi'` 驱动不做终端颜色探测，故该状态恒定 |
+| 视图默认方案名不统一 | `Window → 'Base'`、`StatusBar → 'Menu'`、`Label` / `TableView → ''`（回退 `'Base'`） |
+
+因此仪表盘轨用 [`Set-TguiTheme`](../../ShellPrompt/Private/Set-TguiTheme.ps1) 做 **ALC 原生**装配：
+
+1. **就地覆写已存在的方案实例**（`SchemeManager.GetScheme(name)`）的槽位，槽位表沿用 `UI.Theme.Slots`；**不新增方案名、不写 `ThemeManager.Theme`**（该组合会打坏 `SchemeManager` 内部字典与 `Theme` 的对应关系）。
+2. **逐槽位等值跳过**：TG 2.4.10 把与现值相同的 `Attribute` 再写一遍不是幂等 no-op，而是触发一次 Scheme 重建并把槽位打回内置默认（实测 4 轮交替翻转）。
+3. **显式绑定方案**：`Window` / 状态行 / 会话表绑 `Base`，快捷键栏绑 `Menu`；绑定前用 `Test-TguiSchemeVisible` 过滤"前景 = 背景"的不可见方案，`Resolve-TguiScheme` 再按候选顺序挑第一个**可见**的实例——**界面绝不允许因为配色而空白**。
+
+> 构造 `Attribute` 的坑：其构造函数形参是 `Color&`（byref）。PowerShell 的 `[ref]$c` 是 `PSReference`，反射 `Invoke` 时无法转换成 `Color&`；正确姿势是把装箱后的 `Color` **直接放进 args 数组**，由运行时取数组元素地址作为 byref 实参。
+
 ---
 
 ## 三、回退轨：PSTui GridView（`UI.DashboardTuiEnabled = $false`）
@@ -272,7 +290,8 @@ Terminal.Gui 2.4.10 上踩过并固化的三条规则：
 
 ## 五、已知限制 / 尚未验证
 
-- **未在真机验证**：Terminal.Gui 轨的实现与测试是在 **Linux + 无头（headless）Terminal.Gui** 环境下产出的；**Windows Terminal + PowerShell 7.6 的真机行为尚未验证**。
+- **真机发现的"只剩边框、内容全无"已定位并修复（2026-10-30，待复验）**：真机首验反馈仪表盘只画边框、文本全无。反射探针定位根因为 **Terminal.Gui 内置 `Base` 方案 `Normal` 是白对白**（前景 = 背景 = `(255,255,255)`），而仪表盘轨从未套用仓库主题 ⇒ 文字隐形。修复见 §2.9（ALC 原生 `Set-TguiTheme` + 可见性兜底 `Resolve-TguiScheme`）。**该修复尚未在 Windows Terminal 上复验。**
+- **未在真机验证**：Terminal.Gui 轨的实现与测试是在 **Linux + 无头（headless）Terminal.Gui** 环境下产出的；**Windows Terminal + PowerShell 7.6 的真机行为尚未验证**（容器内 PTY 分配被禁，无法做真终端端到端回归）。
 - **阶段 C 清单待人工执行**：真机验收清单**仍需由人在 Windows 上跑一遍**（含备用屏进出、Ctrl+C 还原、resize 重排、附着/新建/直连全屏交接、删除二次确认）。
 - **回退轨尚未移除**：`UI.DashboardTuiEnabled = $false` 的 PSTui GridView 轨在阶段 C 验收通过前**继续保留**；两轨并存期间，行为差异（键位、错误呈现、屏幕生命周期）以本文第二章与第三章分别描述为准。
 
@@ -282,6 +301,7 @@ Terminal.Gui 2.4.10 上踩过并固化的三条规则：
 
 | # | 验收点 | 通过标准 |
 |---|--------|----------|
+| 0 | **内容可见** | 标题行、统计行、会话表单元格、快捷键栏的**文字全部可见**（不是"只有边框"）；前景与背景不同色 |
 | 1 | 布局观感 | 顶部标题/主机/连接状态、统计行、会话表格、底部快捷键栏各占一行；100×30 / 120×35 / 160×45 三档均无遮挡叠行 |
 | 2 | 键位 | ↑↓ 移动选中、Enter 附着、N 新建、R 刷新、S 直连、X 删除（二次确认）、Esc/Q 退出，各键一次触发（无重复分发） |
 | 3 | 空态/错误态 | 无会话时独立空态行（不伪造表格行）；断网时错误码 + 指引在辅助行，表格区不出现错误文本 |

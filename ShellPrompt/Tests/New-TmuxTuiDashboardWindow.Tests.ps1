@@ -93,3 +93,65 @@ Describe 'TGUI 仪表盘整窗组装 (New-TmuxTuiDashboardWindow)' {
         $result.CountLabels[1].Text | Should -Match 'Detached: 1'
     }
 }
+
+Describe 'TGUI 仪表盘主题配色 (2026-10-30 真机验收补修)' {
+
+    BeforeAll {
+        $moduleRoot = Split-Path -Path $PSScriptRoot -Parent
+        $manifestPath = Join-Path -Path $moduleRoot -ChildPath 'ShellPrompt.psd1'
+        Import-Module -Name $manifestPath -Force -ErrorAction Stop
+        $script:mod = Get-Module -Name 'ShellPrompt'
+
+        function Get-DashboardVm {
+            & $script:mod {
+                ConvertTo-TmuxTuiViewModel -State (Get-TmuxSessionState -SessionData @{
+                        Available = $true
+                        Sessions  = @([PSCustomObject]@{ Name = 'work'; Status = 'detached'; Windows = 2 })
+                    })
+            }
+        }
+
+        function Get-DashboardWindow {
+            param([object]$Vm)
+            & $script:mod {
+                param($v) New-TmuxTuiDashboardWindow -ViewModel $v -HostName 'deb' `
+                    -ConnectionState '已连接' -HasSessions $true -Dispatch { } `
+                    -WindowWidth 120 -WindowHeight 35
+            } $Vm
+        }
+    }
+
+    It '每个子视图 + Window 都有显式 Scheme(修复 Base 白对白隐形)' {
+        $result = Get-DashboardWindow -Vm (Get-DashboardVm)
+
+        $views = @($result.Window.SubViews) + @($result.Window)
+        $withScheme = @($views | Where-Object { $_.HasScheme })
+        $withScheme | Should -HaveCount $views.Count
+    }
+
+    It '绑定的 Scheme 前景 != 背景(内容不隐形), 且与 UI.Theme 同源' {
+        $result = Get-DashboardWindow -Vm (Get-DashboardVm)
+
+        $label = @($result.Window.SubViews | Select-Object -First 1)
+        $cs = $label[0].GetScheme()
+        $f = $cs.Normal.Foreground
+        $b = $cs.Normal.Background
+        ($f.R -ne $b.R -or $f.G -ne $b.G -or $f.B -ne $b.B) | Should -BeTrue
+
+        # 与配置的主题槽位同源(不是 TG 内置的白对白)
+        $expected = & $script:mod { $script:Config.UI.Theme.Slots.Normal }
+        "$($f.R),$($f.G),$($f.B)" | Should -Be $expected.Fg
+        "$($b.R),$($b.G),$($b.B)" | Should -Be $expected.Bg
+    }
+
+    It '表格与快捷键栏同样绑到可见方案(正文与底栏都不隐形)' {
+        $result = Get-DashboardWindow -Vm (Get-DashboardVm)
+
+        foreach ($view in @($result.Table, $result.StatusBar)) {
+            $cs = $view.GetScheme()
+            $f = $cs.Normal.Foreground
+            $b = $cs.Normal.Background
+            ($f.R -ne $b.R -or $f.G -ne $b.G -or $f.B -ne $b.B) | Should -BeTrue
+        }
+    }
+}
