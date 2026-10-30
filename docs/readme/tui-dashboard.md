@@ -47,13 +47,15 @@ Terminal.Gui 从仓库内置的 vendored 程序集加载：
 │ 1   tmux-100001      Attached           2                      │
 │ 2   tmux-100002      Detached           1                      │
 ├──────────────────────────────────────────────────────────────────┤
-│ Enter 附着  [N] 新建  [R] 刷新  [S] SSH  [X] 删除  [Q] 退出  [Esc] 退出 │ ← 快捷键栏
+│ Enter 附着  n 新建  r 刷新  s SSH  x 删除  q 退出  Esc 退出       │ ← 快捷键栏
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 - **顶部状态区固定 3 行**：标题行 `ShellPrompt TMUX Manager | 主机 | 连接状态`；统计行 `会话: N  Attached: N  Detached: N`；第三行仅在**空态**或**错误态**时使用。
 - **中间是会话表**，列固定为 `# | SESSION | STATUS | WINDOWS`：`WINDOWS` **右对齐**；`SESSION` 拿走剩余宽度（列宽计划见 [`New-TmuxTuiColumnPlan`](../../ShellPrompt/Private/New-TmuxTuiColumnPlan.ps1)）。
 - **底部是固定快捷键栏**（Terminal.Gui `StatusBar` + `Shortcut`），贴底一行。
+  渲染契约(2026-10-30 真机+子视图取证)：TG 2.4.10 的 `Shortcut` 屏幕渲染序 = **键名 → HelpText → Title**，
+  故工厂层 `Title = 纯标签`、`HelpText = ''` —— HelpText 再放标签会把"键 标签"渲染两遍。
 - 窗口 `BorderStyle` 置空：置空后窗口内容区等于整个 Frame，绝对行号才与屏幕行号对齐。
 
 ### 2.3 状态分型

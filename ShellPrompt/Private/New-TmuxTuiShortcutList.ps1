@@ -11,6 +11,9 @@
 #     / Key.Esc 等(静态属性 getter 返回 Key 实例; 注意 Esc 不叫 Escape!)。
 #   Shortcut ctor: (Key key, String commandText, Action action, String helpText)
 #     属性: Title/HelpText/Key/Enabled/Action/Command。
+#   Shortcut 屏幕渲染序(2026-10-30 真机复验+子视图取证): KeyView(键名)
+#     -> HelpView(HelpText) -> CommandView(Title) —— HelpText 再放会把"键 标签"
+#     渲染两遍(真机底栏 "n 新建 [n] 新建"); 本工厂因此 Title=纯标签, HelpText=''。
 #   Action delegate 由 PowerShell 脚本块直接转换; 动作分发闭包走
 #     **$global:TguiActionDispatch + 动作值内联字面量**([scriptblock]::Create)。
 #
@@ -130,24 +133,28 @@ function New-TmuxTuiShortcutList {
     foreach ($def in $definitions) {
         if ($def.Value -eq 'Attach') {
             # 附着以 Enter 键呈现; 无会话时**不出现**(死键防护)
+            # ★ 渲染契约(2026-10-30 真机复验, IL+子视图取证): TG 2.4.10 的 Shortcut
+            #   屏幕渲染序 = KeyView(键名) -> HelpView(HelpText) -> CommandView(Title)。
+            #   HelpText 再放标签会把"键 标签"渲染两遍(真机底栏"Enter 附着  Enter 附着");
+            #   Title 也不再带 "[键]" 前缀(KeyView 已有键名) => Title = 纯标签, HelpText = ''。
             if ($HasSessions) {
-                & $appendShortcut 'Enter' "Enter $($def.Label)" $def.Value $def.Label $true $true
+                & $appendShortcut 'Enter' $def.Label $def.Value '' $true $true
             }
             continue
         }
 
         $needsSession = $def.Value -in @('Attach', 'Remove')
         $disabled = $needsSession -and -not $HasSessions
-        $title = "[$($def.Key)] $($def.Label)"
+        $title = $def.Label
         if ($disabled) { $title = "$title (不可用)" }
         # 不可用项: 既不绑定键位(按了没反应), 也不置灰可按状态
-        & $appendShortcut $def.Key.ToUpperInvariant() $title $def.Value $def.Label (-not $disabled) (-not $disabled)
+        & $appendShortcut $def.Key.ToUpperInvariant() $title $def.Value '' (-not $disabled) (-not $disabled)
     }
 
     # Esc 同义 Q 退出(Goal 三-3 两键同义)。
     # Esc 走 TG 内建的 Quit 退出路径, 这里只展示 —— 设 BindKeyToApplication 会与
     # 应用级已有的 Esc->Quit 绑定冲突(见文件头"派发接线"第 2 条)。
-    & $appendShortcut 'Esc' '[Esc] 退出' 'Quit' '退出管理器' $false $true $true
+    & $appendShortcut 'Esc' '退出' 'Quit' '' $false $true $true
 
     return $result.ToArray()
 }

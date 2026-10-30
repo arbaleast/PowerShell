@@ -25,21 +25,21 @@ Describe 'TGUI 快捷键列表 (New-TmuxTuiShortcutList)' {
 
         $shortcuts.Count | Should -Be 7
 
-        $r = $shortcuts | Where-Object { $_.Title -eq '[r] 刷新' } | Select-Object -First 1
+        $r = $shortcuts | Where-Object { $_.Title -eq '刷新' } | Select-Object -First 1
         $r.Action.Invoke()
         (Get-Variable -Name 'dispatched' -Scope Global).Value -contains 'Refresh' | Should -BeTrue
 
-        $x = $shortcuts | Where-Object { $_.Title -eq '[x] 删除' } | Select-Object -First 1
+        $x = $shortcuts | Where-Object { $_.Title -eq '删除' } | Select-Object -First 1
         $x.Action.Invoke()
         (Get-Variable -Name 'dispatched' -Scope Global).Value -contains 'Remove' | Should -BeTrue
 
-        $esc = $shortcuts | Where-Object { $_.Title -eq '[Esc] 退出' } | Select-Object -First 1
+        $esc = $shortcuts | Where-Object { [string]$_.Key -eq 'Esc' } | Select-Object -First 1
         # 纯展示项 no-op(2026-10-30 阶段B收口): Esc 退出统一走 TG 内建 Esc->Quit,
         # 展示项不再分发 —— 防"内建 Quit + 展示项分发"双触发。
         $esc.Action.Invoke()
         (Get-Variable -Name 'dispatched' -Scope Global).Value -contains 'Quit' | Should -BeFalse
 
-        $enter = $shortcuts | Where-Object { $_.Title -eq 'Enter 附着' } | Select-Object -First 1
+        $enter = $shortcuts | Where-Object { $_.Title -eq '附着' } | Select-Object -First 1
         $enter.Action.Invoke()
         (Get-Variable -Name 'dispatched' -Scope Global).Value -contains 'Attach' | Should -BeTrue
     }
@@ -51,9 +51,10 @@ Describe 'TGUI 快捷键列表 (New-TmuxTuiShortcutList)' {
 
         $titles = @($shortcuts | ForEach-Object { $_.Title })
         ($titles | Where-Object { $_ -like '*附着*' }).Count | Should -Be 0
-        ($titles | Where-Object { $_ -eq '[x] 删除 (不可用)' }).Count | Should -Be 1
-        ($titles | Where-Object { $_ -eq '[n] 新建' }).Count | Should -Be 1
-        ($titles | Where-Object { $_ -eq '[Esc] 退出' }).Count | Should -Be 1
+        ($titles | Where-Object { $_ -eq '删除 (不可用)' }).Count | Should -Be 1
+        ($titles | Where-Object { $_ -eq '新建' }).Count | Should -Be 1
+        # Title=纯标签后 q 与 Esc 两项同名"退出"(分属不同键, 见渲染契约)
+        ($titles | Where-Object { $_ -eq '退出' }).Count | Should -Be 2
     }
 
     It 'Q 分发退出; Esc 展示项 no-op(退出走 TG 内建 Esc->Quit, 不重复分发)' {
@@ -62,13 +63,26 @@ Describe 'TGUI 快捷键列表 (New-TmuxTuiShortcutList)' {
             New-TmuxTuiShortcutList -HasSessions $true -Dispatch { param($action) (Get-Variable -Name 'dispatched' -Scope Global).Value.Add($action) }
         }
 
-        $q = $shortcuts | Where-Object { $_.Title -eq '[q] 退出' } | Select-Object -First 1
+        # Title=纯标签后 q 与 Esc 两项同名"退出" —— 按 Key 文本选择(渲染契约新增见下条)
+        $q = $shortcuts | Where-Object { [string]$_.Key -eq 'q' } | Select-Object -First 1
         $q.Action.Invoke()
-        $esc = $shortcuts | Where-Object { $_.Title -eq '[Esc] 退出' } | Select-Object -First 1
+        $esc = $shortcuts | Where-Object { [string]$_.Key -eq 'Esc' } | Select-Object -First 1
         $esc.Action.Invoke()
 
         $log = (Get-Variable -Name 'dispatched' -Scope Global).Value
         $log | Should -HaveCount 1
         $log -contains 'Quit' | Should -BeTrue
+    }
+
+    It '渲染契约(TG 2.4.10 实测): Title=纯标签, HelpText 全空 —— 键名+标签不得双渲染' {
+        # 真机(2026-10-30 Windows Terminal)证明 Shortcut 屏幕渲染序 = 键名+HelpText+Title,
+        # HelpText/Title 各带一次标签 => 底栏 "Enter 附着 Enter 附着" 成对重复。
+        $shortcuts = & $script:mod {
+            New-TmuxTuiShortcutList -HasSessions $true -Dispatch { param($action) [void]$action }
+        }
+        foreach ($sc in $shortcuts) {
+            $sc.HelpText | Should -Be ''
+            $sc.Title | Should -Not -Match '^\['
+        }
     }
 }
