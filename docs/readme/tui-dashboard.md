@@ -142,6 +142,29 @@ Terminal.Gui 2.4.10 上踩过并固化的三条规则：
 
 > 构造 `Attribute` 的坑：其构造函数形参是 `Color&`（byref）。PowerShell 的 `[ref]$c` 是 `PSReference`，反射 `Invoke` 时无法转换成 `Color&`；正确姿势是把装箱后的 `Color` **直接放进 args 数组**，由运行时取数组元素地址作为 byref 实参。
 
+### 2.10 事件循环契约（必须用非泛型 `Run`）
+
+**`Application.Run<Window>(handler, driver)` 不能用来运行已组装好的窗口。**
+
+| 事项 | 事实（2.4.10 实测） |
+|------|------|
+| 泛型重载的约束 | `where T : IRunnable, new()` —— 带 `new()` 约束 |
+| 泛型重载干了什么 | `ApplicationImpl.Run<TRunnable>` 内部 **new 一个全新的 `T`**，装箱成 `IRunnable` 交给 `Run(IRunnable, Func)` 跑完再 `Dispose`（IL：`call <new T>` → `box` → `call Run` → `isinst IDisposable` → `Dispose`） |
+| 后果 | 传入的窗口**从未上屏**；真机跑的是一个**全新空 Window**，只画边框 —— 表现为「**只剩边框、内容全无**」；Esc/应用级键表仍可用，故看起来"活着" |
+| 正确姿势 | 用**非泛型** `Application.Run(IRunnable, Func<Exception,bool>)`，把**组装好的窗口实例**传进去（该重载内部 `Begin(runnable)` 后进事件循环） |
+
+```powershell
+# 正确: 传组装好的窗口
+$runArgs = [object[]]::CreateInstance([System.Object], 2)
+$runArgs[0] = $result.Window
+$runArgs[1] = $errorHandler
+[void]$runMethod.Invoke($null, $runArgs)
+```
+
+> 行为级判据（探针 `.agent_cache/tgui-probe/p63-run-which-window.ps1`）：同一窗口实例 `W`，泛型路径下 `W.IsRunning` 始终为 `False`（跑的是别的实例），非泛型路径下为 `True`（跑的就是 `W`）。
+>
+> `Run` 的 `errorHandler` 只把异常存进 `$global:TguiError` 并结束循环，**事件循环返回后必须消费它**（否则渲染异常表现为"仪表盘无声退出"）。
+
 ---
 
 ## 三、回退轨：PSTui GridView（`UI.DashboardTuiEnabled = $false`）
@@ -290,7 +313,11 @@ Terminal.Gui 2.4.10 上踩过并固化的三条规则：
 
 ## 五、已知限制 / 尚未验证
 
-- **真机发现的"只剩边框、内容全无"已定位并修复（2026-10-30，待复验）**：真机首验反馈仪表盘只画边框、文本全无。反射探针定位根因为 **Terminal.Gui 内置 `Base` 方案 `Normal` 是白对白**（前景 = 背景 = `(255,255,255)`），而仪表盘轨从未套用仓库主题 ⇒ 文字隐形。修复见 §2.9（ALC 原生 `Set-TguiTheme` + 可见性兜底 `Resolve-TguiScheme`）。**该修复尚未在 Windows Terminal 上复验。**
+- **真机发现的"只剩边框、内容全无"已定位并修复（2026-10-30，待复验）**：真机首验反馈仪表盘只画边框、文本全无。共定位到**两个叠加根因**：
+  1. **配色**：Terminal.Gui 内置 `Base` 方案 `Normal` 是白对白（前景 = 背景 = `(255,255,255)`），而仪表盘轨从未套用仓库主题 ⇒ 文字隐形。修复见 §2.9（ALC 原生 `Set-TguiTheme` + 可见性兜底 `Resolve-TguiScheme`）。
+  2. **事件循环**（更根本）：编排层调的是**泛型** `Application.Run<Window>(handler, driver)`，该重载内部会 **new 一个全新的空 Window** 来跑 —— 组装好的仪表盘**从未上屏**，空窗只画边框，故表现为"只剩边框"。修复见 §2.10（改用非泛型 `Run(IRunnable, Func)` 并传入组装好的窗口实例）。
+
+  **以上两处修复均尚未在 Windows Terminal 上复验。**
 - **未在真机验证**：Terminal.Gui 轨的实现与测试是在 **Linux + 无头（headless）Terminal.Gui** 环境下产出的；**Windows Terminal + PowerShell 7.6 的真机行为尚未验证**（容器内 PTY 分配被禁，无法做真终端端到端回归）。
 - **阶段 C 清单待人工执行**：真机验收清单**仍需由人在 Windows 上跑一遍**（含备用屏进出、Ctrl+C 还原、resize 重排、附着/新建/直连全屏交接、删除二次确认）。
 - **回退轨尚未移除**：`UI.DashboardTuiEnabled = $false` 的 PSTui GridView 轨在阶段 C 验收通过前**继续保留**；两轨并存期间，行为差异（键位、错误呈现、屏幕生命周期）以本文第二章与第三章分别描述为准。

@@ -77,7 +77,17 @@ function New-TmuxTuiSessionTable {
         Where-Object { $_.FullName -match '^Terminal.Gui.Views.EnumerableTableSource' } |
         Select-Object -First 1
     $genericSource = $sourceType.MakeGenericType([object])
-    $sourceCtor = $genericSource.GetConstructors() | Select-Object -First 1
+    # 构造器必须按参数形状过滤(2 参: 行集合 + 列字典), 否则 TG 升级新增重载时会绑错
+    # 实测形状(2.4.10): IEnumerable`1 + Dictionary`2[String, Func`2[Object,Object]]
+    $sourceCtor = $genericSource.GetConstructors() |
+        Where-Object {
+            $p = $_.GetParameters()
+            $p.Count -eq 2 -and $p[1].ParameterType.Name -in @('Dictionary`2', 'IDictionary`2')
+        } |
+        Select-Object -First 1
+    if ($null -eq $sourceCtor) {
+        throw "TGUI EnumerableTableSource 构造器形状已变(期望 2 参: 行集合 + 列字典)"
+    }
     $source = $sourceCtor.Invoke(@($rowsForSource, $columnDict))
 
     # ---- 2. TableView 构建 + 列样式 ----

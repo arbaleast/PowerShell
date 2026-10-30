@@ -30,8 +30,14 @@ $diag = & $mod {
     $initM = $appType.GetMethods($static) | Where-Object { $_.Name -eq 'Init' } | Select-Object -First 1
     $shutM = $appType.GetMethod('Shutdown', $static)
     $runGeneric = $appType.GetMethods($static) |
-        Where-Object { $_.Name -eq 'Run' -and $_.IsGenericMethod } | Select-Object -First 1
-    $runTyped = $runGeneric.MakeGenericMethod($tg.Types.Window)
+        Where-Object { $_.Name -eq 'Run' -and -not $_.IsGenericMethodDefinition -and
+                       $_.GetParameters().Count -eq 2 -and
+                       $_.GetParameters()[0].ParameterType.IsAssignableFrom($tg.Types.Window) } |
+        Select-Object -First 1
+    if ($null -eq $runGeneric) {
+        $out.Add('run.error=缺少 Run(IRunnable, Func) 重载')
+        return $out
+    }
     $instP = $appType.GetProperty('Instance', $static)
     $screenP = $appType.GetProperty('Screen', $static)
     $errHandler = [System.Func[[exception], [bool]]]{ param($ex2) Write-Host "diag-error: $($ex2.Message)"; return $false }
@@ -177,7 +183,12 @@ $diag = & $mod {
     # ---- Run(画面停留阶段; Esc/Q 退出) ----
     $out.Add('run=即将进入(此段画面为待检查仪表盘; 按 Esc 或 Q 退出)')
     try {
-        [void]$runTyped.Invoke($null, @($errHandler, 'ansi'))
+        # 非泛型 Run(IRunnable, Func): 传**组装好的**窗口。
+        # 泛型 Run<T> 会内部 new 一个全新空 T(IL 实测), 组装内容从不上屏。
+        $runArgs = [object[]]::CreateInstance([System.Object], 2)
+        $runArgs[0] = $result.Window
+        $runArgs[1] = $errHandler
+        [void]$runGeneric.Invoke($null, $runArgs)
     } catch {
         $out.Add("run.error=$($_.Exception.Message)")
     } finally {

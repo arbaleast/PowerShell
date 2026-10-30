@@ -100,10 +100,24 @@ function Show-TmuxTuiDashboard {
     $initMethod = $tg.Types.Application.GetMethods($staticFlags) |
         Where-Object { $_.Name -eq 'Init' } | Select-Object -First 1
     $shutdownMethod = $tg.Types.Application.GetMethod('Shutdown', $staticFlags)
-    $runGeneric = $tg.Types.Application.GetMethods($staticFlags) |
-        Where-Object { $_.Name -eq 'Run' -and $_.IsGenericMethod } |
+    # ★ 必须用**非泛型** Run(IRunnable, Func<Exception,bool>) 把组装好的窗口交给 TG。
+    #   泛型 Run<T> 的约束是 `where T : IRunnable, new()`; 2026-10-30 IL 实测
+    #   (ApplicationImpl.Run<TRunnable>): 它内部 **new 一个全新的 T**, 交给
+    #   Run(IRunnable, ...) 跑完再 Dispose —— 也就是"组装好的仪表盘从不上屏",
+    #   真机表现为「只剩边框、内容全无」(空 Window 只画边框, Esc/应用级键表仍可用)。
+    #   证据: .agent_cache/tgui-probe/p61-run-callee.ps1 / p62-appimpl-run.ps1。
+    $runMethod = $tg.Types.Application.GetMethods($staticFlags) |
+        Where-Object {
+            $_.Name -eq 'Run' -and
+            -not $_.IsGenericMethodDefinition -and
+            $_.GetParameters().Count -eq 2 -and
+            $_.GetParameters()[0].ParameterType.IsAssignableFrom($tg.Types.Window)
+        } |
         Select-Object -First 1
-    $runTyped = $runGeneric.MakeGenericMethod($tg.Types.Window)
+    if ($null -eq $runMethod) {
+        Write-Warning '[Show-TmuxTuiDashboard] Terminal.Gui 缺少 Run(IRunnable, Func) 重载, 已中止。'
+        return 'Exit'
+    }
     $stopMethod = $tg.Types.Application.GetMethods($staticFlags) |
         Where-Object { $_.Name -eq 'RequestStop' } | Select-Object -First 1
     $instanceProperty = $tg.Types.Application.GetProperty('Instance', $staticFlags)
@@ -254,9 +268,14 @@ function Show-TmuxTuiDashboard {
             }
             $global:TguiAppInstance = $appInstance
 
-            # ---- 事件循环: Run<Window>(handler, driver) 到 RequestStop/Quit ----
+            # ---- 事件循环: Run(组装好的窗口, handler) 到 RequestStop/Quit ----
             try {
-                $runTyped.Invoke($null, @($errorHandler, $driverName))
+                $global:TguiError = $null
+                # 传参用 object[] 手工构造: 避免 @() 展开/包装问题
+                $runArgs = [object[]]::CreateInstance([System.Object], 2)
+                $runArgs[0] = $result.Window
+                $runArgs[1] = $errorHandler
+                [void]$runMethod.Invoke($null, $runArgs)
             } catch {
                 Write-Warning "[Show-TmuxTuiDashboard] Terminal.Gui Run 失败: $($_.Exception.Message)"
                 return 'Exit'
@@ -267,6 +286,15 @@ function Show-TmuxTuiDashboard {
                 }
                 # 已交还: 外层 finally 不再重复 Shutdown
                 $tgInitialized = $false
+            }
+
+            # ---- 消费 errorHandler 捕获的异常 ----
+            # errorHandler 只把异常存进 $global:TguiError 并结束事件循环;
+            # 此前全链路无人读它 ⇒ 任何渲染/布局异常都变成"仪表盘无声退出"。
+            $runError = $global:TguiError
+            if ($null -ne $runError) {
+                $global:TguiError = $null
+                Write-Warning "[Show-TmuxTuiDashboard] Terminal.Gui 渲染异常: $($runError.GetType().Name): $($runError.Message)"
             }
 
             # ---- 读回选中行(TableView 无 SelectedRow, 用 Value.SelectedCell.Y) ----

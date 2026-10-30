@@ -321,6 +321,89 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
         }
     }
 
+    # -------------------------------------------- 事件循环 Run 重载契约(回归护栏)
+    # 2026-10-30 真机故障根因: 编排层调的是**泛型** Application.Run<Window>(handler, driver),
+    #   该重载约束为 `where T : IRunnable, new()`, 实测 IL(ApplicationImpl.Run<T>) 内部
+    #   **new 一个全新的 T** 再交给 Run(IRunnable, ...) 跑完即 Dispose —— 组装好的仪表盘
+    #   从不上屏, 真机表现为「只剩边框、内容全无」(空 Window 只画边框, 应用级键表仍可用)。
+    #   本组用例锁死"必须用非泛型 Run(IRunnable, Func) 跑组装好的窗口"这条契约。
+    Context '事件循环 Run 重载契约(回归护栏)' {
+
+        It 'Terminal.Gui 提供唯一的非泛型 Run(IRunnable, Func) 重载, 首参接受 Window' {
+            $count = & $script:mod {
+                $tg = Get-TguiContext
+                $static = [System.Reflection.BindingFlags]'Public,Static'
+                @($tg.Types.Application.GetMethods($static) | Where-Object {
+                        $_.Name -eq 'Run' -and
+                        -not $_.IsGenericMethodDefinition -and
+                        $_.GetParameters().Count -eq 2 -and
+                        $_.GetParameters()[0].ParameterType.IsAssignableFrom($tg.Types.Window)
+                    }).Count
+            }
+            $count | Should -Be 1
+        }
+
+        It '泛型 Run<T> 带 new() 约束(内部会造空窗)⇒ 不得用于运行已组装窗口' {
+            $info = & $script:mod {
+                $tg = Get-TguiContext
+                $static = [System.Reflection.BindingFlags]'Public,Static'
+                $genericRun = $tg.Types.Application.GetMethods($static) |
+                    Where-Object { $_.Name -eq 'Run' -and $_.IsGenericMethodDefinition } |
+                    Select-Object -First 1
+                $gp = $genericRun.GetGenericArguments()[0]
+                [PSCustomObject]@{
+                    HasNewConstraint = $gp.GenericParameterAttributes.HasFlag([System.Reflection.GenericParameterAttributes]::DefaultConstructorConstraint)
+                    Constraints      = (($gp.GetGenericParameterConstraints() | ForEach-Object { $_.Name }) -join ',')
+                }
+            }
+            $info.HasNewConstraint | Should -BeTrue
+            $info.Constraints | Should -Be 'IRunnable'
+        }
+
+        It '编排层不使用泛型 Run(源码不得出现 MakeGenericMethod)' {
+            $source = Get-Content -Raw -Path (Join-Path -Path $moduleRoot -ChildPath 'Private/Show-TmuxTuiDashboard.ps1')
+            $source | Should -Not -Match 'MakeGenericMethod'
+            # 必须把**组装好的窗口实例**交给 Run
+            $source | Should -Match '\$runArgs\[0\]\s*=\s*\$result\.Window'
+        }
+
+        It '组装好的窗口实例可被 Terminal.Gui 直接 Begin(跑的就是它本身)' {
+            $isRunning = & $script:mod {
+                $tg = Get-TguiContext
+                $static = [System.Reflection.BindingFlags]'Public,Static'
+                $appType = $tg.Types.Application
+                $initM = $appType.GetMethods($static) | Where-Object { $_.Name -eq 'Init' } | Select-Object -First 1
+                $beginM = $appType.GetMethods($static) | Where-Object { $_.Name -eq 'Begin' } | Select-Object -First 1
+                $endM = $appType.GetMethods($static) | Where-Object { $_.Name -eq 'End' } | Select-Object -First 1
+                $shutdownM = $appType.GetMethod('Shutdown', $static)
+                $instanceP = $appType.GetProperty('Instance', $static)
+
+                [void]$initM.Invoke($null, @('ansi'))
+                $observed = $false
+                try {
+                    $vm = ConvertTo-TmuxTuiViewModel -State (Get-TmuxSessionState -SessionData @{
+                            Available = $true
+                            Sessions  = @([PSCustomObject]@{ Name = 'work'; Status = 'detached'; Windows = 2 })
+                        })
+                    $result = New-TmuxTuiDashboardWindow -ViewModel $vm -HostName 'deb' `
+                        -ConnectionState '已连接' -HasSessions $true -Dispatch { }
+
+                    $app = $instanceP.GetValue($null)
+                    $token = $beginM.Invoke($app, @($result.Window))
+                    # Begin 之后, **这个实例**才是正在跑的那个(IsRunning=True)
+                    $observed = [bool]$result.Window.IsRunning
+                    [void]$endM.Invoke($app, @($token))
+                } finally {
+                    try { [void]$shutdownM.Invoke($null, @()) } catch {
+                        Write-Verbose "[test] Run 契约用例 Shutdown 失败: $($_.Exception.Message)"
+                    }
+                }
+                $observed
+            }
+            $isRunning | Should -BeTrue
+        }
+    }
+
     # ---------------------------------------------------------- 生命周期护栏
     Context '生命周期与终端还原' {
 
