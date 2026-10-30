@@ -19,8 +19,8 @@
 > **P2 UX 流程**(`Start-TmuxSession` 启动后顺序):
 > 1. **欢迎 banner** — `New-WelcomeBanner` 渲染主机名 + 随机语录(见 [`New-WelcomeBanner.ps1`](../../ShellPrompt/Private/New-WelcomeBanner.ps1))
 > 2. **SSH 探测 + 会话刷新** — `Invoke-WithProgress` 包覆,期间显示 Spectre 进度动画;无超时参数(见 [`Invoke-WithProgress.ps1`](../../ShellPrompt/Private/Invoke-WithProgress.ps1))
-> 3. **主机 / 会话选择** — `Show-HostSelector` / `Show-SessionManager` 由 GridView 主轨驱动(见 [`Invoke-GridViewMenu.ps1`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1))
-> 4. **连接 / 附着** — `Connect-TmuxSession` / `New-TmuxSession` / `Remove-TmuxSession` 分派,期间 `Save-OriginalTerminalState` + `Reset-TerminalMode` 在 `try/finally` 中保护终端态
+> 3. **主机选择** — `Show-HostSelector` 由 GridView 主轨驱动(见 [`Invoke-GridViewMenu.ps1`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1))
+> 4. **TGUI 仪表盘** — `Show-TmuxTuiDashboard` 单轨渲染会话表与快捷键栏;附着 / 新建 / 删除分别走 `Invoke-TmuxAttach` / `New-TmuxSession` / `Invoke-TmuxSessionDeletion`,期间 `Save-OriginalTerminalState` + `Reset-TerminalMode` 在 `try/finally` 中保护终端态
 
 ## 别名
 

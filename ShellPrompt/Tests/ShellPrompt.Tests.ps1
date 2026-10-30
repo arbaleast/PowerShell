@@ -77,8 +77,8 @@ Describe 'Command Export' {
             'Get-CachedConfig', 'Get-SshConfigHosts', 'Get-TmuxAvailability',
             'Get-TmuxSessions', 'Invoke-SshCommand',
             'Invoke-SshCaptureOutput', 'New-RandomSessionName', 'Reset-TerminalMode',
-            'Get-SshArgs', 'Connect-TmuxSession',
-            'New-TmuxSession', 'Remove-TmuxSession', 'ConvertTo-SshEscapedString',
+            'Get-SshArgs',
+            'New-TmuxSession', 'ConvertTo-SshEscapedString',
             'Test-SshHostName', 'Save-OriginalTerminalState'
         )
         $exported = @(Get-Command -Module ShellPrompt | Select-Object -ExpandProperty Name)
@@ -90,37 +90,31 @@ Describe 'Command Export' {
     It '不应导出单轨化后新增的内部实现函数' {
         $privateNames = @(
             'Invoke-GridViewPrompt', 'Invoke-GridViewHostSelector',
-            'Invoke-GridViewSessionList',
             'Get-GridViewColumnPlan', 'Get-GridViewHostRow',
             'ConvertTo-GridViewPlainText', 'Get-GridViewRenderParam',
-            'Get-TmuxSessionGridRow', 'Get-TmuxSessionStateText', 'Get-TmuxSessionSummary',
-            'Restore-GridViewSelection', 'ConvertTo-TmuxRefreshSelection',
-            'Get-TmuxRefreshedSession', 'Get-ConsoleUiBackend', 'Assert-ConsoleUiReady',
-            'Invoke-TmuxAttach', 'Invoke-TmuxSessionListView', 'ConvertTo-TmuxSessionSelection',
+            'Restore-GridViewSelection',
+            'Get-ConsoleUiBackend', 'Assert-ConsoleUiReady',
+            'Invoke-TmuxAttach',
             # 2026-10-30 TUI 重构: 单视图 + 单行动作条 + 后台取数的内部实现
             # 2026-10-30 回退轨移除: Show-TmuxSessionDashboard/Show-TmuxActionBar/
             #   Read-TmuxActionKey/Get-TmuxPlaceholderRow 已随回退轨删除(文件不存在,
             #   断言改为存在性, 见 Start-TmuxSession.TuiDispatch.Tests.ps1)
-            'Get-TmuxActionDefinition', 'Format-TmuxToolbarText',
+            'Get-TmuxActionDefinition',
             'Get-TmuxSessionState', 'Get-TmuxErrorCode',
             'Submit-TmuxBackgroundTask', 'Receive-TmuxBackgroundTask',
             'Invoke-TmuxSessionFetch', 'Submit-WttrPrefetch', 'Receive-WttrPrefetch',
             # 2026-10-30 第三轮 TUI 修复: Input 态输入机 / 备用屏幕生命周期
-            # 2026-10-30 第四轮修复: MinUI 撤回(Get-GridViewMinUiEnabled 已删),
-            #   改为 UI.DashboardFullScreen 显式全屏
-            # 2026-10-30 第四轮修复: MinUI 撤回(Get-GridViewMinUiEnabled 已删),
-            #   改为 UI.DashboardFullScreen 显式全屏
             # 2026-10-30 第五轮修复: Clear-TmuxScreen(绝对的全量重绘原语)
             # 2026-10-30 TGUI 迁移阶段 A: Terminal.Gui 上下文加载器
             # + UI 视图模型/键位动作纯函数映射
             'Read-TmuxConsoleLine', 'Enter-TmuxAlternateScreen', 'Exit-TmuxAlternateScreen',
             'Clear-TmuxScreen', 'Get-TguiContext',
-            'ConvertTo-TmuxTuiViewModel', 'Resolve-TmuxTuiKeyAction',
+            'ConvertTo-TmuxTuiViewModel',
             'New-TmuxTuiColumnPlan', 'New-TmuxTuiSessionTable', 'Show-TmuxTuiDashboard',
             # 2026-10-30 TGUI 迁移阶段 B: 仪表盘编排/工厂/动作分发(导出盲区收口)
             'New-TmuxTuiShortcutList', 'New-TmuxTuiDashboardWindow',
             'Invoke-TmuxSessionDeletion', 'Invoke-TmuxTuiAction',
-            'ConvertTo-TguiKeyInfo', 'New-TmuxTuiLayoutPlan', 'Test-TmuxTuiInteractive'
+            'New-TmuxTuiLayoutPlan', 'Test-TmuxTuiInteractive'
         )
         $exported = @(Get-Command -Module ShellPrompt | Select-Object -ExpandProperty Name)
         foreach ($name in $privateNames) {
@@ -323,72 +317,6 @@ Describe 'Resolve-ColorTable (颜色语义解析)' {
     }
 }
 
-Describe 'Get-TmuxSessionStateText (状态文案单一事实来源)' {
-
-    It 'attached 应映射为 ● 已附着' {
-        $text = & $script:mod { Get-TmuxSessionStateText -Status 'attached' }
-        $text | Should -Be '● 已附着'
-    }
-
-    It 'detached 应映射为 ○ 已分离' {
-        $text = & $script:mod { Get-TmuxSessionStateText -Status 'detached' }
-        $text | Should -Be '○ 已分离'
-    }
-
-    It '空状态应映射为 ○ 已分离' {
-        $text = & $script:mod { Get-TmuxSessionStateText -Status '' }
-        $text | Should -Be '○ 已分离'
-    }
-
-    It '未知状态应映射为 ○ 已分离' {
-        $text = & $script:mod { Get-TmuxSessionStateText -Status 'weird-state' }
-        $text | Should -Be '○ 已分离'
-    }
-}
-
-Describe 'Get-TmuxSessionSummary (会话计数汇总)' {
-
-    It '空会话数组应得到全 0 计数' {
-        $s = & $script:mod { Get-TmuxSessionSummary -Sessions @() }
-        $s.Total | Should -Be 0
-        $s.Attached | Should -Be 0
-        $s.Detached | Should -Be 0
-    }
-
-    It 'attached 与 detached 应分别计数' {
-        $s = & $script:mod {
-            Get-TmuxSessionSummary -Sessions @(
-                [PSCustomObject]@{ Name = 'a'; Status = 'attached' }
-                [PSCustomObject]@{ Name = 'b'; Status = 'detached' }
-                [PSCustomObject]@{ Name = 'c'; Status = 'detached' }
-            )
-        }
-        $s.Total | Should -Be 3
-        $s.Attached | Should -Be 1
-        $s.Detached | Should -Be 2
-    }
-
-    It '已附着数与已分离数之和应等于总数' {
-        $s = & $script:mod {
-            Get-TmuxSessionSummary -Sessions @(
-                [PSCustomObject]@{ Name = 'a'; Status = 'attached' }
-                [PSCustomObject]@{ Name = 'b'; Status = 'unknown' }
-            )
-        }
-        ($s.Attached + $s.Detached) | Should -Be $s.Total
-    }
-
-    It 'TitleSuffix 应符合统一计数口径' {
-        $s = & $script:mod {
-            Get-TmuxSessionSummary -Sessions @(
-                [PSCustomObject]@{ Name = 'a'; Status = 'attached' }
-                [PSCustomObject]@{ Name = 'b'; Status = 'detached' }
-            )
-        }
-        $s.TitleSuffix | Should -Be '会话 2 附 1 / 分 1'
-    }
-}
-
 Describe 'Get-GridViewHostRow (主机选择表格行)' {
 
     It '应按输入顺序生成行' {
@@ -565,82 +493,6 @@ Describe 'ConvertTo-GridViewPlainText (送入 Terminal.Gui 前的 ANSI 净化)' 
     }
 }
 
-Describe 'Get-TmuxSessionGridRow (会话列表表格行)' {
-
-    It '应按会话顺序生成编号' {
-        $rows = & $script:mod {
-            Get-TmuxSessionGridRow -Sessions @(
-                [PSCustomObject]@{ Name = 'a'; Status = 'attached' }
-                [PSCustomObject]@{ Name = 'b'; Status = 'detached' }
-            )
-        }
-        $rows.Count | Should -Be 2
-        $rows[0].No | Should -Be '01'
-        $rows[1].No | Should -Be '02'
-    }
-
-    It 'Session 与 Value 应为纯会话名' {
-        $rows = & $script:mod {
-            Get-TmuxSessionGridRow -Sessions @([PSCustomObject]@{ Name = 'btop'; Status = 'detached' })
-        }
-        $rows[0].Session | Should -Be 'btop'
-        $rows[0].Value | Should -Be 'btop'
-    }
-
-    It 'ShowStateBadge 关闭时 State 应为空' {
-        $rows = & $script:mod {
-            Get-TmuxSessionGridRow -Sessions @([PSCustomObject]@{ Name = 'a'; Status = 'attached' })
-        }
-        $rows[0].State | Should -Be ''
-    }
-
-    It 'ShowStateBadge 开启时 State 应为统一状态文案' {
-        $rows = & $script:mod {
-            Get-TmuxSessionGridRow -Sessions @(
-                [PSCustomObject]@{ Name = 'a'; Status = 'attached' }
-                [PSCustomObject]@{ Name = 'b'; Status = 'detached' }
-            ) -ShowStateBadge
-        }
-        $rows[0].State | Should -Be '● 已附着'
-        $rows[1].State | Should -Be '○ 已分离'
-    }
-
-    It 'AllowRefresh 关闭时不应追加刷新行' {
-        $rows = & $script:mod {
-            Get-TmuxSessionGridRow -Sessions @([PSCustomObject]@{ Name = 'a'; Status = 'detached' })
-        }
-        $rows.Count | Should -Be 1
-    }
-
-    It 'AllowRefresh 开启时应追加刷新行且使用哨兵值' {
-        $rows = & $script:mod {
-            Get-TmuxSessionGridRow -Sessions @([PSCustomObject]@{ Name = 'a'; Status = 'detached' }) -AllowRefresh
-        }
-        # 哨兵值定义在模块作用域, 需从模块作用域读取后再断言
-        $signal = & $script:mod { $script:TmuxRefreshSignalValue }
-        $rows.Count | Should -Be 2
-        $rows[1].Session | Should -Be '⟳ 刷新会话列表'
-        $rows[1].Value | Should -Be $signal
-    }
-
-    It 'Windows 列应承载窗口数量, 缺失字段时置空(不伪装成 0/1)' {
-        $rows = & $script:mod {
-            Get-TmuxSessionGridRow -Sessions @(
-                [PSCustomObject]@{ Name = 'a'; Status = 'attached'; Windows = 3 }
-                [PSCustomObject]@{ Name = 'b'; Status = 'detached' }
-            )
-        }
-        $rows[0].Windows | Should -Be '3'
-        $rows[1].Windows | Should -BeNullOrEmpty
-        # 刷新行同样携带 Windows 字段, 保证整表行形状一致
-        $refreshRows = & $script:mod {
-            Get-TmuxSessionGridRow -Sessions @([PSCustomObject]@{ Name = 'a'; Status = 'detached'; Windows = 1 }) -AllowRefresh
-        }
-        $refreshRows[0].Windows | Should -Be '1'
-        $refreshRows[1].Windows | Should -Be ''
-    }
-}
-
 Describe 'Get-GridViewColumnPlan (列裁剪计划)' {
 
     It '应优先选 Session 作为键列' {
@@ -745,60 +597,6 @@ Describe 'Restore-GridViewSelection (选中结果归一化与隐藏字段恢复)
     }
 }
 
-Describe 'ConvertTo-TmuxSessionSelection / ConvertTo-TmuxRefreshSelection (选择结果归一化)' {
-
-    It '会话选择应产出统一形状且 Label 为纯会话名' {
-        $sel = & $script:mod { ConvertTo-TmuxSessionSelection -Name 'btop' -Status 'detached' }
-        $sel.Value | Should -Be 'btop'
-        $sel.RawName | Should -Be 'btop'
-        $sel.Label | Should -Be 'btop'
-        $sel.Status | Should -Be 'detached'
-        $sel.IsRefresh | Should -BeFalse
-    }
-
-    It '未指定状态时应按 detached 处理' {
-        $sel = & $script:mod { ConvertTo-TmuxSessionSelection -Name 'btop' }
-        $sel.Status | Should -Be 'detached'
-    }
-
-    It '刷新选择项应使用哨兵值并标记 IsRefresh' {
-        $sel = & $script:mod { ConvertTo-TmuxRefreshSelection }
-        # 哨兵值定义在模块作用域, 需从模块作用域读取后再断言
-        $signal = & $script:mod { $script:TmuxRefreshSignalValue }
-        $sel.Value | Should -Be $signal
-        $sel.IsRefresh | Should -BeTrue
-    }
-}
-
-Describe 'Get-TmuxRefreshedSession (用户触发的刷新)' {
-
-    It '应返回刷新脚本块的结果' {
-        $sessions = & $script:mod {
-            Get-TmuxRefreshedSession -SessionRefresher {
-                @([PSCustomObject]@{ Name = 'a'; Status = 'attached' })
-            }
-        }
-        $sessions.Count | Should -Be 1
-        $sessions[0].Name | Should -Be 'a'
-    }
-
-    It '应过滤掉 $null 元素' {
-        $sessions = & $script:mod {
-            Get-TmuxRefreshedSession -SessionRefresher {
-                @($null, [PSCustomObject]@{ Name = 'a'; Status = 'attached' }, $null)
-            }
-        }
-        $sessions.Count | Should -Be 1
-    }
-
-    It '空结果应返回空数组而不是 $null' {
-        $sessions = & $script:mod {
-            Get-TmuxRefreshedSession -SessionRefresher { $null }
-        }
-        $sessions.Count | Should -Be 0
-    }
-}
-
 Describe '单轨 GridView 契约 (单轨化回归防护)' {
 
     It 'Get-ConsoleUiBackend 的 Backend 恒为 GridView' {
@@ -871,20 +669,6 @@ Describe '单轨 GridView 契约 (单轨化回归防护)' {
         $keys | Should -Not -Contain 'Backend'
     }
 
-    It '保留的 UI 入口不再提供 -Backend 参数' {
-        # 2026-10-30: Show-SessionManager 与旧回退轨视图已删除(见 TuiDispatch 测试),
-        # 该断言收敛到仍存活的 Show-TmuxSessionList(删除确认链在用)。
-        foreach ($name in @('Show-TmuxSessionList')) {
-            $keys = & $script:mod { param($n) (Get-Command $n -ErrorAction Stop).Parameters.Keys } $name
-            $keys | Should -Not -Contain 'Backend'
-        }
-    }
-
-    It 'Show-TmuxSessionList 不再提供 -Backend 参数' {
-        $keys = & $script:mod { (Get-Command Show-TmuxSessionList).Parameters.Keys }
-        $keys | Should -Not -Contain 'Backend'
-    }
-
     It '已删除的 AnsiFallback 降级轨函数在模块作用域内应不存在' {
         $removed = @(
             'Invoke-AnsiMenu', 'Invoke-AnsiHostSelector', 'Invoke-AnsiSessionManager',
@@ -923,7 +707,6 @@ Describe '单轨 GridView 契约 (单轨化回归防护)' {
         foreach ($file in @(
                 'Invoke-GridViewMenu.ps1', 'Get-GridViewColumnPlan.ps1',
                 'Get-GridViewHostRow.ps1',
-                'Get-TmuxSessionGridRow.ps1', 'Get-TmuxSessionStateText.ps1',
                 'Get-ConsoleUiBackend.ps1')) {
             Test-Path (Join-Path $privateDir $file) | Should -BeTrue
         }
@@ -935,7 +718,7 @@ Describe '单轨 GridView 契约 (单轨化回归防护)' {
         # Resolve-TmuxActionKey/Read-TmuxActionKey/Get-TmuxPlaceholderRow 已删除(见下一条)。
         $privateDir = Join-Path $script:mod.ModuleBase 'Private'
         foreach ($file in @(
-                'Get-TmuxActionDefinition.ps1', 'Format-TmuxToolbarText.ps1',
+                'Get-TmuxActionDefinition.ps1',
                 'Get-TmuxSessionState.ps1',
                 'Submit-TmuxBackgroundTask.ps1', 'Receive-TmuxBackgroundTask.ps1',
                 'Invoke-TmuxSessionFetch.ps1', 'Submit-WttrPrefetch.ps1')) {
@@ -943,12 +726,21 @@ Describe '单轨 GridView 契约 (单轨化回归防护)' {
         }
     }
 
-    It '已删除的 PSTui 回退轨源文件不应出现在模块目录内' {
-        # 2026-10-30 晚用户裁定移除: sss 回退轨(main 循环 + 双视图 + 键分发/占位行)
+    It '已删除的旧仪表盘 / 旧会话列表源文件不应出现在模块目录内' {
+        # 2026-10-30 晚用户裁定移除: sss 回退轨(main 循环 + 双视图 + 键分发/占位行);
+        # 2026-10-31 死代码清理: TGUI 单轨化后失去最后调用方的旧会话列表链与旧键位映射
+        #   (AST 可达性分析: 从 5 个公开命令 / profile / 动态 dot-source 均不可达)。
         $privateDir = Join-Path $script:mod.ModuleBase 'Private'
         foreach ($file in @(
                 'Show-TmuxSessionDashboard.ps1', 'Show-TmuxActionBar.ps1',
-                'Read-TmuxActionKey.ps1', 'Get-TmuxPlaceholderRow.ps1')) {
+                'Read-TmuxActionKey.ps1', 'Get-TmuxPlaceholderRow.ps1',
+                'Connect-TmuxSession.ps1', 'Remove-TmuxSession.ps1',
+                'Show-TmuxSessionList.ps1', 'Resolve-TmuxActionKey.ps1',
+                'Resolve-TmuxTuiKeyAction.ps1', 'ConvertTo-TguiKeyInfo.ps1',
+                'Format-TmuxToolbarText.ps1', 'Format-GridViewStateText.ps1',
+                'Get-TmuxSessionGridRow.ps1', 'Get-TmuxSessionStateText.ps1',
+                'Get-TmuxSessionSummary.ps1', 'ConvertTo-TmuxRefreshSelection.ps1',
+                'Get-TmuxRefreshedSession.ps1')) {
             Test-Path (Join-Path $privateDir $file) | Should -BeFalse
         }
     }

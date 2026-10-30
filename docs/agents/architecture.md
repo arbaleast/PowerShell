@@ -21,14 +21,14 @@
   - **检测是惰性的** (2026-10-18 起): 模块加载期**不执行**检测 (实测是模块导入阶段最大单一热点, 约 500ms, 启动期用不到), 改由 `Get-ConsoleUiState` 在首次真正需要时现场检测一次并缓存到 `$script:ConsoleUiBackend`, 后续复用。
   - 检测自身的实现成本也已优化: 模块可发现性用目录级查找 (`Get-ConsoleUiModuleOnDisk`) 替代 `Get-Module -ListAvailable`, 同名命令来源用 `Get-Command -ListAvailable` (去掉 `-All`, 避免全量模块元数据装载) —— 四项诊断语义保持不变。
   - **Phase 1 加载清单是显式有序的** (2026-10-29 改): 原先的"函数名 -> 定义文件"静态索引 + AST 依赖闭包 + 拓扑排序 + `$env:LOCALAPPDATA\ShellPrompt\startup-graph.json` 缓存已删除。实际依赖闭包只有 5 个文件 (`Private/Initialize-Config.ps1` → `Private/Resolve-ColorTable.ps1` → `Private/New-WelcomeBanner.ps1`, 另加自包含的 `Private/Initialize-FnmEnvironment.ps1` 与 `Public/Show-UserScoopLogo.ps1`), 用 `$script:StartupLoadOrder` 显式列出即可。**收益**: 启动期不再扫描 Private/Public 全目录、不再向用户目录写 JSON; **代价**: 依赖从"自动推导"变成"手工维护", 由自检兜底 —— 自检用 AST 取出这 5 个文件里真实调用的命令名逐个检查可见性, 缺失时 `Write-Warning` 报出"哪个文件缺哪个命令"。
-  - `Show-HostSelector` / `Show-SessionManager` / `Show-TmuxSessionList` 是纯分发器, 调用实现前统一执行 `Assert-ConsoleUiReady -Feature <功能名>`。
-  - **方案 A (2026-10-29)**: `Start-TmuxSession` 以**真实 tmux 会话列表为主界面** — Enter 选中会话即附着/恢复 (`Private/Invoke-TmuxAttach.ps1` 统一执行; 空会话/探测失败不弹空表格); Esc 从列表进入轻量**全局操作菜单** (`Show-SessionManager`, 只含 删除/创建/直连 SSH/刷新, 无附着项), 再按 Esc 退出管理器。
+  - `Show-HostSelector` 是纯分发器, 调用实现前统一执行 `Assert-ConsoleUiReady -Feature <功能名>`。
+  - **单轨 (2026-10-30)**: `Start-TmuxSession` 进入 Terminal.Gui v2 仪表盘 (`Private/Show-TmuxTuiDashboard.ps1`) —— 表格内 Enter 选中会话即附着/恢复 (`Private/Invoke-TmuxAttach.ps1` 统一执行), 底栏快捷键覆盖 新建/刷新/SSH/删除/退出。
   - `PSTui` 缺失 / 版本冲突 / `Terminal.Gui` 主版本争用 / stdin 被重定向 → `Assert-ConsoleUiReady` 抛出**可定位的终止错误** (含功能名与原因), **不再静默降级到其它渲染实现**。
   - 调用方 (如 `Start-TmuxSession`) 不感知渲染实现差异, 分发器已无 `-Backend` 参数。
 
 ### sss 仪表盘单轨与终端所有权 (2026-10-30 TGUI 迁移)
 
-- `sss` (`Start-TmuxSession`) 的仪表盘**唯一渲染轨**是 Terminal.Gui v2 应用 `Private/Show-TmuxTuiDashboard.ps1`, 布局/表格/键盘/缩放/备用屏全部由 TG 自管; 结构与键位契约见 [`docs/readme/tui-dashboard.md`](../readme/tui-dashboard.md)。**PSTui 回退轨已按用户裁定移除 (2026-10-30)**: `Show-TmuxSessionDashboard` / `Show-TmuxActionBar` / `Read-TmuxActionKey` / `Get-TmuxPlaceholderRow` 与 `UI.DashboardTuiEnabled` / `UI.DashboardFullScreen` 开关同批删除; **PSTui 依赖本身保留** (主机选择器与其他菜单仍走 PSTui GridView)。
+- `sss` (`Start-TmuxSession`) 的仪表盘**唯一渲染轨**是 Terminal.Gui v2 应用 `Private/Show-TmuxTuiDashboard.ps1`, 布局/表格/键盘/缩放/备用屏全部由 TG 自管; 结构与键位契约见 [`docs/readme/tui-dashboard.md`](../readme/tui-dashboard.md)。**PSTui 依赖本身保留** (主机选择器与删除确认仍走 PSTui GridView)。
 - **终端所有权不变量**: `$script:TmuxTerminalOwner` 标记当前谁在管终端 ('Legacy' 默认 / 'Tgui' = TG 独占)。
   - 'Tgui' 下 `Enter-TmuxAlternateScreen` / `Exit-TmuxAlternateScreen` / `Clear-TmuxScreen` **整体静音** —— 不发 `\e[?1049h/l`、不做 `[Console]::Clear`、不改 `$script:TmuxAltScreenActive`, 备用屏生命周期由 TG 的 `Init/Run/Shutdown` 独占 (禁止双层嵌套, 契约测试在 `Enter-TmuxAlternateScreen.Tests.ps1` / `Show-TmuxTuiDashboard.Tests.ps1`)。
   - 业务动作 (附着/新建/SSH/删除) 只在 `Run` 已返回 + `Shutdown` 已交还终端之后, 于主屏幕执行。
@@ -53,10 +53,9 @@
 - `UI.Theme.Slots.Editable` 为 **正文字 (`205,214,244`) + Surface0 深一档底 (`49,50,68`)** —— 过滤框输入文字始终清晰可读。
 - 不变量**保留**: `Focus` / `Active` / `Highlight` 三槽位**完全同色** (见下方"新契约"), 否则两种焦点状态下选中行高亮不一致。
 - `HotFocus` / `HotActive` (其他 View 的聚焦热区, TableView 不读取) 与高亮条取同色 `69,71,90` 底, 保持视觉一致。
-- State 列的 `⚠ 危险` / `⚠ 备选` 一类带 ANSI 染色徽章在**送入 Terminal.Gui 前**由
-  `ConvertTo-GridViewPlainText`(定义在 `Invoke-GridViewMenu.ps1`)剥离 SGR —— TG TableView 不解析单元格内联
-  ANSI, 且转义字节会干扰 Wcwidth 宽字符列宽计算导致 `'⚠ 危险'` 吞空格。染色契约
-  (`Format-GridViewStateText`) 不变, 仅在渲染边界净化。
+- State 列文本在**送入 Terminal.Gui 前**由 `ConvertTo-GridViewPlainText`(定义在 `Invoke-GridViewMenu.ps1`)剥离
+  可能混入的 SGR —— TG TableView 不解析单元格内联 ANSI, 且转义字节会干扰 Wcwidth 宽字符列宽计算导致
+  `'⚠ 危险'` 吞空格。状态文本本身是纯字符串, 仅在渲染边界净化。
 - 详见 [`docs/readme/gridview-menus.md`](../readme/gridview-menus.md) 的「GridView 配色」表格与槽位定义源码
   [`ShellPrompt/Private/Initialize-Config.ps1`](../../ShellPrompt/Private/Initialize-Config.ps1)
   （CHANGELOG 已收拢为存根, 历史条目不作现行设计依据）。
@@ -90,10 +89,10 @@ profile 加载分为 3 个阶段, 各阶段目标与耗时归因:
 | 灰阶层 | `DarkGray` | 50,50,50 | 语义 `Dark`（当前无调用方请求） | 语义位保留, 未预热 |
 | 灰阶层 | `MidGray` | 100,100,100 | 禁用态语义 `Muted` | 旧 TG Scheme `Disabled` 取色来源; 2026-10-30 起槽位改用 Overlay0 字面量 |
 | 标题色 | `Cyan` | 112,199,209 | 语义 `Cyan`（当前无调用方请求） | Title 区配色已由 TG Scheme 接管 |
-| 状态色 | `Danger` | 220,90,90 | State 列 `⚠ 危险` 文字染色 (`Format-GridViewStateText` ← `Get-GridViewManagerRow`) | PSTui 无行级配色, 语义落在 State 文本 |
+| 状态色 | `Danger` | 220,90,90 | State 列 `⚠ 危险` 语义标记 | PSTui 无行级配色, 语义落在 State 文本 |
 | 状态色 | `Warning` | 220,180,80 | State 列 `⚠ 备选` 文字染色 (同上) | 同上 |
 | 选中底 | `SelectedBg` | 112,199,209 底 + 近黑字 | 语义 `SelectedBg`（当前无调用方请求） | TG Scheme `Focus` 已接管高亮 |
-| 复位 | `Rst` | (重置 ESC `\e[0m`) | 全部 Spectre / ANSI 输出末尾; `Format-GridViewStateText` 也读取 | 必需, 漏写颜色泄漏 |
+| 复位 | `Rst` | (重置 ESC `\e[0m`) | 全部 Spectre / ANSI 输出末尾 | 必需, 漏写颜色泄漏 |
 
 总计（2026-10-29 核对）：**9 键**。直接消费 **6 键**（`FreshGreen` / `SageGreen` / `MidGray` / `Danger` / `Warning` / `Rst`）/ 经 `$script:ColorSemanticMap` 保留语义但当前无调用方 **3 键**（`DarkGray` / `Cyan` / `SelectedBg`）。主绿色系的 RGB 值同时是 `UI.Theme.Slots` 的默认色来源，但 Scheme 槽位落地为 RGB 字面量，不经由 `Colors.*` 键读取。
 
@@ -146,7 +145,7 @@ profile 加载分为 3 个阶段, 各阶段目标与耗时归因:
 
 ## 交互菜单 PSTui 标题区天气（2026-10-18 起, 方案 R2）
 
-三个交互菜单 (SSH 主机选择器 / tmux 管理器 / tmux 会话列表) 的 PSTui 窗口**标题区**自动追加一行 wttr 天气短串 (如 `Shanghai: 🌫 +18°C`), 顶部居中显示. 渲染入口在 [`Private/Invoke-GridViewMenu.ps1`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1) 的三个 `Invoke-GridViewPrompt` 调用点 (`Invoke-GridViewHostSelector` / `Invoke-GridViewSessionManager` / `Invoke-GridViewSessionList`):
+SSH 主机选择器的 PSTui 窗口**标题区**自动追加一行 wttr 天气短串 (如 `Shanghai: 🌫 +18°C`), 顶部居中显示. 渲染入口在 [`Private/Invoke-GridViewMenu.ps1`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1) 的 `Invoke-GridViewHostSelector` 调用点:
 
 - 在拼装 `-Title` 参数之前, 由 [`Private/Get-WttrTitleSuffix.ps1`](../../ShellPrompt/Private/Get-WttrTitleSuffix.ps1) 判定 `$script:Config.Weather.Enabled` 并调用 `Get-WttrWeather -Format CustomUrl -Url 'https://wttr.in/?format=j1&lang=zh' -CacheMinutes 10 -ErrorAction SilentlyContinue`, 自解析 j1 JSON 拼出 ` - <City>: <中文描述> <Temp>°C` 片段;
 - 启用且 wttr 非空时, 把 ` - <wttr>` 拼到原标题末尾; 否则 `$wttrSuffix` 留空, 标题原样渲染;

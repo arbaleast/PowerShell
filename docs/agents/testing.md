@@ -24,7 +24,7 @@ CI 强制以下四条不变量，任何一条不满足都会让 CI 变红：
     每个被测函数至少 3-5 条用例(命中、未命中、错误兜底)。
   - **集成测试**: `Invoke-GridViewMenu` / `Show-*` 分发器 / `Start-TmuxSession`,
     覆盖多函数协作(列裁剪 + 颜色方案 + 隐藏字段恢复等)。
-  - **行为测试**: `Update-Weather` / `Copy-SshPublicKey` / `Remove-TmuxSession` 等含 I/O 副作用的函数,
+  - **行为测试**: `Update-Weather` / `Copy-SshPublicKey` / `Invoke-TmuxSessionDeletion` 等含 I/O 副作用的函数,
     仅断言"不抛"与"关键调用次数", 不强求输出文本(避免改文案就碎套)。
 
 ## 静态分析

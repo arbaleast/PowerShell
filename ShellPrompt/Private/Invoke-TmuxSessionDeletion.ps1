@@ -25,10 +25,9 @@ function Invoke-TmuxSessionDeletion {
         对**已选定**的 tmux 会话执行"二次确认 + kill-session"删除流程。
 
     .DESCRIPTION
-        这是删除 tmux 会话的**唯一屏障实现**, 供两条调用路径共用:
-          - Remove-TmuxSession: 先用 Show-TmuxSessionList 选出会话, 再调本函数;
-          - TGUI 仪表盘: 直接用表格里选中的会话名调本函数。
-        两条路径的确认文案、默认答案、失败口径与 [OK] 消息完全一致。
+        这是删除 tmux 会话的**唯一屏障实现**, 由 TGUI 仪表盘直接调用:
+          - 仪表盘表格里选中会话后, 用会话名调本函数执行确认 + kill-session。
+        确认文案、默认答案、失败口径与 [OK] 消息集中在这里, 不在调用方复刻。
 
         不可逆操作保证:
           - 二次确认默认答案为 'n', 用户必须显式输入 y 才会继续;

@@ -18,9 +18,9 @@ function Get-TmuxActionDefinition {
         返回 tmux 管理器的动作定义集合(键位 / 文案 / 动作值)。
 
     .DESCRIPTION
-        动作集合是"工具条文案"与"单键事件循环"的唯一事实来源:
-          - Format-TmuxToolbarText 用它渲染 `[n]新建  [r]刷新  [s]SSH ...` 单行文本;
-          - Resolve-TmuxActionKey 用它把按下的单字母键映射成动作值。
+        动作集合是"快捷键栏文案与动作值"的唯一事实来源:
+          - New-TmuxTuiShortcutList 用它生成 Terminal.Gui 的 Shortcut 列表,
+            动作值直接由 Shortcut.Action 携带(不经键事件转换)。
 
         上下文(Context)只切换文案, 不切换键位:
           - Normal: 正常态(r=刷新, s=SSH)
@@ -31,7 +31,7 @@ function Get-TmuxActionDefinition {
             n -> New     新建
             r -> Refresh 刷新 / 重试
             s -> Ssh     SSH / 直连
-            x -> Remove  删除(需要存在会话, 高危, 二次确认在 Remove-TmuxSession 内)
+            x -> Remove  删除(需要存在会话, 高危, 二次确认在 Invoke-TmuxSessionDeletion 内)
             q -> Quit    退出管理器
 
     .PARAMETER HasSessions

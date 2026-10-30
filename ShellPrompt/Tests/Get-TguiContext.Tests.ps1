@@ -4,7 +4,8 @@
 #   2. 核心 API 面存在(反射实测,Goal 严禁"按示例假定 API"): Application 的
 #      Init/Run/Shutdown 静态成员与 Window/TableView/StatusBar/View/FTypes;
 #   3. Window : Terminal.Gui.App.IRunnable (Run[TRunnable] 运行模型的前提);
-#   4. 文案不匹配/目录缺失时抛可定位错误(不静默降级)。
+#   4. 文案不匹配/目录缺失时抛可定位错误(不静默降级);
+#   5. vendored 归属护栏: TG 与 PSTui 同目录**单副本**(拆成独立依赖目录即失败)。
 # 说明: 纯反射级验证, 不触发 Application.Init(无头/无 TTY 环境安全)。
 
 Describe 'Terminal.Gui v2 上下文加载器 (Get-TguiContext)' {
@@ -25,6 +26,28 @@ Describe 'Terminal.Gui v2 上下文加载器 (Get-TguiContext)' {
         $first.Version | Should -Not -BeNullOrEmpty
         # PSTui 1.0.5 同源钉版 (vendored 2.4.10.0)
         $first.Assembly.GetName().Version.Major | Should -Be 2
+    }
+
+    It 'vendored Terminal.Gui 与 PSTui 同目录单副本(依赖归属护栏)' {
+        # 归属结论见 docs/readme/tui-dashboard.md 第三章: Terminal.Gui **不独立管理**,
+        # 与 PSTui 同目录单副本(PSTui 对 TG v2 是模块作用域硬依赖)。
+        # 本用例把该结论变成可执行断言: 有人把 TG 拆到独立目录时会失败,
+        # 强制走一次显式决策, 而不是悄悄引入第二份会漂移的二进制。
+        $ctx = & $script:mod { Get-TguiContext }
+        $sourceDir = $ctx.SourceDir
+
+        # 载入源 = PSTui 版本目录: TG 必须与 PSTui.dll 同目录
+        (Test-Path (Join-Path $sourceDir 'Terminal.Gui.dll')) | Should -BeTrue
+        (Test-Path (Join-Path $sourceDir 'PSTui.dll')) | Should -BeTrue
+        # 版本钉在 2.4.10.0(升级须同步 API 面记录与文档)
+        $ctx.Version | Should -Be '2.4.10.0'
+
+        # 全仓库只允许存在这一份 vendored TG
+        $repoRoot = Split-Path -Path $script:mod.ModuleBase -Parent
+        $copies = @(Get-ChildItem -Path (Join-Path $repoRoot 'Modules') -Filter 'Terminal.Gui.dll' -Recurse -File)
+        $copies.Count | Should -Be 1
+        [System.IO.Path]::GetFullPath($copies[0].FullName) |
+            Should -Be ([System.IO.Path]::GetFullPath((Join-Path $sourceDir 'Terminal.Gui.dll')))
     }
 
     It '核心类型句柄齐全且命名空间与 2.4.10 实测 API 面一致' {

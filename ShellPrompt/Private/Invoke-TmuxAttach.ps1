@@ -17,9 +17,9 @@ function Invoke-TmuxAttach {
         向远程主机执行 tmux 会话附着/恢复(会话名由调用方确定)。
 
     .DESCRIPTION
-        统一附着执行层(方案 A, 2026-10-29 抽出):
-          - Connect-TmuxSession: 用户在会话列表中选择会话后调用;
-          - Start-TmuxSession:   会话列表作为主界面, 用户直接选中会话后调用。
+        统一附着执行层(2026-10-29 抽出):
+          - TGUI 仪表盘: 用户在会话表格中选中会话后, 由仪表盘动作分发调用本函数;
+          - Start-TmuxSession: 编排层不直接附着, 统一交给仪表盘。
         远端命令: 先 has-session 判定再决定 attach / new:
         原来的 `attach ... 2>/dev/null || new-session` 会把"attach 因别的原因失败"
         也吞成"新建一个会话", 且 stderr 被丢弃, 用户看不到原因。

@@ -29,69 +29,94 @@ PowerShell/
     ├── Settings.ScriptAnalyzer.psd1   # PSScriptAnalyzer 规则配置
     ├── CHANGELOG.md
     ├── LICENSE                        # MIT 协议
-    ├── Tests/                         # Pester 测试套件 (14 个文件: 13 个 *.Tests.ps1 + 1 个入口, 2026-10-29 核对)
-    │   ├── Format-GridViewStateText.Tests.ps1
+    ├── Tests/                         # Pester 测试套件 (35 个文件: 29 个 *.Tests.ps1 + 3 个门禁/诊断入口 + 1 个基线, 2026-10-31 核对)
+    │   ├── ConvertTo-TmuxTuiViewModel.Tests.ps1
+    │   ├── Diag-TguiRender.ps1                     # 诊断脚本: 真机渲染测量
+    │   ├── Diag-TguiResize.ps1                     # 诊断脚本: 真机缩放测量
+    │   ├── Enter-TmuxAlternateScreen.Tests.ps1
     │   ├── Get-ConsoleUiBackend.Tests.ps1
     │   ├── Get-SpinnerStyleMapping.Tests.ps1
+    │   ├── Get-TguiContext.Tests.ps1
+    │   ├── Get-TmuxActionDefinition.Tests.ps1
+    │   ├── Get-TmuxSessionState.Tests.ps1
     │   ├── Get-TmuxSessions.Tests.ps1
     │   ├── Get-WttrTitleSuffix.Tests.ps1
     │   ├── Get-WttrWeather.Tests.ps1
     │   ├── Get-WttrWeatherDescMap.Tests.ps1
     │   ├── Initialize-Config.Tests.ps1
-    │   ├── Invoke-Tests.ps1
+    │   ├── Invoke-Lint.ps1                         # 门禁入口: PSScriptAnalyzer
+    │   ├── Invoke-ProfileSmoke.ps1                 # 门禁入口: profile 冒烟
+    │   ├── Invoke-SshCaptureOutput.Tests.ps1
+    │   ├── Invoke-Tests.ps1                        # 门禁入口: 跑 Pester 套件
+    │   ├── Invoke-TmuxAttach.Tests.ps1
+    │   ├── Invoke-TmuxSessionDeletion.Tests.ps1
     │   ├── Invoke-WithProgress.Tests.ps1
+    │   ├── New-TmuxTuiDashboardWindow.Tests.ps1
+    │   ├── New-TmuxTuiSessionTable.Tests.ps1
+    │   ├── New-TmuxTuiShortcutList.Tests.ps1
+    │   ├── Read-TmuxConsoleLine.Tests.ps1
     │   ├── Set-TgColorScheme.Tests.ps1
+    │   ├── Set-TguiTheme.Tests.ps1
     │   ├── ShellPrompt.Tests.ps1
-    │   ├── Tmux-ExitCode.Tests.ps1
-    │   └── Update-Weather.Tests.ps1
-    ├── Public/                        # 用户面向命令（稳定 API）
-    │   ├── Copy-SshPublicKey.ps1
-    │   ├── Invoke-Reload.ps1
-    │   ├── Show-UserScoopLogo.ps1
-    │   ├── Start-TmuxSession.ps1
-    │   └── Update-Weather.ps1
-    └── Private/                       # 内部辅助函数（不暴露给用户, 共 41 个 .ps1, 2026-10-29 核对）
-        ├── Connect-TmuxSession.ps1        # 附着已有 tmux 会话
-        ├── ConvertTo-SshEscapedString.ps1 # SSH 单引号转义
-        ├── ConvertTo-TmuxRefreshSelection.ps1 # 「刷新会话列表」选中项契约
-        ├── Format-GridViewStateText.ps1   # State 列文本 + 危险/备选颜色接驳
-        ├── Get-ConsoleUiBackend.ps1       # 菜单主轨可用性检测 (GridView) + Assert-ConsoleUiReady
-        ├── Get-GridViewColumnPlan.ps1     # GridView 列可见性与 keyColumn 规划
-        ├── Get-GridViewHostRow.ps1        # GridView 主机选择行构造
-        ├── Get-GridViewManagerRow.ps1     # GridView 会话管理行构造
-        ├── Get-HostSelectorStateText.ps1  # 主机选择行状态文案（如 ★ 最近）
-        ├── Get-SpinnerStyleMapping.ps1   # ShellPrompt 样式名 → Spectre.Spinner.Known 成员名
-        ├── Get-SshArgs.ps1                # SSH 参数生成器
-        ├── Get-SshConfigHosts.ps1         # SSH config 主机解析
-        ├── Get-TmuxRefreshedSession.ps1   # 刷新时重新拉取会话列表
-        ├── Get-TmuxSessionGridRow.ps1     # GridView 会话列表行构造（含刷新行）
-        ├── Get-TmuxSessions.ps1           # 远程 tmux 探测与列表
-        ├── Get-TmuxSessionStateText.ps1   # 「● 已附着 / ○ 已分离」状态文案
-        ├── Get-TmuxSessionSummary.ps1    # 「附 N / 分 M」标题计数
-        ├── Get-WttrTitleSuffix.ps1        # 菜单标题区 wttr 后缀拼装 (j1 端点 + 中文映射)
-        ├── Get-WttrWeather.ps1            # wttr.in 天气查询 (纯函数, 10 分钟缓存, 供 Update-Weather / 菜单标题区复用)
-        ├── Get-WttrWeatherDescMap.ps1     # wttr 天气描述 → 中文内置字典 (42 条)
-        ├── Initialize-Config.ps1          # 配置初始化与缓存
-        ├── Initialize-FnmEnvironment.ps1  # fnm 环境缓存初始化 (fnm-env.json)
-        ├── Initialize-GridViewColorScheme.ps1 # GridView 配色初始化（失败仅告警）
-        ├── Invoke-GridViewMenu.ps1        # GridView 主轨菜单（主机/会话/会话列表, 在 -Title 区追加单行天气）
-        ├── Invoke-SshCaptureOutput.ps1    # SSH 异步输出捕获
-        ├── Invoke-SshCommand.ps1          # SSH 命令调度（主线逻辑）
-        ├── Invoke-WithProgress.ps1        # 进度封装 (Spectre 单轨)
-        ├── New-TmuxSession.ps1            # 创建新 tmux 会话
-        ├── New-WelcomeBanner.ps1          # [P2] 欢迎 Banner 纯函数（主机名+随机语录）
-        ├── Remove-TmuxSession.ps1         # 删除 tmux 会话
-        ├── Reset-TerminalMode.ps1         # 终端编码/TERM 恢复
-        ├── Resolve-ColorTable.ps1         # 统一颜色表解析（调用方覆盖 → 缓存 → 配置层默认值）
-        ├── Restore-GridViewSelection.ps1  # GridView 选中项归一化与隐藏字段恢复
-        ├── Save-OriginalTerminalState.ps1 # 终端状态保存
-        ├── Set-TgColorScheme.ps1          # Terminal.Gui Scheme 配色
-        ├── Show-HostSelector.ps1          # 主机选择菜单（分发器, 固定 GridView 主轨）
-        ├── Show-SessionManager.ps1        # 会话管理菜单（分发器, 固定 GridView 主轨）
-        ├── Show-TmuxSessionList.ps1       # 会话列表（含「刷新」原地重绘循环)
-        ├── Test-SshHostName.ps1           # 主机名校验
-        ├── Write-TmuxAvailabilityNotice.ps1 # 远程 tmux 探测结果提示
-        └── Write-TmuxWelcomeBanner.ps1    # tmux 会话管理器欢迎 banner
+    │   ├── Show-TmuxTuiDashboard.Tests.ps1
+    │   ├── Ssh-HostName-Validation.Tests.ps1
+    │   ├── Start-TmuxSession.TuiDispatch.Tests.ps1
+    │   ├── Tmux-SessionState.Tests.ps1
+    │   ├── Tmux-SshFailure.Tests.ps1
+    │   ├── Update-Weather.Tests.ps1
+    │   └── pssa-warning-baseline.txt               # PSSA Warning 指纹基线
+    └── Private/                       # 内部辅助函数(不暴露给用户, 共 51 个 .ps1, 2026-10-31 核对)
+        ├── ConvertTo-SshArgumentLine.ps1      # SSH 命令行参数拼接
+        ├── ConvertTo-SshEscapedString.ps1     # SSH 单引号转义
+        ├── ConvertTo-TmuxTuiViewModel.ps1     # 仪表盘视图模型(状态区 + 表格数据)
+        ├── Enter-TmuxAlternateScreen.ps1      # 进入备用屏(TGUI 持有终端时静音)
+        ├── Get-ConsoleUiBackend.ps1           # 菜单主轨可用性检测 (GridView) + Assert-ConsoleUiReady
+        ├── Get-GridViewColumnPlan.ps1         # GridView 列可见性与 keyColumn 规划
+        ├── Get-GridViewHostRow.ps1            # GridView 主机选择行构造
+        ├── Get-HostSelectorStateText.ps1      # 主机选择行状态文案(如 ★ 最近)
+        ├── Get-SpinnerStyleMapping.ps1        # ShellPrompt 样式名 → Spectre.Spinner.Known 成员名
+        ├── Get-SshArgs.ps1                    # SSH 参数生成器
+        ├── Get-SshConfigHosts.ps1             # SSH config 主机解析
+        ├── Get-TguiContext.ps1                # Terminal.Gui v2 独立 ALC 加载器(vendored DLL)
+        ├── Get-TmuxActionDefinition.ps1       # 仪表盘动作定义(键位/文案/动作值唯一事实源)
+        ├── Get-TmuxSessionState.ps1           # 会话可用性与状态判定(Available/Error/ExitCode)
+        ├── Get-TmuxSessions.ps1               # 远程 tmux 探测与列表
+        ├── Get-WttrTitleSuffix.ps1            # 菜单标题区 wttr 后缀拼装 (j1 端点 + 中文映射)
+        ├── Get-WttrWeather.ps1                # wttr.in 天气查询 (纯函数, 10 分钟缓存)
+        ├── Get-WttrWeatherDescMap.ps1         # wttr 天气描述 → 中文内置字典 (42 条)
+        ├── Initialize-Config.ps1              # 配置初始化与缓存
+        ├── Initialize-FnmEnvironment.ps1      # fnm 环境缓存初始化 (fnm-env.json)
+        ├── Initialize-GridViewColorScheme.ps1 # GridView 配色初始化(失败仅告警)
+        ├── Invoke-GridViewMenu.ps1            # GridView 主轨菜单(主机选择器, 标题区追加单行天气)
+        ├── Invoke-SshCaptureOutput.ps1        # SSH 异步输出捕获
+        ├── Invoke-SshCommand.ps1              # SSH 命令调度(主线逻辑)
+        ├── Invoke-TmuxAttach.ps1              # tmux 会话附着/恢复执行
+        ├── Invoke-TmuxSessionDeletion.ps1     # 删除 tmux 会话的唯一屏障(二次确认 + kill-session)
+        ├── Invoke-TmuxSessionFetch.ps1        # 后台取数(远程 tmux 探测与会话列表)
+        ├── Invoke-TmuxTuiAction.ps1           # 仪表盘业务动作分发
+        ├── Invoke-WithProgress.ps1            # 进度封装 (Spectre 单轨)
+        ├── New-TmuxSession.ps1                # 创建新 tmux 会话
+        ├── New-TmuxTuiColumnPlan.ps1          # 仪表盘表格列裁剪计划
+        ├── New-TmuxTuiDashboardWindow.ps1     # 仪表盘窗口(表格 + 快捷键栏)构造
+        ├── New-TmuxTuiLayoutPlan.ps1          # 仪表盘布局计划(零重叠零空档)
+        ├── New-TmuxTuiSessionTable.ps1        # 仪表盘会话表 (TableView) 构造
+        ├── New-TmuxTuiShortcutList.ps1        # 仪表盘快捷键栏 (Shortcut) 构造
+        ├── New-WelcomeBanner.ps1              # [P2] 欢迎 Banner 纯函数(主机名 + 随机语录)
+        ├── Read-TmuxConsoleLine.ps1           # 控制台单行读取(带超时)
+        ├── Receive-TmuxBackgroundTask.ps1     # 后台取数任务结果回收
+        ├── Reset-TerminalMode.ps1             # 终端编码/TERM 恢复
+        ├── Resolve-ColorTable.ps1             # 统一颜色表解析(调用方覆盖 → 缓存 → 配置层默认值)
+        ├── Restore-GridViewSelection.ps1      # GridView 选中项归一化与隐藏字段恢复
+        ├── Save-OriginalTerminalState.ps1     # 终端状态保存
+        ├── Set-TgColorScheme.ps1              # Terminal.Gui Scheme 配色
+        ├── Set-TguiTheme.ps1                  # Terminal.Gui 主题设置
+        ├── Show-HostSelector.ps1              # 主机选择菜单(分发器, 固定 GridView 主轨)
+        ├── Show-TmuxTuiDashboard.ps1          # TGUI 仪表盘编排(sss 唯一渲染轨)
+        ├── Submit-TmuxBackgroundTask.ps1      # 后台取数任务提交
+        ├── Submit-WttrPrefetch.ps1            # 天气预取任务提交
+        ├── Test-SshHostName.ps1               # 主机名校验
+        ├── Test-TmuxTuiInteractive.ps1        # 交互式终端判定
+        └── Write-TmuxWelcomeBanner.ps1        # tmux 会话管理器欢迎 banner
 ```
 
 ## 加载流程
@@ -184,7 +209,7 @@ spinner 与 ScriptBlock 进度动画在 v2.0 起改为 **单轨 Spectre.Console 
 
 同批删除的还有 `Private/Show-ProgressSpinner.ps1`（自绘 spinner，`Get-SpinnerFrame` / `Get-SpinnerSequence` / `ConvertTo-SpectrePlainText` 均无生产调用方）；其中仍被 `Invoke-WithProgress` 使用的 `Get-SpinnerStyleMapping` 已独立成 [`Private/Get-SpinnerStyleMapping.ps1`](../../ShellPrompt/Private/Get-SpinnerStyleMapping.ps1)。
 
-**Spectre markup 转义**：唯一走 `Write-SpectreHost` 的自绘渲染路径已随 `Show-ProgressSpinner` 删除。现存两处 Spectre 输出（`Invoke-SpectreCommandWithStatus` 的标题、`Read-SpectreConfirm` 的提示）都不含裸 `[`，或在调用侧自行转义（见 `Remove-TmuxSession.ps1` 的 `$sessionName.Replace('[', '[[')`）。
+**Spectre markup 转义**：唯一走 `Write-SpectreHost` 的自绘渲染路径已随 `Show-ProgressSpinner` 删除。现存两处 Spectre 输出（`Invoke-SpectreCommandWithStatus` 的标题、`Read-SpectreConfirm` 的提示）都不含裸 `[`，或在调用侧自行转义（见 `Invoke-TmuxSessionDeletion.ps1` 的 `$sessionName.Replace('[', '[[')`）。
 
 **风格映射表** (调用方 `-Style` → Spectre.Spinner.Known)：
 

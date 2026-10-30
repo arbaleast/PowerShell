@@ -18,16 +18,16 @@
 | 🎨 配置 | [`docs/readme/configuration.md`](docs/readme/configuration.md) | 配置文件位置、优先级、配置项（Paths/Colors/SSH 域，含消费状态；Weather/UI 域交叉链接）、用户示例 |
 | ⚡ 命令一览 | [`docs/readme/commands.md`](docs/readme/commands.md) | 公开命令、内部封装、别名、开发模式重载 |
 | 🏗️ 架构 | [`docs/readme/architecture.md`](docs/readme/architecture.md) | 目录结构、加载流程、关注点分离、Spinner/Progress 单轨 Spectre 调度 |
-| 🎛️ 交互菜单后端 | [`docs/readme/gridview-menus.md`](docs/readme/gridview-menus.md) | PSTui GridView 单轨契约、会话文案、配色槽位、能力与性能 |
+| 🎛️ 交互菜单后端 | [`docs/readme/gridview-menus.md`](docs/readme/gridview-menus.md)、[`docs/readme/tui-dashboard.md`](docs/readme/tui-dashboard.md) | PSTui GridView 主轨契约与配色、Terminal.Gui v2 `sss` 仪表盘契约与键位 |
 | 🛠️ 开发者指南 | [`docs/readme/development.md`](docs/readme/development.md) | 命名/作用域/函数拆分/输出注解/错误处理 |
 
 ## ✨ 功能速览
 
 - **远程开发** — `Start-TmuxSession` 菜单式管理 tmux 会话、`Copy-SshPublicKey` 一键推公钥、SSH config 主机 Tab 补全
 - **终端体验** — ANSI 欢迎 Banner + 随机语录、PSReadLine 历史补全增强、profile 分阶段加载计时
-- **交互式 UI** — Spectre.Console 单轨动画（`Invoke-WithProgress`：进度动画 + 异常重拋）、PSTui `Out-ConsoleGridView` 单轨菜单、5 套 spinner 样式名
+- **交互式 UI** — Terminal.Gui v2 `sss` 仪表盘（会话表 + 快捷键栏）、PSTui `Out-ConsoleGridView` 主机选择器、Spectre.Console 单轨动画（`Invoke-WithProgress`：进度动画 + 异常重拋）、5 套 spinner 样式名
 - **工具链** — Starship prompt、fnm 自动切 Node 版本
-- **天气** — 三个交互菜单标题区的 wttr.in 天气短串（10 分钟缓存 + 5 秒超时兜底，失败静默跳过）
+- **天气** — 菜单标题区与仪表盘状态区的 wttr.in 天气短串（10 分钟缓存 + 5 秒超时兜底，失败静默跳过）
 
 细节见 [功能特点](docs/readme/features.md)。
 ## 🚀 安装
@@ -37,7 +37,7 @@
 | 依赖 | 说明 |
 |------|------|
 | PowerShell 7.6+ | **唯一支持版本**。`ShellPrompt.psd1` 声明 `PowerShellVersion = '7.6'`；Windows PowerShell 5.1 已不再支持。抬高门槛的原因是交互菜单主轨依赖的 [`PSTui`](Modules/PSTui/1.0.5/README.md) 是 .NET 10 二进制模块, 要求 PS 7.6+ |
-| `PSTui` | 交互菜单**唯一**渲染实现, 仓库内置于 `Modules/PSTui/`。缺失/版本冲突/非交互宿主时, 交互菜单调用会抛出可定位的终止错误（模块本身仍可正常加载） |
+| `PSTui` | GridView 菜单（SSH 主机选择器）的渲染实现, 仓库内置于 `Modules/PSTui/`; 它同时带来 vendored 的 Terminal.Gui v2 运行时依赖(与 `PSTui.dll` 同目录, 单副本)。缺失/版本冲突/非交互宿主时, 交互菜单调用会抛出可定位的终止错误（模块本身仍可正常加载） |
 | starship | 可选 — 现代化 Prompt，通过 `Get-Command starship` 检测 |
 | fnm | 可选 — Node.js 版本管理。**当前按 `fnm.exe` 检测**（Windows 实现）；Linux/WSL 上 `fnm` 名称探测尚未适配，Node 注入会静默跳过 |
 | ssh | 可选 — 远程连接时按需使用 |

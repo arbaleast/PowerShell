@@ -53,7 +53,7 @@ function New-RandomSessionName {
       - 无会话时独立空态行(不伪造表格行), 附着与删除标注"不可用"。
 
     各操作分支已抽取到独立的 Private 函数:
-    Invoke-TmuxAttach(附着执行) / New-TmuxSession(创建) / Remove-TmuxSession(删除)。
+    Invoke-TmuxAttach(附着执行) / New-TmuxSession(创建) / Invoke-TmuxSessionDeletion(删除, 含二次确认)。
 
 .PARAMETER HostName
     远程主机名（来自 ~/.ssh/config）。未指定时弹出交互式主机选择菜单。

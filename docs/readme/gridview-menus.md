@@ -34,15 +34,15 @@
 
 ## 对外契约
 
-[`Show-HostSelector`](../../ShellPrompt/Private/Show-HostSelector.ps1) / [`Show-TmuxSessionList`](../../ShellPrompt/Private/Show-TmuxSessionList.ps1) 是纯分发器，返回 `PSCustomObject`（`.Value` 为选中值，`$null` 表示用户取消）。调用方无需感知渲染实现细节。
+[`Show-HostSelector`](../../ShellPrompt/Private/Show-HostSelector.ps1) 是纯分发器，返回 `PSCustomObject`（`.Value` 为选中值，`$null` 表示用户取消）。调用方无需感知渲染实现细节。
 
-> 原 `Show-SessionManager` 分发器（及 `Get-GridViewManagerRow` / `Write-TmuxAvailabilityNotice`）已于 **2026-10-30** 随「全局操作菜单」一并删除。**同日稍后：sss 回退轨（`Show-TmuxSessionDashboard` + `Show-TmuxActionBar` + `Read-TmuxActionKey` + `Get-TmuxPlaceholderRow`）也按用户裁定移除** —— tmux 管理器唯一实现在 Terminal.Gui v2 仪表盘（[tui-dashboard.md](tui-dashboard.md) §二），删除前结构见 git 历史。
+> **tmux 管理器只有 Terminal.Gui v2 仪表盘一轨**（[tui-dashboard.md](tui-dashboard.md) §二）；GridView 主轨现在只承载 SSH 主机选择器。
 
 ## 交互流程（2026-10-30 TUI 重构起）
 
 `sss` 进入主机后，tmux 管理器的界面结构为**单一 Terminal.Gui v2 仪表盘**（状态区 + 会话表 + 快捷键栏）。
 
-> **2026-10-30 晚**：本节原先描述的 PSTui 回退轨（`Show-TmuxSessionDashboard` 主视图 + `Show-TmuxActionBar` 动作条）已被用户裁定移除，tmux 管理器唯一实现在 [tui-dashboard.md](tui-dashboard.md) §二；删除前的双视图结构描述见 git 历史。
+> tmux 管理器界面是**单一 Terminal.Gui v2 仪表盘**（状态区 + 会话表 + 快捷键栏），结构与键位契约见 [tui-dashboard.md](tui-dashboard.md)。
 
 键位契约（n 新建 / r 刷新 / s SSH / x 删除 / q 退出 / Esc 退出）的唯一事实来源仍是 [`Get-TmuxActionDefinition.ps1`](../../ShellPrompt/Private/Get-TmuxActionDefinition.ps1)，完整键位表与错误码表见 [tmux 管理器 TUI 仪表盘](tui-dashboard.md)。
 
@@ -149,13 +149,13 @@
 
 | 能力项 | GridView 主轨现状 | 补偿手段 |
 |---|---|---|
-| 行级红色 / 危险项高亮 | PSTui 未开放 Color/Theme API，且 TG TableView **不解析**单元格内的内联 ANSI SGR | `State` 列文本（`⚠ 危险` / `⚠ 备选` / `★ 最近`）；文本由 `Format-GridViewStateText` 染色，但在**送入 Terminal.Gui 前**由 `ConvertTo-GridViewPlainText` 剥离 SGR——转义字节会干扰 Wcwidth 宽字符列宽计算导致 `'⚠ 危险'` **吞空格**（2026-10-30 修复） |
+| 行级红色 / 危险项高亮 | PSTui 未开放 Color/Theme API，且 TG TableView **不解析**单元格内的内联 ANSI SGR | `State` 列文本（`⚠ 危险` / `⚠ 备选` / `★ 最近`）承载语义；状态文本本身是纯字符串，**送入 Terminal.Gui 前**由 `ConvertTo-GridViewPlainText` 剥离可能混入的 SGR——转义字节会干扰 Wcwidth 宽字符列宽计算导致 `'⚠ 危险'` **吞空格**（2026-10-30 修复） |
 | 底部帮助文本行 | 表格视图无底部帮助区 | 按键说明由 **PSTui 自带状态栏**（`Rows: n \| Enter Accept \| Esc Close`）提供；提示行草案 A.2 已于 2026-10-19 撤回——alternate screen 下菜单上方的提示用户看不到；仓库内 `Write-GridViewHint` 函数随之于 2026-10-29 一并删除 |
 | 实时增量过滤 | 无键盘级过滤回调 | `-Focus Filter` 表格筛选框（`UI.GridViewFocus = 'Filter'`） |
 | `Disabled` 行灰显 | 不支持渲染禁用态 | `State` 列标注 + 选中后**阻断**并提示 |
 | 独立「退出」行 | 表格不再放 Exit 行 | `Esc` / `Ctrl-C` 退出，返回 `$null` |
 
-> **2026-10-30 补充**：tmux 管理器底部的新版实现是 Terminal.Gui `Shortcut` 快捷键栏（纯 TGUI 渲染，见 [tui-dashboard.md](tui-dashboard.md) §2）；本表此前的回退轨"单行动作条"已移除，其"纯控制台输出不受表格帮助区限制"的讨论随之失效。表格视图（主机选择器等仍存活的 PSTui 视图）内的按键说明仍由 PSTui 自带状态栏提供。
+> **2026-10-30 补充**：tmux 管理器底部是 Terminal.Gui `Shortcut` 快捷键栏（纯 TGUI 渲染，见 [tui-dashboard.md](tui-dashboard.md) §2）。表格视图（主机选择器等仍存活的 PSTui 视图）内的按键说明仍由 PSTui 自带状态栏提供。
 
 ## 性能特征（GridView 主轨）
 
@@ -173,4 +173,4 @@
 
 ## 删除会话的二次确认
 
-`Remove-TmuxSession` 在选中会话后、`tmux kill-session` 之前插入 [`Read-SpectreConfirm`](../../Modules/PwshSpectreConsole/2.6.3/PwshSpectreConsole.psm1) 阻断式确认（默认答案 `n`）。确认不可用（非交互终端）时**按「不删除」处理**，绝不默认放行。
+[`Invoke-TmuxSessionDeletion`](../../ShellPrompt/Private/Invoke-TmuxSessionDeletion.ps1) 在选中会话后、`tmux kill-session` 之前插入 [`Read-SpectreConfirm`](../../Modules/PwshSpectreConsole/2.6.3/PwshSpectreConsole.psm1) 阻断式确认（默认答案 `n`）。确认不可用（非交互终端）时**按「不删除」处理**，绝不默认放行。

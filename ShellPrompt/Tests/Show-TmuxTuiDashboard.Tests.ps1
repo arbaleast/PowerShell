@@ -7,9 +7,10 @@
 #   4. 快捷键绑定契约: BindKeyToApplication / Command=NotBound / Esc 不重复绑定;
 #   5. **Terminal.Gui 键盘注入**: Application.Begin + RaiseKeyDownEvent,
 #      Enter/N/Q 各自触发对应 Shortcut.Action 恰好一次(Goal 六-5);
-#   6. TG 键 -> 仓库键事件形状的桥接(ConvertTo-TguiKeyInfo);
-#   7. 业务动作分发(new/delete/refresh/attach/ssh, Goal 六-4);
-#   8. 非交互终端护栏 + 终端所有者还原(Goal 四)。
+#   6. 业务动作分发(new/delete/refresh/attach/ssh, Goal 六-4);
+#   7. 非交互终端护栏 + 终端所有者还原(Goal 四)。
+# 说明: 2026-10-31 死代码清理后, 旧键事件桥接(ConvertTo-TguiKeyInfo /
+#       Resolve-TmuxTuiKeyAction)已删除 —— TGUI 轨直接用 Shortcut.Action 传动作值。
 # 说明: 全部无头(不启真实 SSH / 不连远端); TG 侧只做 Begin/End 级别的注入。
 
 Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
@@ -367,23 +368,6 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
     }
 
     # -------------------------------------------------------------- 键桥接
-    Context 'TG 键 -> 仓库键事件桥接 (ConvertTo-TguiKeyInfo)' {
-
-        It 'Esc -> Escape/[char]27, 字母 -> 大写键名 + 小写字符' {
-            $esc = & $script:mod { ConvertTo-TguiKeyInfo -Key ([PSCustomObject]@{ KeyCode = 'Esc' }) }
-            $esc.Key | Should -BeExactly 'Escape'
-            [int][char]$esc.KeyChar | Should -Be 27
-
-            $letter = & $script:mod { ConvertTo-TguiKeyInfo -Key ([PSCustomObject]@{ KeyCode = 'N' }) }
-            $letter.Key | Should -BeExactly 'N'
-            [int][char]$letter.KeyChar | Should -Be 110
-
-            $enter = & $script:mod { ConvertTo-TguiKeyInfo -Key ([PSCustomObject]@{ KeyCode = 'Enter' }) }
-            $enter.Key | Should -BeExactly 'Enter'
-            [int][char]$enter.KeyChar | Should -Be 13
-        }
-    }
-
     # ---------------------------------------------------------- 业务动作分发
     Context '业务动作分发 (Invoke-TmuxTuiAction)' {
 

@@ -328,15 +328,9 @@ Describe 'Menu dispatchers' {
         }
     }
 
-    It 'Show-TmuxSessionList 不再提供 -Backend 参数' {
-        $cmd = & $script:mod { Get-Command -Name 'Show-TmuxSessionList' -CommandType Function }
-        $cmd | Should -Not -BeNullOrEmpty
-        $cmd.Parameters.ContainsKey('Backend') | Should -Be $false
-    }
-
     It 'GridView 实现函数应存在于模块私有作用域' {
         foreach ($name in @(
-                'Invoke-GridViewHostSelector', 'Invoke-GridViewSessionList')) {
+                'Invoke-GridViewHostSelector')) {
             $found = & $script:mod { param($n) [bool](Get-Command $n -CommandType Function -ErrorAction SilentlyContinue) } $name
             $found | Should -Be $true
         }
@@ -358,7 +352,7 @@ Describe 'Menu dispatchers' {
         # (那样会把模块私有函数一并列出来)
         $exported = @($script:mod.ExportedCommands.Keys)
         foreach ($name in @(
-                'Invoke-GridViewHostSelector', 'Invoke-GridViewSessionList',
+                'Invoke-GridViewHostSelector',
                 'Invoke-GridViewPrompt', 'Get-ConsoleUiBackend')) {
             $exported -contains $name | Should -Be $false
         }
