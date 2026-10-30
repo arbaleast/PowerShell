@@ -14,6 +14,11 @@
 #   - Get-WttrWeather (HTTP + 缓存)
 #   - Get-WttrWeatherDescMap (本目录同会话文件, 提供中英映射)
 
+# 标题区天气的端点 URL: 由 Get-WttrTitleSuffix 与 Submit-WttrPrefetch 共用。
+# 共用的意义: 后台预取写回缓存时用的 CacheKey 必须与同步路径完全一致,
+# 否则预取结果命中不了缓存, 首屏仍然要等一次 HTTP。
+$script:_WttrTitleUrl = 'https://wttr.in/?format=j1&lang=zh'
+
 function Get-WttrTitleSuffix {
     <#
     .SYNOPSIS
@@ -49,7 +54,10 @@ function Get-WttrTitleSuffix {
 
     # 一次 HTTP 拉 j1, 走 Get-WttrWeather 的缓存 + 错误兜底通道;
     # lang=zh 为礼貌性参数, 真正中文化靠下方客户端字典 (见上方端点选择动机)
-    $raw = Get-WttrWeather -Format CustomUrl -Url 'https://wttr.in/?format=j1&lang=zh' -CacheMinutes 10 -ErrorAction SilentlyContinue
+    # 2026-10-30: 先收割后台预取(Submit-WttrPrefetch)。预取已完成时结果直接进模块缓存,
+    # 这条同步路径随即命中缓存, 不再发 HTTP —— 标题区不因天气请求阻塞首屏。
+    $null = Receive-WttrPrefetch
+    $raw = Get-WttrWeather -Format CustomUrl -Url $script:_WttrTitleUrl -CacheMinutes 10 -ErrorAction SilentlyContinue
     if ([string]::IsNullOrWhiteSpace($raw)) {
         return ''
     }

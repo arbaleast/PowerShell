@@ -1,6 +1,6 @@
 # 🎛️ 交互菜单后端（PSTui GridView 单轨）
 
-`sss`（[`Start-TmuxSession`](../../ShellPrompt/Public/Start-TmuxSession.ps1)）里的**三个交互菜单（主机选择 / 全局操作菜单 / 会话列表）**是**单轨**的：唯一渲染实现是 [`Modules/PSTui`](../../Modules/PSTui/1.0.5/README.md) 的 `Out-ConsoleGridView` 表格视图（[`Invoke-GridViewMenu.ps1`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1)）。自研 ANSI 降级轨（`AnsiFallback`）已于 2026-10-18 整体移除；方案 A（2026-10-29）起，tmux 管理器以**真实会话列表为主界面**，全局操作菜单是其 Esc 后的轻量外层（见下文「交互流程」）。
+`sss`（[`Start-TmuxSession`](../../ShellPrompt/Public/Start-TmuxSession.ps1)）里的交互界面是**单轨**的：唯一渲染实现是 [`Modules/PSTui`](../../Modules/PSTui/1.0.5/README.md) 的 `Out-ConsoleGridView` 表格视图（[`Invoke-GridViewMenu.ps1`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1)）。自研 ANSI 降级轨（`AnsiFallback`）已于 2026-10-18 整体移除。**2026-10-30 TUI 重构后**，tmux 管理器只保留**一个表格面板**——会话主视图（正常态列会话，探测失败/无会话时列带错误码的占位面板），全局动作收敛为底部**单行动作条**（单字母键直达）；主机选择菜单与会话列表（删除流程用）维持不变。详见 [tmux 管理器 TUI 仪表盘](tui-dashboard.md)。
 
 主轨可用性检测由 [`Get-ConsoleUiBackend`](../../ShellPrompt/Private/Get-ConsoleUiBackend.ps1) 提供（`PSTui` 可发现性 / 同名命令冲突 / `Terminal.Gui` 主版本争用 / 交互式宿主），其中 `Backend` **恒为** `'GridView'`。
 
@@ -34,33 +34,39 @@
 
 ## 对外契约
 
-[`Show-HostSelector`](../../ShellPrompt/Private/Show-HostSelector.ps1) / [`Show-SessionManager`](../../ShellPrompt/Private/Show-SessionManager.ps1) / [`Show-TmuxSessionList`](../../ShellPrompt/Private/Show-TmuxSessionList.ps1) 是纯分发器，返回 `PSCustomObject`（`.Value` 为选中值，`$null` 表示用户取消）。调用方无需感知渲染实现细节。
+[`Show-HostSelector`](../../ShellPrompt/Private/Show-HostSelector.ps1) / [`Show-TmuxSessionDashboard`](../../ShellPrompt/Private/Show-TmuxSessionDashboard.ps1) / [`Show-TmuxSessionList`](../../ShellPrompt/Private/Show-TmuxSessionList.ps1) 是纯分发器，返回 `PSCustomObject`（`.Value` 为选中值，`$null` 表示用户取消）。调用方无需感知渲染实现细节。
 
-## 交互流程（方案 A, 2026-10-29 起）
+> 原 `Show-SessionManager` 分发器（及 `Get-GridViewManagerRow` / `Write-TmuxAvailabilityNotice`）已于 **2026-10-30** 随「全局操作菜单」一并删除，职责由 `Show-TmuxSessionDashboard` + `Show-TmuxActionBar` 接管。
 
-`sss` 进入主机后，**tmux 管理器主界面 = 真实会话列表**（`Show-TmuxSessionList`，标题「TMUX 管理器」）：
+## 交互流程（2026-10-30 TUI 重构起）
 
-- **Enter** 选中某个会话 → 立即对该会话执行附着/恢复（远端 `tmux has-session … && tmux attach -d … || tmux new-session -A …`，统一由 [`Invoke-TmuxAttach.ps1`](../../ShellPrompt/Private/Invoke-TmuxAttach.ps1) 执行）。
-- **Esc** 从会话列表进入**轻量全局操作菜单**（创建 / 刷新 / 直连 SSH / 删除，防呆语序：安全动作置顶、删除垫底）；全局操作菜单的 **Esc** 才是退出管理器。
-- 无会话或 tmux 探测失败时**不弹空表格**：先给出明确提示（区分"没有会话"与"数据获取失败"），再直接进入全局操作菜单。
-- "附着/恢复"不再是独立菜单动作——它只能针对列表中明确选中的会话执行。
+`sss` 进入主机后，tmux 管理器的界面结构为：**一个主视图 + 一行动作条**。
 
-## 全局操作菜单文案（Action ↔ Value）
+### tmux 会话主视图（单面板）
 
-全局操作菜单只有 **Action**（可见文案）与 **State**（状态徽章）两列，外加隐藏列 `Disabled` / `Value`。
+[`Show-TmuxSessionDashboard`](../../ShellPrompt/Private/Show-TmuxSessionDashboard.ps1) 是唯一主视图，标题形如 `TMUX 管理器 [debian] - 会话 2 (附 1 / 分 1)`，并在标题尾部拼上**单行工具条**（`[a]附着  [n]新建  [r]刷新  [s]SSH  [x]删除  [q]退出`）——表格打开期间键位也可见。
 
-> **说明列（Desc）已于 2026-10-19 删除**（与 Action 重复，释放约 16 字宽度）。文档中不再出现 Desc 列。
+- **有会话**时，行数据来自 `Get-TmuxSessionGridRow`（序号 / 会话名 / 状态 / 窗口数）。
+- **探测失败或无会话**时，行数据来自 `Get-TmuxPlaceholderRow`：**与正常态同构**（列名一致），`Session` 列给一句话说明，`State` 列给 `错误码 · 降级指引`（如 `E_SSH_TIMEOUT · 按 r 重试 · 按 s 直连 SSH`）。两条路径走**同一条** `Invoke-GridViewPrompt` 渲染路径，不存在第二套渲染实现。
+- **Enter** 选中某个会话 → 立即对该会话执行附着/恢复（统一由 [`Invoke-TmuxAttach.ps1`](../../ShellPrompt/Private/Invoke-TmuxAttach.ps1) 执行）。
+- **Esc** 从主视图进入底部单行动作条。
 
-> **行序即防呆（2026-10-30 起）**：GridView 焦点默认在表格（第 0 行吃 Enter 直达），因此**安全高频动作置顶、高危动作垫底**——「创建」永远是第 0 行，「删除」只在有会话时出现在最后一行；二次确认仍由 `Remove-TmuxSession` 用 `Read-SpectreConfirm` 阻断。State 徽章一律为「符号 + 两汉字」同构形态（含纯文本中性徽章），保证列宽对齐不空洞。
+### 底部单行动作条（单键）
 
-| 行序 | Action（可见文案） | Value（隐藏列，选中返回值） | State 徽章 |
-|----|--------|-------|------|
-| 0 | `创建新 tmux 会话` | `New` | `✓ 推荐` |
-| 1 | `刷新会话列表` | `Refresh` | `⟳ 手动` |
-| 2 | `直接 SSH 登录` | `Ssh` | `⚠ 备选` |
-| 3 | `删除 tmux 会话`（仅在有会话时） | `Remove` | `⚠ 危险` |
+[`Show-TmuxActionBar`](../../ShellPrompt/Private/Show-TmuxActionBar.ps1) 打印单行状态栏 `[TMUX] <工具条> > ` 并读取**一个**键：
 
-> 仅在有会话时才出现「删除」一行（无会话时菜单只含「创建」「SSH 登录」「刷新」）；附着操作**不在**此菜单。菜单实现见 [`Invoke-GridViewMenu.ps1`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1)，行构造见 [`Get-GridViewManagerRow.ps1`](../../ShellPrompt/Private/Get-GridViewManagerRow.ps1)。修改文案时在 `Get-GridViewManagerRow.ps1` 内调整。
+- 登记过的键 → 立即返回对应动作；
+- 未登记的键 → 提示一次并继续等待（最多 `-MaxAttempts` 次，默认 10）；
+- **ESC** 或无输入（非交互终端 / Ctrl-C）→ 退出管理器。
+
+动作条是**纯控制台输出**，不走表格视图；因此这里的内联 ANSI 会被终端真实解析，「删除」项可染成危险色（与 GridView 表格单元格内联 ANSI 会被剥离的行为不同）。
+
+键位契约的唯一事实来源是 [`Get-TmuxActionDefinition.ps1`](../../ShellPrompt/Private/Get-TmuxActionDefinition.ps1)，完整键位表与错误码表见 [tmux 管理器 TUI 仪表盘](tui-dashboard.md)。
+
+### 静默与降级
+
+- **成功路径不再输出任何 toast**（原 `[OK] 正在重新获取会话列表 ...` 已删除）；只有失败才提示。
+- **「确实没有会话」与「探测失败」严格区分**：前者渲染操作提示（按 `n` 新建 / 按 `r` 刷新 / 按 `s` 直连），后者渲染错误码 + 降级指引。失败**绝不会**折叠成空列表。
 
 ## 会话列表的「已附着 / 已分离」状态
 
@@ -87,23 +93,24 @@
 
 | 刷新入口 | 表现 |
 |---------|------|
-| 全局操作菜单的 `刷新会话列表`（方案 A 起的主流程） | 选中后重拉会话并**重新弹出会话列表**（每次弹出都取最新快照） |
+| 底部动作条的 `r` 键（2026-10-30 起的 tmux 管理器主流程） | 重拉会话并**重新弹出主视图**（每次弹出都取最新快照）；失败态下 `r` 的文案变为「重试」 |
 | 删除流程列表最后一行的 `⟳ 刷新会话列表` | 删除前**原地重绘**，避免基于过期列表误删 |
 
 刷新语义：
 
 - **仅由用户手动触发**。菜单打开期间**没有任何定时器 / 后台轮询**，不占用额外进程或线程，也不会在后台悄悄刷新。
 - 刷新会**重新执行一次 `tmux` 查询**，拿到最新的附着状态与窗口数，并据此重算「附 N / 分 M」。
-- 方案 A 起，tmux 管理器主界面的会话表格**不内嵌刷新行**（刷新属于全局操作，不伪装成会话数据行），刷新从 **Esc 后的全局操作菜单**进入；每次动作执行完毕回到循环顶部时也会自动重拉一次。
+- tmux 管理器主视图的会话表格**不内嵌刷新行**（刷新属于全局动作，不伪装成会话数据行），刷新从底部动作条的 `r` 键进入；每次动作执行完毕回到循环顶部时也会自动重拉一次。
+- **刷新是静默的**：成功路径不再输出任何 toast（原 `[OK] 正在重新获取会话列表 ...` 已删除），只有失败才提示。
 - 删除流程的列表仍保留表格内 `⟳ 刷新会话列表` 行（删除危险操作前强制看最新列表，语义与二次确认独立）。
 - 刷新后若已经没有可用会话，会给出告警（等价于「无可选会话」）。
 - **对外契约不变**：仍返回带 `.Value` 的 `PSCustomObject` 或 `$null`；刷新项通过独立的刷新标记（`.IsRefresh` / 内部哨兵值）区分，不会与真实会话名混淆。
 
 典型使用场景：
 
-- 你在另一个终端标签页 `tmux attach` 了某个会话 → 回到本终端打开会话列表 → Esc 进全局菜单选 `刷新会话列表` → State 列与「附 N / 分 M」立即更新。
+- 你在另一个终端标签页 `tmux attach` 了某个会话 → 回到本终端打开主视图 → `Esc` 进底部动作条按 `r` → State 列与「附 N / 分 M」立即更新。
 - 刚用 `tmux kill-session` 删掉了会话，但列表还显示旧记录 → 刷新一次即可看到最新结果。
-- 方案 A 的主流程里每次附着/创造/删除/直连结束都会**自动重拉**并重新弹出会话列表，多数情况下无需手动刷新。
+- 主流程里每次附着/新建/删除/直连结束都会**自动重拉**并重新弹出主视图，多数情况下无需手动刷新。
 
 ## 查看主轨检测结果（调试用）
 
@@ -165,6 +172,8 @@
 | `Disabled` 行灰显 | 不支持渲染禁用态 | `State` 列标注 + 选中后**阻断**并提示 |
 | 独立「退出」行 | 表格不再放 Exit 行 | `Esc` / `Ctrl-C` 退出，返回 `$null` |
 
+> **2026-10-30 补充**：tmux 管理器底部新增的**单行动作条**（`Show-TmuxActionBar`）是**纯控制台输出**（`Write-Host` 单行文本），不是表格视图的底部帮助区，因此不受"表格视图无底部帮助区"这条限制约束；表格内的按键说明仍由 PSTui 自带状态栏提供。
+
 ## 性能特征（GridView 主轨）
 
 | 维度 | `GridView` 主轨 |
@@ -175,7 +184,7 @@
 | 非交互终端 / stdin 重定向 | 分层处理：调用交互菜单前 `Assert-ConsoleUiReady` 检测到非交互宿主 → 抛**可定位终止错误**；若重定向绕过检测、`Out-ConsoleGridView` 运行时抛错 → 分发器**兜住异常**，`Write-Warning` 后返回 `$null`（不向调用方抛出） |
 | 单个菜单项渲染耗时 | 不适用 (表格单元格) |
 
-**结论**: 「ui 卡顿」问题已消解 —— 三个交互菜单**全部且仅**走 `GridView` 主轨, 逐行绝对定位覆盖的自研 ANSI 渲染实现已随降级轨一并移除, 相关的手写清屏、颜色表补全与三区布局代码均不再存在。
+**结论**: 「ui 卡顿」问题已消解 —— 交互菜单**全部且仅**走 `GridView` 主轨, 逐行绝对定位覆盖的自研 ANSI 渲染实现已随降级轨一并移除, 相关的手写清屏、颜色表补全与三区布局代码均不再存在。2026-10-30 TUI 重构只调整了信息结构（tmux 管理器收敛为**一个**主视图 + 一行动作条），**未引入第二套渲染实现**。
 
 > 真实交互终端的手感无法在自动化环境量化 (stdin 被重定向), 需人工验收：打开/移动/确认/取消各 1 轮、删除确认默认 `n`、空数据警告不弹窗。
 

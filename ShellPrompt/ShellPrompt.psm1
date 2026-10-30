@@ -14,6 +14,10 @@ if ((Test-Path -Path $repoModulesDir) -and `
     $env:PSModulePath = $repoModulesDir + [IO.Path]::PathSeparator + $env:PSModulePath
 }
 
+# Private 目录绝对路径: 后台线程任务(Submit-TmuxBackgroundTask)需要按文件名定位
+# 待 dot-source 的模块内文件 —— 线程作业是独立 runspace, 拿不到模块作用域。
+$script:ShellPromptPrivateDir = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
+
 # Load configuration first; $script:ShellPromptRoot 守束避免重复 dot-source
 if (-not (Get-Variable -Name 'ShellPromptRoot' -Scope Script -ErrorAction SilentlyContinue)) {
     . "$PSScriptRoot\Private\Initialize-Config.ps1"

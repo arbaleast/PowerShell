@@ -90,13 +90,20 @@ Describe 'Command Export' {
     It '不应导出单轨化后新增的内部实现函数' {
         $privateNames = @(
             'Invoke-GridViewPrompt', 'Invoke-GridViewHostSelector',
-            'Invoke-GridViewSessionManager', 'Invoke-GridViewSessionList',
-            'Get-GridViewColumnPlan', 'Get-GridViewHostRow', 'Get-GridViewManagerRow',
+            'Invoke-GridViewSessionList',
+            'Get-GridViewColumnPlan', 'Get-GridViewHostRow',
             'ConvertTo-GridViewPlainText', 'Get-GridViewRenderParam',
             'Get-TmuxSessionGridRow', 'Get-TmuxSessionStateText', 'Get-TmuxSessionSummary',
             'Restore-GridViewSelection', 'ConvertTo-TmuxRefreshSelection',
             'Get-TmuxRefreshedSession', 'Get-ConsoleUiBackend', 'Assert-ConsoleUiReady',
-            'Invoke-TmuxAttach', 'Invoke-TmuxSessionListView', 'ConvertTo-TmuxSessionSelection'
+            'Invoke-TmuxAttach', 'Invoke-TmuxSessionListView', 'ConvertTo-TmuxSessionSelection',
+            # 2026-10-30 TUI 重构: 单视图 + 单行动作条 + 后台取数的内部实现
+            'Show-TmuxSessionDashboard', 'Show-TmuxActionBar',
+            'Get-TmuxActionDefinition', 'Format-TmuxToolbarText',
+            'Resolve-TmuxActionKey', 'Read-TmuxActionKey',
+            'Get-TmuxSessionState', 'Get-TmuxErrorCode', 'Get-TmuxPlaceholderRow',
+            'Submit-TmuxBackgroundTask', 'Receive-TmuxBackgroundTask',
+            'Invoke-TmuxSessionFetch', 'Submit-WttrPrefetch', 'Receive-WttrPrefetch'
         )
         $exported = @(Get-Command -Module ShellPrompt | Select-Object -ExpandProperty Name)
         foreach ($name in $privateNames) {
@@ -410,65 +417,29 @@ Describe 'Get-GridViewHostRow (主机选择表格行)' {
     }
 }
 
-Describe 'Get-GridViewManagerRow (tmux 全局操作菜单表格行)' {
+Describe '已删除的全局操作菜单实现(2026-10-30 TUI 重构)' {
 
-    # 方案 A: 附着不再是菜单动作, 全局操作菜单只含 删除/创建/直连/刷新
-    It '无会话时只应保留 创建/直连/刷新 三行' {
-        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $false }
-        $rows.Count | Should -Be 3
-        $rows.Value | Should -Not -Contain 'Attach'
-        $rows.Value | Should -Not -Contain 'Remove'
-        $rows.Value | Should -Contain 'New'
+    # 原"全局操作菜单"是第二个表格面板, 与会话列表上下重复渲染。
+    # 重构后它被"唯一主视图 + 底部单行动作条"取代, 相关实现必须**不再存在**,
+    # 否则就可能出现两套并存的全局动作入口(用户看到两处入口 = 重构没做完)。
+    It '全局操作菜单相关实现不得再存在' {
+        foreach ($name in @(
+                'Show-SessionManager', 'Invoke-GridViewSessionManager',
+                'Get-GridViewManagerRow', 'Write-TmuxAvailabilityNotice')) {
+            $found = & $script:mod {
+                param($n) [bool](Get-Command $n -CommandType Function -ErrorAction SilentlyContinue)
+            } $name
+            $found | Should -BeFalse
+        }
     }
 
-    It '有会话时应包含 删除/创建/直连/刷新 四行, 且不再提供附着项' {
-        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true }
-        $rows.Count | Should -Be 4
-        $rows.Value | Should -Not -Contain 'Attach'
-        $rows.Value | Should -Contain 'Remove'
-        $rows.Value | Should -Contain 'New'
-        $rows.Value | Should -Contain 'Ssh'
-        $rows.Value | Should -Contain 'Refresh'
-        # 2026-10-19 P0: 锁定 Desc 列不再出现在 Manager 行对象上
-        $rows[0].PSObject.Properties.Name | Should -Not -Contain 'Desc'
-    }
-
-    It '防呆语序: 创建置顶, 删除垫底(高安全动作拿默认焦点)' {
-        # 2026-10-30 防呆修复: 默认 Focus='Table' 时第 0 行吃 Enter 直达,
-        # 高危的删除动作绝不能排第 0 行, 必须垫底。
-        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true }
-        $rows[0].Value | Should -Be 'New'
-        $rows[1].Value | Should -Be 'Refresh'
-        $rows[2].Value | Should -Be 'Ssh'
-        $rows[3].Value | Should -Be 'Remove'
-    }
-
-    It '非删除动作的 State 应为同构中性徽章(消除 State 列空洞)' {
-        # 2026-10-30: New/Refresh 原先是空串, 表格 State 列大段留白;
-        # 改为与 '⚠ 危险' 同构的「符号 + 两汉字」纯文本徽章(不带 ANSI)。
-        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true }
-        $new = @($rows | Where-Object { $_.Value -eq 'New' })[0]
-        $refresh = @($rows | Where-Object { $_.Value -eq 'Refresh' })[0]
-        $new.State | Should -Be '✓ 推荐'
-        $refresh.State | Should -Be '⟳ 手动'
-        $new.State | Should -Not -Match ([regex]::Escape([char]27))
-        $refresh.State | Should -Not -Match ([regex]::Escape([char]27))
-    }
-
-    It '删除动作应以 ⚠ 危险 标注危险语义' {
-        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true }
-        $remove = @($rows | Where-Object { $_.Value -eq 'Remove' })[0]
-        # P1.3: 危险文字现在包裹 Colors.Danger ANSI 码(已含 ESC), 用 -Match 兼容
-        $remove.State | Should -Match '⚠ 危险'
-        $remove.State | Should -Match '\[38;2;220;90;90m'
-    }
-
-    It '直连动作应以 ⚠ 备选 标注' {
-        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true }
-        $ssh = @($rows | Where-Object { $_.Value -eq 'Ssh' })[0]
-        # P1.3: 备选文字现在包裹 Colors.Warning ANSI 码, 用 -Match 兼容
-        $ssh.State | Should -Match '⚠ 备选'
-        $ssh.State | Should -Match '\[38;2;220;180;80m'
+    It '全局操作菜单相关源文件不得再出现在模块目录内' {
+        $privateDir = Join-Path $script:mod.ModuleBase 'Private'
+        foreach ($file in @(
+                'Show-SessionManager.ps1', 'Get-GridViewManagerRow.ps1',
+                'Write-TmuxAvailabilityNotice.ps1')) {
+            Test-Path (Join-Path $privateDir $file) | Should -BeFalse
+        }
     }
 }
 
@@ -871,9 +842,12 @@ Describe '单轨 GridView 契约 (单轨化回归防护)' {
         $keys | Should -Not -Contain 'Backend'
     }
 
-    It 'Show-SessionManager 不再提供 -Backend 参数' {
-        $keys = & $script:mod { (Get-Command Show-SessionManager).Parameters.Keys }
-        $keys | Should -Not -Contain 'Backend'
+    It '新的 UI 入口不再提供 -Backend 参数' {
+        # 2026-10-30: Show-SessionManager 已被 Show-TmuxSessionDashboard 取代
+        foreach ($name in @('Show-TmuxSessionDashboard', 'Show-TmuxActionBar')) {
+            $keys = & $script:mod { param($n) (Get-Command $n).Parameters.Keys } $name
+            $keys | Should -Not -Contain 'Backend'
+        }
     }
 
     It 'Show-TmuxSessionList 不再提供 -Backend 参数' {
@@ -918,9 +892,23 @@ Describe '单轨 GridView 契约 (单轨化回归防护)' {
         $privateDir = Join-Path $script:mod.ModuleBase 'Private'
         foreach ($file in @(
                 'Invoke-GridViewMenu.ps1', 'Get-GridViewColumnPlan.ps1',
-                'Get-GridViewHostRow.ps1', 'Get-GridViewManagerRow.ps1',
+                'Get-GridViewHostRow.ps1',
                 'Get-TmuxSessionGridRow.ps1', 'Get-TmuxSessionStateText.ps1',
                 'Get-ConsoleUiBackend.ps1')) {
+            Test-Path (Join-Path $privateDir $file) | Should -BeTrue
+        }
+    }
+
+    It 'TUI 重构新增的实现文件应存在于模块目录内' {
+        # 2026-10-30: 单主视图 + 单行动作条 + 后台取数的实现文件
+        $privateDir = Join-Path $script:mod.ModuleBase 'Private'
+        foreach ($file in @(
+                'Show-TmuxSessionDashboard.ps1', 'Show-TmuxActionBar.ps1',
+                'Get-TmuxActionDefinition.ps1', 'Format-TmuxToolbarText.ps1',
+                'Resolve-TmuxActionKey.ps1', 'Read-TmuxActionKey.ps1',
+                'Get-TmuxSessionState.ps1', 'Get-TmuxPlaceholderRow.ps1',
+                'Submit-TmuxBackgroundTask.ps1', 'Receive-TmuxBackgroundTask.ps1',
+                'Invoke-TmuxSessionFetch.ps1', 'Submit-WttrPrefetch.ps1')) {
             Test-Path (Join-Path $privateDir $file) | Should -BeTrue
         }
     }
