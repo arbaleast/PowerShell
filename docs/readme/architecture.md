@@ -29,7 +29,7 @@ PowerShell/
     ├── Settings.ScriptAnalyzer.psd1   # PSScriptAnalyzer 规则配置
     ├── CHANGELOG.md
     ├── LICENSE                        # MIT 协议
-    ├── Tests/                         # Pester 测试套件 (35 个条目: 29 个 *.Tests.ps1 + 2 个诊断脚本 + 3 个门禁入口 + 1 个基线, 2026-10-30 核对)
+    ├── Tests/                         # Pester 测试套件 (36 个条目: 29 个 *.Tests.ps1 + 3 个诊断脚本 + 3 个门禁入口 + 1 个基线, 2026-10-31 核对)
     │   ├── ConvertTo-TmuxTuiViewModel.Tests.ps1
     │   ├── Diag-TguiRender.ps1                     # 诊断脚本: 真机渲染测量
     │   ├── Diag-TguiResize.ps1                     # 诊断脚本: 真机缩放测量

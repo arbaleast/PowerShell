@@ -27,3 +27,8 @@
 # 见 Diag-TguiResize.ps1: TG 事件回调跨 runtime 会话执行, 诊断状态只能收进单一
 # $global:Tdiag 哈希表(与产线 $global:TguiPendingAction 同一设计)。
 # PSAvoidGlobalVars | ShellPrompt/Tests/Diag-TguiResize.ps1 | Found global variable 'global:Tdiag'. | 32
+
+# --- 2026-10-31 Diag-TguiKeys.ps1 真机按键取证脚本新增(lead): 局部条目 ---
+# 见 Diag-TguiKeys.ps1: TG 事件回调跨 runtime 会话执行, 按键流水只能收进
+# \$global:DiagJournal 列表(与产线 \$global:TguiPendingAction 同一设计)。
+# PSAvoidGlobalVars | ShellPrompt/Tests/Diag-TguiKeys.ps1 | Found global variable 'global:DiagJournal'. | 4
