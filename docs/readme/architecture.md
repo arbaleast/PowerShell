@@ -22,14 +22,14 @@ PowerShell/
 │   │   └── wttr.md                    # 菜单标题区天气约束
 │   ├── readme/                        # 用户手册分片（从 README 拆出, 一章一文件）
 │   │   ├── architecture.md / commands.md / configuration.md
-│   │   ├── features.md / gridview-menus.md / development.md
+│   │   ├── features.md / tui-dashboard.md / development.md
 └── ShellPrompt/                       # 模块根目录
     ├── ShellPrompt.psd1               # 模块清单 (ModuleVersion 2.0.0)
     ├── ShellPrompt.psm1               # 模块入口脚本
     ├── Settings.ScriptAnalyzer.psd1   # PSScriptAnalyzer 规则配置
     ├── CHANGELOG.md
     ├── LICENSE                        # MIT 协议
-    ├── Tests/                         # Pester 测试套件 (35 个文件: 29 个 *.Tests.ps1 + 3 个门禁/诊断入口 + 1 个基线, 2026-10-31 核对)
+    ├── Tests/                         # Pester 测试套件 (35 个条目: 29 个 *.Tests.ps1 + 2 个诊断脚本 + 3 个门禁入口 + 1 个基线, 2026-10-30 核对)
     │   ├── ConvertTo-TmuxTuiViewModel.Tests.ps1
     │   ├── Diag-TguiRender.ps1                     # 诊断脚本: 真机渲染测量
     │   ├── Diag-TguiResize.ps1                     # 诊断脚本: 真机缩放测量
@@ -51,11 +51,11 @@ PowerShell/
     │   ├── Invoke-TmuxAttach.Tests.ps1
     │   ├── Invoke-TmuxSessionDeletion.Tests.ps1
     │   ├── Invoke-WithProgress.Tests.ps1
+    │   ├── New-TguiHostSelectorWindow.Tests.ps1
     │   ├── New-TmuxTuiDashboardWindow.Tests.ps1
     │   ├── New-TmuxTuiSessionTable.Tests.ps1
     │   ├── New-TmuxTuiShortcutList.Tests.ps1
     │   ├── Read-TmuxConsoleLine.Tests.ps1
-    │   ├── Set-TgColorScheme.Tests.ps1
     │   ├── Set-TguiTheme.Tests.ps1
     │   ├── ShellPrompt.Tests.ps1
     │   ├── Show-TmuxTuiDashboard.Tests.ps1
@@ -65,14 +65,13 @@ PowerShell/
     │   ├── Tmux-SshFailure.Tests.ps1
     │   ├── Update-Weather.Tests.ps1
     │   └── pssa-warning-baseline.txt               # PSSA Warning 指纹基线
-    └── Private/                       # 内部辅助函数(不暴露给用户, 共 51 个 .ps1, 2026-10-31 核对)
+    └── Private/                       # 内部辅助函数(不暴露给用户, 共 49 个 .ps1, 2026-10-30 核对)
         ├── ConvertTo-SshArgumentLine.ps1      # SSH 命令行参数拼接
         ├── ConvertTo-SshEscapedString.ps1     # SSH 单引号转义
         ├── ConvertTo-TmuxTuiViewModel.ps1     # 仪表盘视图模型(状态区 + 表格数据)
         ├── Enter-TmuxAlternateScreen.ps1      # 进入备用屏(TGUI 持有终端时静音)
-        ├── Get-ConsoleUiBackend.ps1           # 菜单主轨可用性检测 (GridView) + Assert-ConsoleUiReady
-        ├── Get-GridViewColumnPlan.ps1         # GridView 列可见性与 keyColumn 规划
-        ├── Get-GridViewHostRow.ps1            # GridView 主机选择行构造
+        ├── Get-ConsoleUiBackend.ps1           # Terminal.Gui v2 ALC 就绪检测(Backend 恒 'TerminalGui') + Assert-ConsoleUiReady
+        ├── Get-HostSelectorRow.ps1            # 主机选择行构造(LastHost 置顶 + State 标注)
         ├── Get-HostSelectorStateText.ps1      # 主机选择行状态文案(如 ★ 最近)
         ├── Get-SpinnerStyleMapping.ps1        # ShellPrompt 样式名 → Spectre.Spinner.Known 成员名
         ├── Get-SshArgs.ps1                    # SSH 参数生成器
@@ -81,20 +80,20 @@ PowerShell/
         ├── Get-TmuxActionDefinition.ps1       # 仪表盘动作定义(键位/文案/动作值唯一事实源)
         ├── Get-TmuxSessionState.ps1           # 会话可用性与状态判定(Available/Error/ExitCode)
         ├── Get-TmuxSessions.ps1               # 远程 tmux 探测与列表
-        ├── Get-WttrTitleSuffix.ps1            # 菜单标题区 wttr 后缀拼装 (j1 端点 + 中文映射)
+        ├── Get-WttrTitleSuffix.ps1            # TGUI 标题行 wttr 后缀拼装 (j1 端点 + 中文映射)
         ├── Get-WttrWeather.ps1                # wttr.in 天气查询 (纯函数, 10 分钟缓存)
         ├── Get-WttrWeatherDescMap.ps1         # wttr 天气描述 → 中文内置字典 (42 条)
         ├── Initialize-Config.ps1              # 配置初始化与缓存
         ├── Initialize-FnmEnvironment.ps1      # fnm 环境缓存初始化 (fnm-env.json)
-        ├── Initialize-GridViewColorScheme.ps1 # GridView 配色初始化(失败仅告警)
-        ├── Invoke-GridViewMenu.ps1            # GridView 主轨菜单(主机选择器, 标题区追加单行天气)
         ├── Invoke-SshCaptureOutput.ps1        # SSH 异步输出捕获
         ├── Invoke-SshCommand.ps1              # SSH 命令调度(主线逻辑)
+        ├── Invoke-TguiHostSelector.ps1        # 主机选择器 TGUI 编排(过滤 → 组装 → Init → Run → Shutdown)
         ├── Invoke-TmuxAttach.ps1              # tmux 会话附着/恢复执行
         ├── Invoke-TmuxSessionDeletion.ps1     # 删除 tmux 会话的唯一屏障(二次确认 + kill-session)
         ├── Invoke-TmuxSessionFetch.ps1        # 后台取数(远程 tmux 探测与会话列表)
         ├── Invoke-TmuxTuiAction.ps1           # 仪表盘业务动作分发
         ├── Invoke-WithProgress.ps1            # 进度封装 (Spectre 单轨)
+        ├── New-TguiHostSelectorWindow.ps1     # 主机选择器整窗组装(标题/搜索框/主机表/提示行, 无头可测)
         ├── New-TmuxSession.ps1                # 创建新 tmux 会话
         ├── New-TmuxTuiColumnPlan.ps1          # 仪表盘表格列裁剪计划
         ├── New-TmuxTuiDashboardWindow.ps1     # 仪表盘窗口(表格 + 快捷键栏)构造
@@ -106,11 +105,10 @@ PowerShell/
         ├── Receive-TmuxBackgroundTask.ps1     # 后台取数任务结果回收
         ├── Reset-TerminalMode.ps1             # 终端编码/TERM 恢复
         ├── Resolve-ColorTable.ps1             # 统一颜色表解析(调用方覆盖 → 缓存 → 配置层默认值)
-        ├── Restore-GridViewSelection.ps1      # GridView 选中项归一化与隐藏字段恢复
+        ├── Resolve-TguiThemeName.ps1          # UI.Theme 名称规范化(未知名回退默认)
         ├── Save-OriginalTerminalState.ps1     # 终端状态保存
-        ├── Set-TgColorScheme.ps1              # Terminal.Gui Scheme 配色
-        ├── Set-TguiTheme.ps1                  # Terminal.Gui 主题设置
-        ├── Show-HostSelector.ps1              # 主机选择菜单(分发器, 固定 GridView 主轨)
+        ├── Set-TguiTheme.ps1                  # Terminal.Gui 主题设置 (ALC 原生, 唯一配色路径)
+        ├── Show-HostSelector.ps1              # 主机选择菜单(分发器, Terminal.Gui v2 TGUI)
         ├── Show-TmuxTuiDashboard.ps1          # TGUI 仪表盘编排(sss 唯一渲染轨)
         ├── Submit-TmuxBackgroundTask.ps1      # 后台取数任务提交
         ├── Submit-WttrPrefetch.ps1            # 天气预取任务提交
@@ -199,7 +197,7 @@ PowerShell 启动
 
 spinner 与 ScriptBlock 进度动画在 v2.0 起改为 **单轨 Spectre.Console 架构**。模块清单声明 `PowerShellVersion = '7.6'`，`PwshSpectreConsole` 是**硬依赖**（缺失即 `ShellPrompt.psm1` 抛终止错误，不做静默降级）。
 
-> **重要区分**: 进度动画是**单轨 Spectre**, 交互菜单是**单轨 GridView (PSTui)**, 见 [交互菜单后端](gridview-menus.md)。Spectre.Console **不负责菜单渲染**, 只负责 spinner、进度动画与删除会话的二次确认(`Read-SpectreConfirm`); 菜单按键提示行已于 2026-10-19 撤回(`Write-GridViewHint` 已于 2026-10-29 删除), 按键说明由 PSTui 自带状态栏提供。
+> **重要区分**: 进度动画是**单轨 Spectre**, 交互式 UI 是**单轨 Terminal.Gui v2**(vendored `Modules/Terminal.Gui/2.4.10/`, 见 [tmux 管理器 TUI 仪表盘](tui-dashboard.md))。Spectre.Console **不负责交互式 UI 渲染**, 只负责 spinner、进度动画与删除会话的二次确认(`Read-SpectreConfirm`); 历史上挂在菜单上的按键提示行已于 2026-10-19 撤回(`Write-GridViewHint` 已于 2026-10-29 删除), 交互式 UI 的键位说明现由各 TGUI 自带的提示行/快捷键栏承担。
 
 | 路径 | 渲染后端 | 触发条件 | 存在原因 |
 |------|----------|----------|----------|

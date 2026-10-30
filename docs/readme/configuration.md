@@ -16,7 +16,9 @@ $HOME/.ShellPrompt/config.ps1
 
 ## 配置项
 
-配置共 **5 个域**：本页收录 `Paths` / `Colors` / `SSH`；`Weather` 域见 [功能特点·天气](features.md#-交互菜单标题区天气)，`UI` 域（`GridViewFocus` / `GridViewFullScreen` / `Theme`）见 [交互菜单后端](gridview-menus.md#配置项home shellpromptconfigps1)。
+配置共 **5 个域**：本页收录 `Paths` / `Colors` / `SSH`；`Weather` 域见 [功能特点·天气](features.md#-交互菜单标题区天气)，`UI` 域（`UI.Theme`，TGUI 配色槽位）见 [tmux 管理器 TUI 仪表盘](tui-dashboard.md#27-配置)。
+
+> **2026-10-30 迁移**：`UI.GridViewFocus` / `UI.GridViewFullScreen` / `UI.DashboardTuiEnabled` / `UI.DashboardFullScreen` 已随 PSTui 轨与自研回退轨一并移除, `UI` 域当前只剩 `UI.Theme`。旧键残留在 `config.ps1` 里无害（静默忽略）。
 
 > 下表「状态」列标注该键**当前是否有消费方**（2026-10-29 核对）。
 >

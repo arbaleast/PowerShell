@@ -22,8 +22,10 @@ CI 强制以下四条不变量，任何一条不满足都会让 CI 变红：
 - **测试分类**:
   - **单元测试**: `Get-*` / `Set-*` / `Test-*` / `Format-*` / `Connect-*` 等纯函数或近纯函数,
     每个被测函数至少 3-5 条用例(命中、未命中、错误兜底)。
-  - **集成测试**: `Invoke-GridViewMenu` / `Show-*` 分发器 / `Start-TmuxSession`,
-    覆盖多函数协作(列裁剪 + 颜色方案 + 隐藏字段恢复等)。
+  - **集成测试**: `Invoke-TguiHostSelector` / `Show-*` 分发器 (`Show-HostSelector` / `Show-TmuxTuiDashboard`) / `Start-TmuxSession`,
+    覆盖多函数协作(整窗组装 + 配色方案 + 键位分发等)。
+    归属护栏用例: `Get-TguiContext.Tests.ps1` 断言 vendored Terminal.Gui 只在 `Modules/Terminal.Gui/<ver>/` **单副本**;
+    `Get-ConsoleUiBackend.Tests.ps1` 断言 `Backend` 恒为 `'TerminalGui'`(AnsiFallback / PSTui GridView 轨均已移除)。
   - **行为测试**: `Update-Weather` / `Copy-SshPublicKey` / `Invoke-TmuxSessionDeletion` 等含 I/O 副作用的函数,
     仅断言"不抛"与"关键调用次数", 不强求输出文本(避免改文案就碎套)。
 
@@ -72,7 +74,7 @@ CI 强制以下四条不变量，任何一条不满足都会让 CI 变红：
   - `README.md`: 新增 / 修改 / 弃用命令必须给最小可运行示例。
   - `docs/agents/architecture.md`: 模块加载顺序 / 单轨菜单 / Phase 1 加载清单 / 启动期时序变更时必须更新。
   - `AGENTS.md` + `docs/readme/*`: README 已拆分, 用户可见变更按主题改对应分片
-    (commands / configuration / features / architecture / gridview-menus), 不要写回 README 本体。
+    (commands / configuration / features / architecture / tui-dashboard), 不要写回 README 本体。
   - PR 描述: 新的用户可见变更写进 PR 描述(替代 CHANGELOG 条目)。
 - **CHANGELOG 政策**: `ShellPrompt/CHANGELOG.md` **已收拢为存根**（2026-10-29）—— 历史段曾永久丢失,
   冻结前的条目描述的是当时已撤销 / 已移除的实现, 正文已由 git 历史替代。
@@ -83,9 +85,9 @@ CI 强制以下四条不变量，任何一条不满足都会让 CI 变红：
 - **必标场景**: 涉及 **profile 加载 / SSH / tmux / prompt 渲染** 的改动,
   必须在 **PR 描述**中标注 `[人工测试必做]`(CHANGELOG 已冻结, 不进 CHANGELOG)。
 - **最小真机验证集**:
-  - 重启 pwsh 跑 `sss` / `Start-TmuxSession`, 标题区应仍显示 `城市名: 中文描述 +温度°C`
+  - 重启 pwsh 跑 `sss` / `Start-TmuxSession`, SSH 主机选择器的 TGUI 标题行应仍显示 `城市名: 中文描述 +温度°C`
     (Get-WttrTitleSuffix 拆分前后行为必须完全一致)。
-  - SSH 主机选择菜单 / tmux 会话列表 / tmux 管理器三种菜单各 1 轮交互。
+  - SSH 主机选择菜单 / tmux 管理器两处交互式 UI 各 1 轮交互(完整走一遍过滤与选行/取消路径)。
   - 用一个**测试用** tmux 会话验证删除路径: 删除成功显示 `[OK]`, **失败(例如会话名不存在)必须显示警告且不显示 `[OK]`**。
   - Starship prompt 渲染正常, 无 ANSI 颜色错位或 escape 残留。
 

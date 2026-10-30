@@ -12,11 +12,11 @@
 |---|---|---|
 | **Terminal.Gui 轨**（唯一） | **独立的 Terminal.Gui v2 应用**（`Show-TmuxTuiDashboard`） | 现行实现，真机验收通过（2026-10-30 `5d5daac`） |
 
-> 仪表盘**只有这一条轨**：仓库中不存在第二条仪表盘渲染路径，也没有与之配套的渲染开关配置。**PSTui 依赖本身保留**——SSH 主机选择器与其他菜单仍走 PSTui GridView。
+> 仪表盘**只有这一条轨**：仓库中不存在第二条仪表盘渲染路径，也没有与之配套的渲染开关配置。**PSTui 依赖本身已同日（2026-10-30）随 `Modules/PSTui` 删除**——SSH 主机选择器也已迁至这一条 vendored Terminal.Gui v2 轨（见下）。
 
-- Terminal.Gui 轨是**独立应用**，不是"套了 Terminal.Gui 装饰的 GridView"：Terminal.Gui 自己负责布局、绘制、表格、选择、键盘、缩放与状态栏；仓库既有的 PowerShell 业务层（`Invoke-TmuxSessionFetch` / `Get-TmuxSessionState` / `Invoke-TmuxAttach` / `New-TmuxSession` / `Invoke-TmuxSessionDeletion` / `Invoke-SshCommand`）继续负责 SSH 与 tmux，**Terminal.Gui 不重写任何 SSH/tmux 逻辑**。
-- PSTui 链路、`Invoke-GridViewPrompt` 与 SSH 主机选择器（[`Show-HostSelector`](../../ShellPrompt/Private/Show-HostSelector.ps1)）**都保留**；主机选择器仍是 PSTui 表格，不在本次迁移范围内。
-- GridView 轨的其它 `Out-ConsoleGridView` 能力（全局操作菜单等）不迁移。
+- Terminal.Gui 轨是**独立应用**，不是"套了 Terminal.Gui 装饰的表格弹窗"：Terminal.Gui 自己负责布局、绘制、表格、选择、键盘、缩放与状态栏；仓库既有的 PowerShell 业务层（`Invoke-TmuxSessionFetch` / `Get-TmuxSessionState` / `Invoke-TmuxAttach` / `New-TmuxSession` / `Invoke-TmuxSessionDeletion` / `Invoke-SshCommand`）继续负责 SSH 与 tmux，**Terminal.Gui 不重写任何 SSH/tmux 逻辑**。
+- SSH 主机选择器（[`Show-HostSelector`](../../ShellPrompt/Private/Show-HostSelector.ps1)）已同日迁至同一 vendored Terminal.Gui v2 轨，与仪表盘共用"组装层 + 编排层"拆分（`New-TguiHostSelectorWindow` / `Invoke-TguiHostSelector`）；原 PSTui 链路与 `Invoke-GridViewPrompt` 随 `Modules/PSTui` 删除。
+- 原 GridView 轨的其余 `Out-ConsoleGridView` 能力不迁入：会话删除改走仪表盘当前选中行，不再弹嵌套列表；tmux 会话列表菜单已不存在。
 
 下文第二章描述 Terminal.Gui 轨的运行契约，第三章给出 vendored 依赖（Terminal.Gui）的归属结论。
 
@@ -28,7 +28,7 @@
 
 Terminal.Gui 从仓库内置的 vendored 程序集加载：
 
-- 载入源：`Modules/PSTui/<最高版本目录>/Terminal.Gui.dll`（版本钉 **2.4.10.0**）。
+- 载入源：`Modules/Terminal.Gui/<最高版本目录>/Terminal.Gui.dll`（版本钉 **2.4.10.0**；2026-10-30 自 `Modules/PSTui/1.0.5/` 迁出，全仓库单副本）。
 - 载入方式：**独立可回收 `AssemblyLoadContext`**（[`Get-TguiContext`](../../ShellPrompt/Private/Get-TguiContext.ps1)），带路径解析回调连带加载同目录依赖（`System.IO.Abstractions` / `Wcwidth` / `ColorHelper`）。
 - 该上下文是**幂等**的：首次调用加载并缓存，后续复用；依赖或程序集缺失时抛可定位的终止错误，不静默降级。
 - Terminal.Gui 的 **vendored 归属**（是否拆成独立依赖目录、版本如何管）见 [第三章](#三vendored-依赖归属terminal-gui-放哪)。
@@ -117,12 +117,9 @@ Terminal.Gui 2.4.10 上踩过并固化的三条规则：
 
 ### 2.7 配置
 
-| 键 | 默认值 | 作用 |
-|----|--------|------|
-| `UI.GridViewFocus` | `'Table'` | GridView 初始焦点（主机选择器等 PSTui 视图） |
-| `UI.GridViewFullScreen` | `$false` | PSTui 弹窗是否全屏渲染 |
+`UI` 域当前只剩 **`UI.Theme`**（TGUI 配色槽位，见 [`Private/Initialize-Config.ps1`](../../ShellPrompt/Private/Initialize-Config.ps1)）。
 
-> 原 `UI.DashboardTuiEnabled` / `UI.DashboardFullScreen` 已随回退轨移除（2026-10-30）。
+> 原 `UI.GridViewFocus` / `UI.GridViewFullScreen` / `UI.DashboardTuiEnabled` / `UI.DashboardFullScreen` 均已随 PSTui 轨与自研回退轨移除（2026-10-30）；旧键残留在 `config.ps1` 里无渲染开关效果（静默忽略），无害。
 
 > `UI` 域是 `[ordered] OrderedDictionary`，条目**不是 PowerShell 属性**：判键存在要用 `.Contains('X')`，取值用 `['X']`——用 `.PSObject.Properties['X']` 判存在恒为 `$null`，开关会永远不生效。
 
@@ -132,11 +129,11 @@ Terminal.Gui 2.4.10 上踩过并固化的三条规则：
 
 ### 2.9 配色契约（ALC 原生主题）
 
-**Terminal.Gui 轨必须自带一套主题装配**，不能沿用 PSTui 轨的 `Set-TgColorScheme`：
+**Terminal.Gui 轨必须自带一套主题装配**，不沿用默认加载上下文 `Add-Type` 轨的旧 `Set-TgColorScheme`（该函数已随 PSTui 于 2026-10-30 删除，现役唯一配色路径就是 ALC 原生 `Set-TguiTheme`）：
 
 | 事项 | 事实 |
 |------|------|
-| 载入方式不同 | PSTui 轨经 `Add-Type` 走**默认加载上下文**；仪表盘轨走**独立 ALC**（§2.1）。同名类型跨程序集是**两套类型身份**，互相赋值抛 `Cannot convert ... Scheme to ... Scheme` |
+| 载入方式不同 | 旧默认加载上下文轨（`Add-Type`）已随 PSTui 删除；仪表盘与主机选择器走**独立 ALC**（§2.1）。同名类型跨程序集是**两套类型身份**，互相赋值抛 `Cannot convert ... Scheme to ... Scheme` |
 | 内置 `Base` 方案不可见 | 实测 `SchemeManager.GetScheme('Base').Normal` = 前景 `(255,255,255)` / 背景 `(255,255,255)` —— **白对白，文字隐形**；`'ansi'` 驱动不做终端颜色探测，故该状态恒定 |
 | 视图默认方案名不统一 | `Window → 'Base'`、`StatusBar → 'Menu'`、`Label` / `TableView → ''`（回退 `'Base'`） |
 
@@ -186,55 +183,56 @@ $runArgs[1] = $errorHandler
 
 | 事项 | 实测值 / 事实 |
 |------|------|
-| Terminal.Gui 版本 | **2.4.10.0**，vendored 于 `Modules/PSTui/1.0.5/Terminal.Gui.dll`（**已入版本库**，版本固定） |
-| PSTui 版本 | 1.0.5（**保留**：SSH 主机选择器与其他菜单仍走 PSTui GridView，见 §一） |
+| Terminal.Gui 版本 | **2.4.10.0**，vendored 于 `Modules/Terminal.Gui/2.4.10/`（**已入版本库**，全仓库单副本；2026-10-30 自 `Modules/PSTui/1.0.5/` 迁出） |
+| PSTui | **已删除**（2026-10-30）—— SSH 主机选择器亦已迁至本轨 Terminal.Gui v2（见 §一） |
 | 模块导入耗时 | ≈ **207 ms**（冷导入，`-NoProfile`） |
-| 导入后是否已加载 TG/PSTui | **否** —— 惰性加载，模块导入**不**给 Shell 启动增加负担 |
+| 导入后是否已加载 TG | **否** —— 惰性加载，模块导入**不**给 Shell 启动增加负担 |
 | `Get-TguiContext` 首次 / 二次 | **28.9 ms** / **1.2 ms**（ALC 与 TG 反射句柄有缓存） |
 | 仪表盘窗口组装 | 首次 ≈ **840 ms**（TG 静态初始化 + JIT，一次性），稳态 ≈ **30–45 ms** |
-| CI 触发路径 | `ShellPrompt/**`、`Modules/**`、`Microsoft.PowerShell_profile.ps1`、workflow 本身 —— vendored 依赖（`Modules/PSTui/1.0.5/Terminal.Gui.dll` 等）变更同样会改变仪表盘行为，故 `Modules/**` 必须触发 CI。⚠️ 该路径补齐已本地提交（`e415424`），**尚待有 `workflow` scope 的凭据推上**——OAuth 凭据缺该 scope 时 GitHub 会整体拒绝含 workflow 变更的推送 |
+| CI 触发路径 | `ShellPrompt/**`、`Modules/**`、`Microsoft.PowerShell_profile.ps1`、workflow 本身 —— vendored 依赖（`Modules/Terminal.Gui/2.4.10/` 的 DLL 等）变更同样会改变仪表盘行为，故 `Modules/**` 必须触发 CI。⚠️ 该路径补齐已本地提交（`e415424`），**尚待有 `workflow` scope 的凭据推上**——OAuth 凭据缺该 scope 时 GitHub 会整体拒绝含 workflow 变更的推送 |
 
 ---
 
 ## 三、vendored 依赖归属（Terminal.Gui 放哪）
+
+> **2026-10-30 更新**：PSTui 已整体删除，Terminal.Gui 随之迁到**独立目录** `Modules/Terminal.Gui/<ver>/`（当年评估记录里的方案 B）。下表为**现状**；§3.2 的三方案评估作为历史决策记录保留（方案 A 的"与 PSTui 同目录"前提已失效）。
 
 ### 3.1 现状（事实）
 
 | 事实 | 值 |
 |------|---|
 | Terminal.Gui 版本 | **2.4.10.0**（`AssemblyVersion` = `AssemblyFileVersion`），目标框架 `.NETCoreApp,v10.0` |
-| vendored 位置 | `Modules/PSTui/1.0.5/Terminal.Gui.dll` —— **单一副本**，随 PSTui 1.0.5 一同入版本库 |
-| 同目录托管依赖 | `ColorHelper` / `JetBrains.Annotations` / `Markdig` / `Microsoft.Extensions.DependencyInjection.Abstractions` / `Microsoft.Extensions.Logging.Abstractions` / `Onigwrap` / `System.IO.Abstractions` 系列 / `Testably.Abstractions.FileSystem.Interface` / `TextMateSharp(.Grammars)` / `Wcwidth`（与 TG 同目录，共 13 个依赖 DLL） |
-| 消费方 A | PSTui 1.0.5 的 GridView（`Out-ConsoleGridView`）—— **默认加载上下文**；TG 必须与 `PSTui.dll` 同目录才能被模块作用域程序集解析命中 |
-| 消费方 B | `sss` 仪表盘 —— **独立可回收 ALC**（`ShellPrompt-Tgui`），依赖按"同目录同名文件"回载 |
-| 同进程内的 TG 类型身份 | **两套**（默认上下文 / `ShellPrompt-Tgui`），同名类型不可互赋值（见 §2.9） |
+| vendored 位置 | `Modules/Terminal.Gui/2.4.10/` —— **单一副本**，独立版本目录入版本库（2026-10-30 纯 rename 自 `Modules/PSTui/1.0.5/` 迁出，无内容变更） |
+| 同目录托管依赖 | `ColorHelper` / `JetBrains.Annotations` / `Markdig` / `Microsoft.Extensions.DependencyInjection.Abstractions` / `Microsoft.Extensions.Logging.Abstractions` / `Onigwrap` / `System.IO.Abstractions` 系列 / `Testably.Abstractions.FileSystem.Interface` / `TextMateSharp(.Grammars)` / `Wcwidth`（共 13 个依赖 DLL，随目录一并迁入） |
+| 消费方 | `sss` 仪表盘与 SSH 主机选择器 —— **独立可回收 ALC**（`ShellPrompt-Tgui`），依赖按"同目录同名文件"回载 |
+| 同进程内的 TG 类型身份 | **一套**（`ShellPrompt-Tgui` ALC）；原"默认上下文第二套"已随 PSTui 删除，不存在 |
 
-### 3.2 结论：**不独立管理** —— Terminal.Gui 与 PSTui 同目录、单副本
+### 3.2 结论：**独立目录、单副本**（2026-10-30 起）
 
-评估过三种布局：
+当年（PSTui 仍在时代）评估过三种布局，评估记录保留如下；"维持现状（方案 A）"的 **PSTui 前提已随 PSTui 删除失效**，采用的是其中的方案 B：
 
 | 方案 | 后果 | 判定 |
 |------|------|------|
-| **A. 维持现状**（TG 与 PSTui 同目录，单副本） | 两条消费路径加载**同一个文件**，版本必然一致；无重复体积 | ✅ **采用** |
-| B. TG 移到 `Modules/Terminal.Gui/<ver>/`，PSTui 目录留副本 | 两份 TG 二进制进版本库（+9 MB），版本漂移不可见；"哪份才是真的"对后来者是坑 | ❌ 不采用 |
-| C. TG 移到独立目录，默认上下文预加载后给 PSTui 用 | PSTui 的 GridView 改为依赖"别处预加载的程序集"——**新的失败模式**（预加载失败即主机选择器失效）；仪表盘 ALC 仍要自己再载一份 | ❌ 不采用 |
+| A. 维持现状（TG 与 PSTui 同目录，单副本） | 两条消费路径加载**同一个文件**，版本必然一致；无重复体积 | ✅ 当年采用；2026-10-30 PSTui 删除后**失效** |
+| B. TG 移到 `Modules/Terminal.Gui/<ver>/`，PSTui 目录留副本 | 两份 TG 二进制进版本库（+9 MB），版本漂移不可见；"哪份才是真的"对后来者是坑 | ❌ 当年不采用；**PSTui 删除后即为现状**（PSTui 目录不复存在，无"第二份"问题） |
+| C. TG 移到独立目录，默认上下文预加载后给 PSTui 用 | PSTui 的 GridView 改为依赖"别处预加载的程序集"——**新的失败模式**（预加载失败即主机选择器失效）；仪表盘 ALC 仍要自己再载一份 | ❌ 不采用（该失败模式随 ALC 化主机选择器一并消失） |
 
-判定依据：
+现行格局的判定依据：
 
-1. **PSTui 对 Terminal.Gui v2 是硬依赖**，且走**二进制模块的模块作用域解析**：`Terminal.Gui.dll` 必须与 `PSTui.dll` 同目录。搬走它等于把"主机选择器能否弹出"押在一个新的预加载环节上。
-2. 仪表盘轨的 ALC **已经**从同一目录按同目录规则解析依赖，**无需改任何加载方式**即可与 PSTui 共用单副本；两套类型身份是 ALC 隔离的必然结果，不是"两份文件"的副作用。
+1. **TG 是全仓唯一的交互式 UI 依赖**，独立版本目录 + 独立 ALC 的组合天然满足"单副本、版本钉死、类型身份一致"。
+2. ALC 从独立目录按同目录规则解析依赖；"主机选择器能否弹出"由 [`Get-ConsoleUiBackend`](../../ShellPrompt/Private/Get-ConsoleUiBackend.ps1) 的 vendored 目录探测显式兜底，不再是隐式的程序集预加载。
 3. 版本耦合的风险由**显式失败**兜住：加载器对核心类型面逐项探针，vendored 版本一变就抛 `TGUI 载入失败: Terminal.Gui 中缺少核心类型 …`，并指回 [`Get-TguiContext.ps1`](../../ShellPrompt/Private/Get-TguiContext.ps1) 头部的 API 面记录（§2.1）——不是静默半屏。
 
-> 因此**不做 DLL 迁移**：既不改 vendored 目录结构，也不改程序集加载方式。
+> 因此**不做回迁**：不改 vendored 目录结构，也不改程序集加载方式。
 
 ### 3.3 升级 Terminal.Gui 的固定动作
 
-1. 替换 `Modules/PSTui/<ver>/` 下的 TG 与同目录依赖；
+1. 替换 `Modules/Terminal.Gui/<ver>/` 下的 TG 与同目录依赖；
 2. 重跑反射探针，逐条核对 `Get-TguiContext.ps1` 头部的 API 面记录；
 3. 同步本文件 §2.1 / §3.1 的版本与依赖清单；
 4. 跑三道门禁（Pester / PSScriptAnalyzer / Profile 冒烟）。
 
-> 护栏：`ShellPrompt/Tests/Get-TguiContext.Tests.ps1` 断言仪表盘加载的 TG **就是** PSTui 同目录的那一份（单副本不变量）。有人把 TG 拆出去时该断言会失败，强制走一次显式决策。
+> 护栏：`ShellPrompt/Tests/Get-TguiContext.Tests.ps1` 断言 TG 就在 `Modules/Terminal.Gui/<ver>/` **独立目录单副本**（有人引入第二份 `Terminal.Gui.dll`、或把 TG 迁回任何其他目录时该断言失败，强制走一次显式决策）。
 
 ## 四、错误码表
 
@@ -272,7 +270,7 @@ $runArgs[1] = $errorHandler
 - 仪表盘当前**只有一条轨**（见 §一）；若真机再出问题，历史实现走 git 历史回查，不留在工作树。
 
 - **终端宽度下限 40 列**：仪表盘按 **40×10** 起步（`New-TmuxTuiDashboardWindow` 的 `ValidateRange` 与编排层的屏幕夹取一致）。真实终端窄于 40 列时，仪表盘会按 40 列布局 ⇒ **该极端场景存在横向溢出**。宽度 ≥ 72 列起隐藏 WINDOWS 列、≥ 96 列起隐藏 STATUS 列（见 §2.4），三档目标尺寸（100×30 / 120×35 / 160×45）不受影响。
-- **首次拉起的一次性延迟**：首次进入 `sss` 时 Terminal.Gui 静态初始化 + JIT 约 **0.84 s**（之后稳态 30–45 ms）；模块导入阶段**不**加载 Terminal.Gui/PSTui（惰性），因此不影响 Shell 启动耗时。详见 §2.12。
+- **首次拉起的一次性延迟**：首次进入 `sss` 时 Terminal.Gui 静态初始化 + JIT 约 **0.84 s**（之后稳态 30–45 ms）；模块导入阶段**不**加载 Terminal.Gui（惰性），因此不影响 Shell 启动耗时。详见 §2.12。
 - **绘制级断言无法无头执行**：Terminal.Gui 2.4.10 未暴露 `FakeDriver` / 公开的 `View.Render`，无头证据止于方案配色值、布局几何、IL 反汇编与子视图/`IsRunning` 行为探针；"内容确实可见"由真机清单第 0 项确认（已通过）。
 
 ### 真机验收清单（Windows Terminal + pwsh 7.6+，逐项打勾）
@@ -298,7 +296,6 @@ $runArgs[1] = $errorHandler
 
 ## 相关文档
 
-- [交互菜单后端（PSTui GridView 单轨）](gridview-menus.md) —— 菜单能力边界、配色槽位、刷新语义
 - [架构](architecture.md) —— 模块目录树与加载流程
 - [命令一览](commands.md) —— 公开命令与交互流程
 - [配置](configuration.md) —— 配置域与优先级
