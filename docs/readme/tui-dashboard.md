@@ -165,6 +165,29 @@ $runArgs[1] = $errorHandler
 >
 > `Run` 的 `errorHandler` 只把异常存进 `$global:TguiError` 并结束循环，**事件循环返回后必须消费它**（否则渲染异常表现为"仪表盘无声退出"）。
 
+### 2.11 Init 周期与事件订阅
+
+仪表盘的 `while` 循环每轮都是 `Init → Run → Shutdown`（附着/新建/删除/刷新之后回仪表盘）。2.4.10 实测两条事实：
+
+| 事项 | 事实 |
+|------|------|
+| `Shutdown` 会清空事件订阅 | `ApplicationImpl.ScreenChanged` 的处理器数 `1 → 0` |
+| `Application.Instance` 不随周期变化 | `Init → Shutdown → Init` 之后**仍是同一个对象**（`ReferenceEquals = True`） |
+
+⇒ 只按"实例标识"去重的订阅守卫会在第二轮误判"已订阅"而跳过，结果是**第一次交互之后 resize 不再触发重建**。因此编排层在 `Shutdown` 之后必须清掉"本轮已订阅"标记（`$global:TguiSubscribedApp = $null`），让下一轮重新订阅。
+
+### 2.12 依赖与启动耗时（阶段 C 实测）
+
+| 事项 | 实测值 / 事实 |
+|------|------|
+| Terminal.Gui 版本 | **2.4.10.0**，vendored 于 `Modules/PSTui/1.0.5/Terminal.Gui.dll`（**已入版本库**，版本固定） |
+| PSTui 版本 | 1.0.5（保留，见第三章） |
+| 模块导入耗时 | ≈ **207 ms**（冷导入，`-NoProfile`） |
+| 导入后是否已加载 TG/PSTui | **否** —— 惰性加载，模块导入**不**给 Shell 启动增加负担 |
+| `Get-TguiContext` 首次 / 二次 | **28.9 ms** / **1.2 ms**（ALC 与 TG 反射句柄有缓存） |
+| 仪表盘窗口组装 | 首次 ≈ **840 ms**（TG 静态初始化 + JIT，一次性），稳态 ≈ **30–45 ms** |
+| CI 触发路径 | `ShellPrompt/**`、`Microsoft.PowerShell_profile.ps1`、workflow 本身 —— ⚠️ **尚未含 `Modules/**`**：vendored 依赖（`Modules/PSTui/1.0.5/Terminal.Gui.dll` 等）变更同样会改变仪表盘行为，但当前推送凭据无 `workflow` scope，改不了 `.github/workflows/test.yml`，待补 |
+
 ---
 
 ## 三、回退轨：PSTui GridView（`UI.DashboardTuiEnabled = $false`）
@@ -321,6 +344,9 @@ $runArgs[1] = $errorHandler
 - **未在真机验证**：Terminal.Gui 轨的实现与测试是在 **Linux + 无头（headless）Terminal.Gui** 环境下产出的；**Windows Terminal + PowerShell 7.6 的真机行为尚未验证**（容器内 PTY 分配被禁，无法做真终端端到端回归）。
 - **阶段 C 清单待人工执行**：真机验收清单**仍需由人在 Windows 上跑一遍**（含备用屏进出、Ctrl+C 还原、resize 重排、附着/新建/直连全屏交接、删除二次确认）。
 - **回退轨尚未移除**：`UI.DashboardTuiEnabled = $false` 的 PSTui GridView 轨在阶段 C 验收通过前**继续保留**；两轨并存期间，行为差异（键位、错误呈现、屏幕生命周期）以本文第二章与第三章分别描述为准。
+- **终端宽度下限 40 列**：仪表盘按 **40×10** 起步（`New-TmuxTuiDashboardWindow` 的 `ValidateRange` 与编排层的屏幕夹取一致）。真实终端窄于 40 列时，仪表盘会按 40 列布局 ⇒ **该极端场景存在横向溢出**。宽度 ≥ 72 列起隐藏 WINDOWS 列、≥ 96 列起隐藏 STATUS 列（见 §2.4），这三档目标尺寸（100×30 / 120×35 / 160×45）不受影响。
+- **首次拉起的一次性延迟**：首次进入 `sss` 时 Terminal.Gui 静态初始化 + JIT 约 **0.84 s**（之后稳态 30–45 ms）；模块导入阶段**不**加载 Terminal.Gui/PSTui（惰性），因此不影响 Shell 启动耗时。详见 §2.12。
+- **绘制级断言无法无头执行**：Terminal.Gui 2.4.10 未暴露 `FakeDriver` / 公开的 `View.Render`，无法在无头环境捕获"实际画出的像素"。本地证据止于方案配色值、布局几何、IL 反汇编与 `IsRunning` 行为探针；**"内容确实可见"只能由真机清单第 0 项确认**。
 
 ### 真机验收清单（Windows Terminal + pwsh 7.6+，逐项打勾）
 

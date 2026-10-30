@@ -404,6 +404,78 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
         }
     }
 
+    # ------------------------------- Init 周期与事件订阅(2026-10-30 回归护栏)
+    # 仪表盘的 while 循环每轮都是 Init -> Run -> Shutdown(附着/新建/删除/刷新后回仪表盘)。
+    # 2.4.10 实测: Shutdown 会**清空** Application 上的事件订阅, 而 Application.Instance
+    # 在 Init -> Shutdown -> Init 之间是**同一个对象** ⇒ 只按实例标识去重的订阅守卫
+    # 会在第二轮误判"已订阅", 导致第一次交互之后 resize 不再触发重建。
+    Context 'Init 周期与 ScreenChanged 订阅(回归护栏)' {
+
+        It 'Shutdown 清空事件订阅, 且 Instance 在 Init 周期之间不变(所以守卫必须另设标记)' {
+            $facts = & $script:mod {
+                $tg = Get-TguiContext
+                $static = [System.Reflection.BindingFlags]'Public,Static'
+                $appType = $tg.Types.Application
+                $initM = $appType.GetMethods($static) | Where-Object { $_.Name -eq 'Init' } | Select-Object -First 1
+                $shutM = $appType.GetMethod('Shutdown', $static)
+                $instP = $appType.GetProperty('Instance', $static)
+
+                $handlerCount = {
+                    param($app)
+                    $f = $app.GetType().GetField('ScreenChanged', [System.Reflection.BindingFlags]'NonPublic,Instance,Public')
+                    if ($null -eq $f) { return -1 }
+                    $v = $f.GetValue($app)
+                    if ($null -eq $v) { return 0 }
+                    return @($v.GetInvocationList()).Count
+                }
+
+                [void]$initM.Invoke($null, @('ansi'))
+                try {
+                    $app1 = $instP.GetValue($null)
+                    $before = & $handlerCount $app1
+                    # 回调签名必须与 ScreenChanged 委托一致(两参), 但本用例只关心
+                    # 订阅计数, 不消费事件内容 —— 故显式丢弃两个参数, 既保持签名
+                    # 又不触发 PSReviewUnusedParameter。
+                    $app1.add_ScreenChanged({
+                            param($oldScreen, $newScreen)
+                            $null = $oldScreen
+                            $null = $newScreen
+                        })
+                    $subscribed = & $handlerCount $app1
+                    [void]$shutM.Invoke($null, @())
+                    $afterShutdown = & $handlerCount $app1
+                    # 第二轮 Init: 同一对象?
+                    [void]$initM.Invoke($null, @('ansi'))
+                    $app2 = $instP.GetValue($null)
+                    $sameInstance = [object]::ReferenceEquals($app1, $app2)
+                    [void]$shutM.Invoke($null, @())
+                    [PSCustomObject]@{
+                        Before      = $before
+                        Subscribed  = $subscribed
+                        AfterShut   = $afterShutdown
+                        SameInstance = $sameInstance
+                    }
+                } finally {
+                    # 清理 Shutdown: 重复调用可能抛(已 Init->Shutdown->Init 过),
+                    # 此处吞掉异常属预期, 但必须留痕以免触发空 catch 告警。
+                    try { [void]$shutM.Invoke($null, @()) } catch { Write-Verbose "[test] 清理期 Shutdown 抛出(预期内): $($_.Exception.Message)" }
+                }
+            }
+            # 订阅确实挂上了
+            $facts.Subscribed | Should -BeGreaterThan $facts.Before
+            # Shutdown 把它清掉了 —— 这是"守卫必须另设标记"的根据
+            $facts.AfterShut | Should -Be 0
+            # Instance 不变 —— 只按实例标识去重是不够的
+            $facts.SameInstance | Should -BeTrue
+        }
+
+        It '编排层在 Shutdown 之后清掉"本轮已订阅"标记(否则第二轮不再订阅)' {
+            $source = Get-Content -Raw -Path (Join-Path -Path $moduleRoot -ChildPath 'Private/Show-TmuxTuiDashboard.ps1')
+            # Shutdown 调用之后必须紧跟一次标记清理
+            $source | Should -Match '(?s)Shutdown 失败.*?\$global:TguiSubscribedApp\s*=\s*\$null'
+        }
+    }
+
     # ---------------------------------------------------------- 生命周期护栏
     Context '生命周期与终端还原' {
 

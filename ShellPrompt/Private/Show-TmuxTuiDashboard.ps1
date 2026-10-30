@@ -284,6 +284,13 @@ function Show-TmuxTuiDashboard {
                 try { $shutdownMethod.Invoke($null, @()) } catch {
                     Write-Verbose "[Show-TmuxTuiDashboard] Run finally 内 Shutdown 失败: $($_.Exception.Message)"
                 }
+                # ★ Shutdown 会**清空** Application 上的事件订阅(2.4.10 实测:
+                #   ScreenChanged 的处理器数 1 -> 0), 而 Application.Instance 在
+                #   Init -> Shutdown -> Init 之间是**同一个对象**(ReferenceEquals=True)。
+                #   ⇒ 只按实例标识去重的订阅守卫会在第二轮误判"已订阅"而跳过,
+                #   结果是第一次交互(附着/新建/删除/刷新)之后 resize 不再触发重建。
+                #   所以 Shutdown 之后必须清掉"本轮已订阅"标记, 让下一轮重新订阅。
+                $global:TguiSubscribedApp = $null
                 # 已交还: 外层 finally 不再重复 Shutdown
                 $tgInitialized = $false
             }
