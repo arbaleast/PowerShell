@@ -245,6 +245,125 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
             # Esc 不走我们的 Action(由 TG 内建 Quit 退出应用)
             @($hits | Where-Object { $_ -eq 'Quit' }) | Should -HaveCount 1
         }
+
+        It '方向键(CursorDown/CursorUp)在表格内移动选中行, 首尾边界不越界' {
+            # Goal 三-2: 上下方向键移动选中行 —— 由 TG 自己的 TableView 负责
+            # (键盘选中归 TG, 见 Goal 二的职责划分), 因此这里用 TG 的按键注入
+            # 走**真实事件链**验证, 而不是测我们自己的键位映射表。
+            # 注: TG 2.4.10 的方向键静态属性名是 CursorUp/CursorDown(不是 UpArrow)。
+            $nav = & $script:mod {
+                $tg = Get-TguiContext
+                $static = [System.Reflection.BindingFlags]'Public,Static'
+                $appType = $tg.Types.Application
+                $initM = $appType.GetMethods($static) | Where-Object { $_.Name -eq 'Init' } | Select-Object -First 1
+                $beginM = $appType.GetMethods($static) | Where-Object { $_.Name -eq 'Begin' } | Select-Object -First 1
+                $endM = $appType.GetMethods($static) | Where-Object { $_.Name -eq 'End' } | Select-Object -First 1
+                $raiseM = $appType.GetMethod('RaiseKeyDownEvent', $static)
+                $shutdownM = $appType.GetMethod('Shutdown', $static)
+                $instanceP = $appType.GetProperty('Instance', $static)
+
+                [void]$initM.Invoke($null, @('ansi'))
+                try {
+                    $vm = ConvertTo-TmuxTuiViewModel -State (Get-TmuxSessionState -SessionData @{
+                            Available = $true
+                            Sessions  = @(
+                                [PSCustomObject]@{ Name = 'work'; Status = 'detached'; Windows = 2 }
+                                [PSCustomObject]@{ Name = 'ci'; Status = 'attached'; Windows = 1 }
+                                [PSCustomObject]@{ Name = 'ops'; Status = 'detached'; Windows = 3 }
+                            )
+                        })
+                    $result = New-TmuxTuiDashboardWindow -ViewModel $vm -HostName 'deb' `
+                        -ConnectionState '已连接' -HasSessions $true -Dispatch { } `
+                        -WindowWidth 120 -WindowHeight 35 -SelectedIndex 0
+                    $tableView = $result.Table
+                    $app = $instanceP.GetValue($null)
+                    $token = $beginM.Invoke($app, @($result.Window))
+                    try {
+                        $trail = [System.Collections.Generic.List[int]]::new()
+                        $trail.Add([int]$tableView.Value.SelectedCell.Y)
+                        foreach ($k in @('CursorDown', 'CursorDown', 'CursorDown', 'CursorUp', 'CursorUp', 'CursorUp')) {
+                            $keyObj = $tg.Types.Key.GetProperty($k).GetValue($null)
+                            [void]$raiseM.Invoke($null, @($keyObj))
+                            $trail.Add([int]$tableView.Value.SelectedCell.Y)
+                        }
+                        $trail.ToArray()
+                    } finally {
+                        [void]$endM.Invoke($app, @($token))
+                    }
+                } finally {
+                    try { [void]$shutdownM.Invoke($null, @()) } catch {
+                        Write-Verbose "[test] 方向键用例 Shutdown 失败: $($_.Exception.Message)"
+                    }
+                }
+            }
+
+            # 初始第 0 行 -> 下 -> 下 -> 下(到底, 停住) -> 上 -> 上 -> 上(到顶, 停住)
+            @($nav) | Should -Be @(0, 1, 2, 2, 1, 0, 0)
+        }
+
+        It '导航后按 Enter: 触发附着, 且编排层读回的是被导航到的那一行(不是第 0 行)' {
+            # Goal 三-2 + 四-5 + 六-4: Enter 附着"当前选中会话"。
+            # 编排层读回契约: Value.SelectedCell.Y -> SessionRows[idx].Name。
+            $testHits = [System.Collections.Generic.List[string]]::new()
+            $r = & $script:mod {
+                param($hits)
+                $tg = Get-TguiContext
+                $static = [System.Reflection.BindingFlags]'Public,Static'
+                $appType = $tg.Types.Application
+                $initM = $appType.GetMethods($static) | Where-Object { $_.Name -eq 'Init' } | Select-Object -First 1
+                $beginM = $appType.GetMethods($static) | Where-Object { $_.Name -eq 'Begin' } | Select-Object -First 1
+                $endM = $appType.GetMethods($static) | Where-Object { $_.Name -eq 'End' } | Select-Object -First 1
+                $raiseM = $appType.GetMethod('RaiseKeyDownEvent', $static)
+                $shutdownM = $appType.GetMethod('Shutdown', $static)
+                $instanceP = $appType.GetProperty('Instance', $static)
+
+                [void]$initM.Invoke($null, @('ansi'))
+                try {
+                    $vm = ConvertTo-TmuxTuiViewModel -State (Get-TmuxSessionState -SessionData @{
+                            Available = $true
+                            Sessions  = @(
+                                [PSCustomObject]@{ Name = 'work'; Status = 'detached'; Windows = 2 }
+                                [PSCustomObject]@{ Name = 'ci'; Status = 'attached'; Windows = 1 }
+                            )
+                        })
+                    $dispatch = { param($a) $hits.Add([string]$a) }
+                    $result = New-TmuxTuiDashboardWindow -ViewModel $vm -HostName 'deb' `
+                        -ConnectionState '已连接' -HasSessions $true -Dispatch $dispatch `
+                        -WindowWidth 120 -WindowHeight 35 -SelectedIndex 0
+                    $app = $instanceP.GetValue($null)
+                    $token = $beginM.Invoke($app, @($result.Window))
+                    try {
+                        # 先下移一行, 再按 Enter
+                        $down = $tg.Types.Key.GetProperty('CursorDown').GetValue($null)
+                        [void]$raiseM.Invoke($null, @($down))
+                        $enter = $tg.Types.Key.GetProperty('Enter').GetValue($null)
+                        [void]$raiseM.Invoke($null, @($enter))
+                    } finally {
+                        [void]$endM.Invoke($app, @($token))
+                    }
+                    # 编排层读回(与 Show-TmuxTuiDashboard 同一契约)
+                    $rowIndex = [int]$result.Table.Value.SelectedCell.Y
+                    $name = if ($rowIndex -ge 0 -and $rowIndex -lt @($vm.SessionRows).Count) {
+                        @($vm.SessionRows)[$rowIndex].Name
+                    } else { $null }
+                    [PSCustomObject]@{
+                        Hits    = @($hits.ToArray())
+                        RowIndex = $rowIndex
+                        Name    = $name
+                    }
+                } finally {
+                    try { [void]$shutdownM.Invoke($null, @()) } catch {
+                        Write-Verbose "[test] Enter 导航用例 Shutdown 失败: $($_.Exception.Message)"
+                    }
+                }
+            } $testHits
+
+            # Enter 触发附着动作(恰好一次)
+            @($r.Hits | Where-Object { $_ -eq 'Attach' }) | Should -HaveCount 1
+            # 选中的是第 1 行 —— 名字必须是 'ci', 绝不是第 0 行的 'work'
+            $r.RowIndex | Should -Be 1
+            $r.Name | Should -Be 'ci'
+        }
     }
 
     # -------------------------------------------------------------- 键桥接
