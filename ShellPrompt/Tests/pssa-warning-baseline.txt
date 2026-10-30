@@ -1,0 +1,21 @@
+# pssa-warning-baseline.txt - PSScriptAnalyzer Warning 增量门禁基线
+#
+# 本文件由 ShellPrompt/Tests/Invoke-Lint.ps1 的 -UpdateBaseline 生成, 也可人工维护。
+# 指纹 = RuleName + 仓库相对路径 + 规范化消息 (不含行号: 行号会随代码改动漂移)。
+# 每行格式:
+#   # <RuleName> | <仓库相对路径> | <规范化消息> | <期望出现次数>
+#
+# 语义:
+#   - 指纹不在本文件中 => 新增 Warning, 门禁失败 (退出码 2)
+#   - 当前出现次数 > 期望次数 => 新增 Warning, 门禁失败 (退出码 2)
+#   - 当前出现次数 < 期望次数 => 该 Warning 已被修复, 不失败, 可收紧基线
+#   - Error 严重级别始终阻断 (退出码 1), 与本基线无关
+# PSAvoidUsingEmptyCatchBlock | ShellPrompt/Private/Invoke-SshCaptureOutput.ps1 | Empty catch block is used. Please use Write-Error or throw statements in catch blocks. | 1
+# PSAvoidUsingEmptyCatchBlock | ShellPrompt/Private/Reset-TerminalMode.ps1 | Empty catch block is used. Please use Write-Error or throw statements in catch blocks. | 5
+# PSAvoidUsingEmptyCatchBlock | ShellPrompt/Private/Save-OriginalTerminalState.ps1 | Empty catch block is used. Please use Write-Error or throw statements in catch blocks. | 2
+# PSShouldProcess | ShellPrompt/Private/New-WelcomeBanner.ps1 | 'Get-RandomQuote' has the ShouldProcess attribute but does not call ShouldProcess/ShouldContinue. | 1
+# PSShouldProcess | ShellPrompt/Private/New-WelcomeBanner.ps1 | 'New-WelcomeBanner' has the ShouldProcess attribute but does not call ShouldProcess/ShouldContinue. | 1
+# PSUseCmdletCorrectly | ShellPrompt/Private/Get-SshArgs.ps1 | Cmdlet 'Write-Output' may be used incorrectly. Please check that all mandatory parameters are supplied. | 1
+# PSUseProcessBlockForPipelineCommand | ShellPrompt/Private/ConvertTo-SshEscapedString.ps1 | Command accepts pipeline input but has not defined a process block. | 1
+# PSUseSingularNouns | ShellPrompt/Private/Get-SshArgs.ps1 | The cmdlet 'Get-SshArgs' uses a plural noun. A singular noun should be used instead. | 1
+# PSUseSingularNouns | ShellPrompt/Private/Get-SshConfigHosts.ps1 | The cmdlet 'Get-SshConfigHosts' uses a plural noun. A singular noun should be used instead. | 1

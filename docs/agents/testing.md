@@ -2,11 +2,23 @@
 
 # 测试与文档（Testing & Documentation）
 
-## 测试基线
+## 测试门禁（不变量）
 
-- **Pester 不变量**：任何阶段后，修改都不得引入 Fail，Pass 数不得低于最近一次实测基线。
-- **最近一次实测基线**：`261 Pass / 0 Fail`（2026-10-29 GitHub Actions 在 `d666618` 上实测，13 个测试文件；`Invoke-Tests.ps1` 默认 Fail 即非零退出，所以"绿"本身就代表 0 Fail）。
-- **真机覆盖状态（2026-10-29 起）**：自动化基线由 [CI](#持续集成ci) 实测并持续刷新（本节是唯一权威位置）；`sss` 三类菜单交互、tmux 删除路径的 `[OK]`/警告表现、starship 渲染等**交互项仍需人工真机验证**（见下文"最小真机验证集"），CI 不覆盖它们。
+CI 强制以下四条不变量，任何一条不满足都会让 CI 变红：
+
+- **测试失败必须阻断 CI**：`ShellPrompt/Tests/Invoke-Tests.ps1` 在出现 Fail 时以**非零退出码**结束。
+- **测试规模不得低于 CI 设定的门槛**：测试入口支持 `-MinPassed`（通过用例数下限）与 `-MinTestFiles`（测试文件数下限），
+  两者由 [CI workflow](../../.github/workflows/test.yml) **显式传参**（门槛数值只在该 workflow 里维护，改动会出现在 diff 里）。
+  低于门槛同样以非零退出码结束 —— 整份测试文件被删除、或用例被大面积掏空时，CI 不会再"全绿蒙混过关"。
+  门槛只做**下限**检查：新增测试不会让 CI 变红；降低门槛等于降低质量标准，必须在 PR 里说明理由。
+- **静态分析不允许新增 Warning**：Error 永远阻断；Warning 走**增量基线**比对（见下文「静态分析」）。
+- **Profile 冒烟检查必须通过**：`profile` job 用干净 pwsh 进程加载 `Microsoft.PowerShell_profile.ps1`，
+  校验启动链路无 `[ShellPrompt]` 错误/警告、启动期自检通过、ShellPrompt 模块可导入。
+
+> **实际测试结果以 CI 执行日志为准。** 本文件只描述不变量，**不记录任何一次运行的 Pass/Fail 数字、用例总数或测试文件数** ——
+> 那些数字属于某一次快照，写进文档只会腐烂。需要看当前基线，去看最近一次 CI run 的日志；
+> 需要在本地复现，按 [`docs/agents/environment.md`](environment.md) 的方式准备环境后跑同一批入口脚本。
+
 - **测试分类**:
   - **单元测试**: `Get-*` / `Set-*` / `Test-*` / `Format-*` / `Connect-*` 等纯函数或近纯函数,
     每个被测函数至少 3-5 条用例(命中、未命中、错误兜底)。
@@ -19,26 +31,39 @@
 
 - **命令**: `Invoke-ScriptAnalyzer -Path ./ShellPrompt -Recurse -Settings ./ShellPrompt/Settings.ScriptAnalyzer.psd1`
   (`-Path` 为必填参数; 配置文件与代码约定同步维护)。
-- **基线**（最近一次 CI 实测，2026-10-29 @ `d666618`）：**0 Error / 14 Warning / 4 Information**（与阶段 B 原测一致）。
+- **入口脚本**: `pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Lint.ps1`
+  —— 扫描 → 与 Warning 基线比对 → 按结果给退出码（CI 依赖它）。
+- **Warning 基线**: `ShellPrompt/Tests/pssa-warning-baseline.txt`。
+  每行是一条**指纹**：`规则名|仓库相对路径|规范化消息|期望出现次数`。
+  - 指纹**不含行号**：文件改动引起的行号漂移不会误报。
+  - 出现次数用于区分"同一条消息在同一文件里出现多次"的情况（例如多条一模一样的 Empty catch）。
+  - **当前次数超过基线次数** ⇒ 新增 Warning ⇒ CI 失败。
+  - **当前次数少于基线次数** ⇒ 该 Warning 已被修复 ⇒ CI 不失败，但输出会提示**可以收紧基线**；
+    确认修复无误后跑 `pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Lint.ps1 -UpdateBaseline` 重新生成基线。
 - **红线**:
   - **不允许新增 Error**; 发现 Error 立即修, 不得用 SuppressMessage 隐藏。
-  - **新增 Warning 必须有合理理由**: 在 PR 描述中说明
-    (如 `PSUseShouldProcessForStateChangingFunctions` 等已在模块约定内接受的忽略)。
+  - **不允许新增 Warning**; 确需接受时，在 PR 描述中说明理由，并同步更新基线文件（改动会出现在 diff 里，可审查）。
+  - **不得**通过关闭规则、排除目录、忽略全部 Warning 等方式让门禁变绿。
 
 ## 持续集成（CI）
 
 - **配置文件**: [`.github/workflows/test.yml`](../../.github/workflows/test.yml)（全仓唯一的 workflow）。
 - **触发条件**: `push` / `pull_request` 且改动命中 `ShellPrompt/**`、`Microsoft.PowerShell_profile.ps1` 或该 workflow 本身;
   文档改动不触发。另有 `workflow_dispatch` 供手动触发。
-- **两个 job**:
-  - `test`: 装 PowerShell 7.6+ → 装 Pester 5+ → 跑 `ShellPrompt/Tests/Invoke-Tests.ps1`（失败即非零退出）。
-  - `lint`: 跑 PSScriptAnalyzer，**只在出现 Error 时失败**（与上面的红线一致），报告落 `.agent_cache/pssa.txt`。
+- **三个 job**（互不依赖、可并行；任一失败都应立即可见）:
+  - `test`: 装 PowerShell 7.6+ → 装 Pester 5+ → 跑 `ShellPrompt/Tests/Invoke-Tests.ps1`（含数量门禁参数）。
+    退出码：0 = 全通过，1 = 存在 Fail，2 = 数量门槛未达标；非 0 一律让 job 失败。
+  - `lint`: 装 PSScriptAnalyzer → 跑 `ShellPrompt/Tests/Invoke-Lint.ps1`。
+    Error 或新增 Warning ⇒ job 失败；报告落 `.agent_cache/pssa.txt`。
+  - `profile`: 装 PowerShell 7.6+ → 跑 `ShellPrompt/Tests/Invoke-ProfileSmoke.ps1`。
+    用干净 pwsh 进程加载仓库根的 profile，断言启动链路无 `[ShellPrompt]` 错误/警告、自检通过、
+    `$global:_MARKS` 存在且非空、`Ensure-ShellPrompt` 后模块可导入；失败即 job 失败。
+    starship / fnm / PSReadLine 属于**可选依赖**，runner 上没装不算失败。
 - **运行环境**: `windows-latest`。原因: 当前模块硬编码了 `ssh.exe` / `LOCALAPPDATA` / `TEMP` / `USERPROFILE`，
   套件也是在 Windows 上写的；迁到 `ubuntu-latest` 需要先补跨平台地基。
-- **CI 不做的事**: 不加载用户 profile、不连真实 ssh/tmux 主机、不访问业务网络（wttr.in 在测试里已被 Mock）、
-  不在仓库外写文件。安装 Pester / PSScriptAnalyzer 需要访问 PowerShell Gallery, 属于工具安装而非被测行为。
-- **新增/删除 Private 函数、修改 `FunctionsToExport`、改动 profile dot-source 链**时,
-  除等 CI 结果外, 还要按下一节人工刷新本文件里的计数。
+- **CI 不做的事**: 不加载用户 profile（`profile` job 用的是临时 HOME 下的干净 profile 路径）、
+  不连真实 ssh/tmux 主机、不访问业务网络（wttr.in 在测试里已被 Mock）、不在仓库外写文件。
+  安装 Pester / PSScriptAnalyzer 需要访问 PowerShell Gallery, 属于工具安装而非被测行为。
 
 ## 文档同步核对
 
@@ -64,13 +89,14 @@
   - 用一个**测试用** tmux 会话验证删除路径: 删除成功显示 `[OK]`, **失败(例如会话名不存在)必须显示警告且不显示 `[OK]`**。
   - Starship prompt 渲染正常, 无 ANSI 颜色错位或 escape 残留。
 
-## 何时回跑基线(并刷新 Pester / PSScriptAnalyzer 计数)
+## 何时回跑基线
 
 - 新增 / 删除 Private 函数(拆分、合并、抽出)。
 - 改动 `ShellPrompt.psd1` 的 `FunctionsToExport` 或 `CmdletsToExport`。
 - 改动 `Microsoft.PowerShell_profile.ps1` Phase 1 dot-source 链。
 - 改动 starship 接管路径(Starship 安装 / `$ENV:STARSHIP_CONFIG` / `$ENV:STARSHIP_DISTRO` 等)。
 - 阶段验收完成后强制回跑。
+- 回跑结果看 CI 日志；**不要**把这次的 Pass/Fail 数字回抄进本文件。
 
 ## 调试与诊断
 
@@ -79,10 +105,14 @@
   `pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Tests.ps1`
   该入口默认在出现 Fail 时以**非零退出码**结束(CI 依赖它); 在交互会话里用 `&` 调用时加 `-NoExit`,
   否则 `exit` 会把当前会话一起结束。
-  任何 Pester 失败或新 Warning 必须先排查再提交流程。
+  本地想复现 CI 的规模门禁, 可以显式带上 `-MinPassed` / `-MinTestFiles`（取 CI workflow 里同一组数值）。
+- **静态分析**: `pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Lint.ps1`
+  （收紧基线时加 `-UpdateBaseline`）。
+- **Profile 冒烟**: `pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-ProfileSmoke.ps1`
+  （失败时返回非零；可选依赖缺失不算失败）。
 - **临时输出约束**: 所有测试运行 / 静态分析 / 调试日志必须落到 `.agent_cache/` 下,
   仓库根目录禁止产生临时文件(`pester.txt` / `pssa.txt` / `*.tmp` 等)。
 
 ## 文档
 
-- **Documentation**: 任何用户可见变更或配置更新必须在 `README.md` 留痕(用法示例、迁移说明)。
+- **Documentation**: 本文件是测试与文档义务的入口；文档同步清单见上文「文档同步核对」。

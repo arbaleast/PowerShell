@@ -29,5 +29,5 @@ PowerShell 终端环境增强仓库（Windows 取向；Linux / WSL 部分能力�
 | 改动 SSH 执行路径或 tmux 会话逻辑 | [`docs/agents/domain-ssh-tmux.md`](docs/agents/domain-ssh-tmux.md) |
 | 提交前确认测试 / 静态分析 / 文档更新义务 / 测试基线 | [`docs/agents/testing.md`](docs/agents/testing.md) |
 | 写 commit message 或 PR 标题 | [`docs/agents/commit-convention.md`](docs/agents/commit-convention.md) |
-| 在本机执行 `pwsh` / 排查 pwsh 定位（机器专属记录） | [`docs/agents/environment.md`](docs/agents/environment.md) |
+| 在本机执行 `pwsh` / 准备本地运行环境（版本要求与安装方式） | [`docs/agents/environment.md`](docs/agents/environment.md) |
 | 改菜单标题区天气 / `Weather.*` 配置 | [`docs/agents/wttr.md`](docs/agents/wttr.md) |

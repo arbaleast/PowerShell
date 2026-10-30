@@ -75,10 +75,16 @@ jobs:
         # ssh/tmux 主机、不加载用户 profile。
         # 用子进程 pwsh 跑, 这样脚本里的 exit 只结束子进程, 退出码经 $LASTEXITCODE
         # 传给本 step, 同时把完整输出落到 .agent_cache/pester.txt (仓库约定)。
+        #
+        # 质量门禁参数 (受审基线, 改动会直接出现在本文件的 diff 里):
+        #   -MinTestFiles 15  : Tests 目录 *.Tests.ps1 至少 15 个 —— 整份测试文件被删除时拦下
+        #   -MinPassed    300 : 通过用例至少 300 条         —— 用例被大面积掏空时拦下
+        # 门槛只做"下限"检查: 新增测试只会让结果更宽松, 不会让 CI 变红;
+        # 降低门槛 = 降低质量标准, 必须在 PR 里说明理由 (Fail 判定与门槛无关, 永远阻断)。
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path .agent_cache | Out-Null
-          pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Tests.ps1 2>&1 |
+          pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Tests.ps1 -MinPassed 300 -MinTestFiles 15 2>&1 |
             Tee-Object -FilePath .agent_cache/pester.txt
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -122,26 +128,18 @@ jobs:
             Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
           }
 
-      - name: Run PSScriptAnalyzer
-        # 红线与 docs/agents/testing.md 一致: 不允许新增 Error; Warning 允许,
-        # 但需在 PR 描述里说明理由。报告落 .agent_cache/ (仓库约定)。
+      - name: Run PSScriptAnalyzer (Warning 增量门禁)
+        # 红线 (与 docs/agents/testing.md 一致):
+        #   Error      -> 永远阻断 CI;
+        #   新增 Warning -> 阻断 CI (与 ShellPrompt/Tests/pssa-warning-baseline.txt 比对);
+        #   历史 Warning 被修复 -> 不阻断, 输出提示"可收紧基线"。
+        # 基线指纹 = 规则名 + 仓库相对路径 + 规范化消息 + 出现次数 —— 不依赖行号,
+        # 因此文件改动导致的行号漂移不会误报。报告落 .agent_cache/ (仓库约定)。
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path .agent_cache | Out-Null
-          $results = @(Invoke-ScriptAnalyzer -Path ./ShellPrompt -Recurse -Settings ./ShellPrompt/Settings.ScriptAnalyzer.psd1)
-          $results |
-            Select-Object Severity, RuleName, ScriptName, Line, Message |
-            Format-Table -AutoSize |
-            Out-String -Width 200 |
-            Set-Content -Path .agent_cache/pssa.txt
-          $errors   = @($results | Where-Object { $_.Severity -eq 'Error' })
-          $warnings = @($results | Where-Object { $_.Severity -eq 'Warning' })
-          $infos    = @($results | Where-Object { $_.Severity -eq 'Information' })
-          Write-Host ("PSSA: {0} Error / {1} Warning / {2} Information" -f $errors.Count, $warnings.Count, $infos.Count)
-          if ($errors.Count -gt 0) {
-            $errors | Format-List RuleName, ScriptName, Line, Message | Out-String | Write-Host
-            exit 1
-          }
+          pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Lint.ps1 -ReportPath .agent_cache/pssa.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload lint report
         if: always()
@@ -149,4 +147,59 @@ jobs:
         with:
           name: pssa-report
           path: .agent_cache/pssa.txt
+          if-no-files-found: ignore
+
+  profile:
+    name: Profile 冒烟
+    # windows-latest: 本项目是 Windows PowerShell 终端增强工具, profile 的真实加载路径
+    # 依赖 Documents\PowerShell 下的 Microsoft.PowerShell_profile.ps1, 且模块清单要求
+    # PowerShell 7.6+; 放到 ubuntu 跑不到真实启动链路。
+    #
+    # 与 test / lint 两个 job 的关系: 三者**互不依赖、可并行**。
+    #   test    -> 单元/集成测试 (含数量门禁)
+    #   lint    -> 静态分析 (Error + 新增 Warning 门禁)
+    #   profile -> 启动链路冒烟 (profile 加载 / 自检 / 模块导入)
+    # 不设 needs 是刻意的: 三个信号互相独立, 任一失败都应立刻可见, 不必等其它 job。
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure PowerShell 7.6+
+        # 与 test / lint job 保持一致: ShellPrompt.psd1 声明 PowerShellVersion = '7.6'。
+        shell: pwsh
+        run: |
+          $required = [version]'7.6'
+          if ($PSVersionTable.PSVersion -ge $required) {
+            Write-Host "Using preinstalled pwsh $($PSVersionTable.PSVersion)"
+            exit 0
+          }
+          $ver = '7.6.0'
+          $dir = Join-Path $env:RUNNER_TEMP "pwsh-$ver"
+          $zip = Join-Path $env:RUNNER_TEMP "pwsh-$ver.zip"
+          $url = "https://github.com/PowerShell/PowerShell/releases/download/v$ver/powershell-$ver-win-x64.zip"
+          Write-Host "Preinstalled pwsh is $($PSVersionTable.PSVersion) (< $required); downloading $ver"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          Add-Content -Path $env:GITHUB_PATH -Value $dir
+
+      - name: Profile 启动冒烟检查
+        # 干净 pwsh 进程加载仓库根的 Microsoft.PowerShell_profile.ps1, 断言:
+        #   1) 启动链路没有 [ShellPrompt] 前缀的错误/警告 (banner 等正常输出不算失败);
+        #   2) profile 启动期自检通过 (启动清单里的命令全部可解析, 文件全部加载成功);
+        #   3) $global:_MARKS 存在且非空 (走既有的 SHELLPROMPT_PROFILE_TRACE 钩子);
+        #   4) 调用 Ensure-ShellPrompt 后 ShellPrompt 模块可正常导入。
+        # starship / fnm / PSReadLine 属于可选依赖, runner 上没装不算失败。
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .agent_cache | Out-Null
+          pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-ProfileSmoke.ps1 2>&1 |
+            Tee-Object -FilePath .agent_cache/profile-smoke.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload profile smoke log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-smoke-log
+          path: .agent_cache/profile-smoke.txt
           if-no-files-found: ignore
