@@ -23,3 +23,7 @@
 # See Show-TmuxTuiDashboard.Tests.ps1 键盘注入用例: TG 事件循环回调会换 runtime 会话,
 # 记数通道必须走 global(与生产 $global:TguiPendingAction 同一设计), 无法降为 script 作用域。
 # PSAvoidGlobalVars | ShellPrompt/Tests/Show-TmuxTuiDashboard.Tests.ps1 | Found global variable 'global:TguiTestHits'. | 3
+# --- 2026-10-30 真机复验(取数重复风暴)诊断脚本新增(lead): 局部条目 ---
+# 见 Diag-TguiResize.ps1: TG 事件回调跨 runtime 会话执行, 诊断状态只能收进单一
+# $global:Tdiag 哈希表(与产线 $global:TguiPendingAction 同一设计)。
+# PSAvoidGlobalVars | ShellPrompt/Tests/Diag-TguiResize.ps1 | Found global variable 'global:Tdiag'. | 32
