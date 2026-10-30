@@ -318,9 +318,10 @@ Describe 'Menu dispatchers' {
         $script:mod = Get-Module ShellPrompt
     }
 
-    It 'Show-HostSelector 与新的 tmux UI 入口不再提供 -Backend 参数' {
-        # 2026-10-30: 原 Show-SessionManager 已被 Show-TmuxSessionDashboard / Show-TmuxActionBar 取代
-        foreach ($name in @('Show-HostSelector', 'Show-TmuxSessionDashboard', 'Show-TmuxActionBar')) {
+    It 'Show-HostSelector 不再提供 -Backend 参数' {
+        # 2026-10-30: tmux UI 入口收敛为 TGI 轨 Show-TmuxTuiDashboard(私有),
+        # 回退轨视图已删除 —— 该断言收敛到仍存活的 Show-HostSelector。
+        foreach ($name in @('Show-HostSelector')) {
             $cmd = & $script:mod { param($n) Get-Command -Name $n -CommandType Function } $name
             $cmd | Should -Not -BeNullOrEmpty
             $cmd.Parameters.ContainsKey('Backend') | Should -Be $false

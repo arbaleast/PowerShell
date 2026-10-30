@@ -6,12 +6,13 @@
 
 ## 一、当前状态
 
-`sss` 的仪表盘现在有**两条轨**：
+`sss` 的仪表盘现在只有**一条轨**（2026-10-30 用户裁定移除 PSTui 回退轨）：
 
-| 轨 | 渲染实现 | 开关 | 状态 |
-|---|---|---|---|
-| **Terminal.Gui 轨**（默认） | **独立的 Terminal.Gui v2 应用**（`Show-TmuxTuiDashboard`） | `UI.DashboardTuiEnabled = $true`（默认） | 当前主线 |
-| **PSTui GridView 轨**（回退） | 仓库自有单行工具条 + PSTui `Out-ConsoleGridView` | `UI.DashboardTuiEnabled = $false` | **回退轨**，保留到阶段 C 真机验收通过 |
+| 轨 | 渲染实现 | 状态 |
+|---|---|---|
+| **Terminal.Gui 轨**（唯一） | **独立的 Terminal.Gui v2 应用**（`Show-TmuxTuiDashboard`） | 现行实现，真机验收通过（2026-10-30 `5d5daac`） |
+
+> 原"PSTui GridView 回退轨"（`Show-TmuxSessionDashboard` / `Show-TmuxActionBar` / `Read-TmuxActionKey` / `Get-TmuxPlaceholderRow` 与 `UI.DashboardTuiEnabled` / `UI.DashboardFullScreen` 开关）已一并删除，删除前结构与契约见 git 历史。**PSTui 依赖本身保留**——SSH 主机选择器与其他菜单仍走 PSTui GridView。
 
 - Terminal.Gui 轨是**独立应用**，不是"套了 Terminal.Gui 装饰的 GridView"：Terminal.Gui 自己负责布局、绘制、表格、选择、键盘、缩放与状态栏；仓库既有的 PowerShell 业务层（`Invoke-TmuxSessionFetch` / `Get-TmuxSessionState` / `Invoke-TmuxAttach` / `New-TmuxSession` / `Invoke-TmuxSessionDeletion` / `Invoke-SshCommand`）继续负责 SSH 与 tmux，**Terminal.Gui 不重写任何 SSH/tmux 逻辑**。
 - PSTui 链路、`Invoke-GridViewPrompt` 与 SSH 主机选择器（[`Show-HostSelector`](../../ShellPrompt/Private/Show-HostSelector.ps1)）**都保留**；主机选择器仍是 PSTui 表格，不在本次迁移范围内。
@@ -117,8 +118,10 @@ Terminal.Gui 2.4.10 上踩过并固化的三条规则：
 
 | 键 | 默认值 | 作用 |
 |----|--------|------|
-| `UI.DashboardTuiEnabled` | `$true` | `$true` 走 Terminal.Gui 轨；`$false` 回退到 PSTui GridView 轨 |
-| `UI.DashboardFullScreen` | `$true` | **仅回退轨**：控制 GridView 仪表盘的全屏标志 |
+| `UI.GridViewFocus` | `'Table'` | GridView 初始焦点（主机选择器等 PSTui 视图） |
+| `UI.GridViewFullScreen` | `$false` | PSTui 弹窗是否全屏渲染 |
+
+> 原 `UI.DashboardTuiEnabled` / `UI.DashboardFullScreen` 已随回退轨移除（2026-10-30）。
 
 > `UI` 域是 `[ordered] OrderedDictionary`，条目**不是 PowerShell 属性**：判键存在要用 `.Contains('X')`，取值用 `['X']`——用 `.PSObject.Properties['X']` 判存在恒为 `$null`，开关会永远不生效。
 
@@ -192,134 +195,10 @@ $runArgs[1] = $errorHandler
 
 ---
 
-## 三、回退轨：PSTui GridView（`UI.DashboardTuiEnabled = $false`）
+## 三、历史：PSTui 回退轨（已移除）
 
-> 本章描述的是**回退轨**，保留到阶段 C 真机验收通过为止。以下内容仍然有效且可达。
-
-### 3.1 分层
-
-| 层 | 职责 | 判定标准 |
-|---|---|---|
-| **数据层** | 把"远端到底发生了什么"变成**可判定的状态对象**：有会话 / 确实没会话 / 探测失败，以及失败时的稳定错误码 | 不碰控制台、不读配置、不做 UI 决策 |
-| **渲染层** | 把状态对象变成**屏幕上的一行/一屏**：主视图（表格或占位面板）与单行工具条 | 不发起网络请求、不做动作分发 |
-| **交互层** | 把"用户按了什么"变成**一个动作值**：单键读取 → 键位映射 → 事件循环 | 不区分"成功 / 失败"，只区分"登记过的键 / 没登记的键" |
-
-分层的直接收益：键位契约（哪个键做什么）、失败判定（什么算失败）、渲染外观（长什么样）三者各自只有一个事实来源，互不牵连。
-
-### 3.2 回退轨的文件一览
-
-**数据层**
-
-| 文件 | 职责 |
-|---|---|
-| [`Get-TmuxSessionState.ps1`](../../ShellPrompt/Private/Get-TmuxSessionState.ps1) | 把探测结果归一成状态对象，并提供稳定错误码映射（`Get-TmuxErrorCode`） |
-| [`Get-TmuxPlaceholderRow.ps1`](../../ShellPrompt/Private/Get-TmuxPlaceholderRow.ps1) | 构造占位面板行，列名与 `Get-TmuxSessionGridRow` 完全一致 |
-| [`Invoke-TmuxSessionFetch.ps1`](../../ShellPrompt/Private/Invoke-TmuxSessionFetch.ps1) | SSH 探测入口：后台线程执行 `Get-TmuxSessions -Force`，后台不可用时退回同步调用 |
-| [`Submit-TmuxBackgroundTask.ps1`](../../ShellPrompt/Private/Submit-TmuxBackgroundTask.ps1) | 后台线程任务**提交端**：`Start-ThreadJob` + 按 `-DependencyFile` dot-source 依赖 |
-| [`Receive-TmuxBackgroundTask.ps1`](../../ShellPrompt/Private/Receive-TmuxBackgroundTask.ps1) | 后台线程任务**收割端**：等待完成，把成功/超时/作业内异常归一成统一形状 |
-| [`Submit-WttrPrefetch.ps1`](../../ShellPrompt/Private/Submit-WttrPrefetch.ps1) | 标题区天气的后台预取与缓存回写 |
-
-**渲染层**
-
-| 文件 | 职责 |
-|---|---|
-| [`Format-TmuxToolbarText.ps1`](../../ShellPrompt/Private/Format-TmuxToolbarText.ps1) | 把动作集合渲染成**一行**工具条文本 |
-| [`Show-TmuxSessionDashboard.ps1`](../../ShellPrompt/Private/Show-TmuxSessionDashboard.ps1) | 唯一主视图：有会话时渲染会话表格，失败/空态渲染占位面板 |
-
-**交互层**
-
-| 文件 | 职责 |
-|---|---|
-| [`Get-TmuxActionDefinition.ps1`](../../ShellPrompt/Private/Get-TmuxActionDefinition.ps1) | 键位契约的**唯一事实来源**：键 → 文案 → 动作值 → 是否依赖会话 |
-| [`Resolve-TmuxActionKey.ps1`](../../ShellPrompt/Private/Resolve-TmuxActionKey.ps1) | 纯函数：单键 → 动作值；未登记的键返回空串 |
-| [`Read-TmuxActionKey.ps1`](../../ShellPrompt/Private/Read-TmuxActionKey.ps1) | 用 `[Console]::ReadKey($true)` 读**一个**键并归一化成 token；带 `-KeyReader` 注入口供测试注入 |
-| [`Show-TmuxActionBar.ps1`](../../ShellPrompt/Private/Show-TmuxActionBar.ps1) | 底部单行状态栏 + 单键事件循环 |
-
-**已删除**：`Private/Show-SessionManager.ps1`（全局操作菜单）、`Private/Get-GridViewManagerRow.ps1`、`Private/Write-TmuxAvailabilityNotice.ps1`；`Invoke-GridViewSessionManager` 已从 [`Invoke-GridViewMenu.ps1`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1) 中移除；`Show-TmuxSessionList`（删除流程的会话列表）保留不变。
-
-### 3.3 布局与动作条
-
-正常态（`Status = Ok`）：
-
-```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│ TMUX 管理器 [debian] - 会话 2 (附 1 / 分 1)                               │
-│            [a]附着  [n]新建  [r]刷新  [s]SSH  [x]删除  [q]退出           │ ← 单行工具条
-├──────────────────────────────────────────────────────────────────────────┤     （拼进窗口标题）
-│ No   Session          State         Windows                              │
-│ 01   tmux-100001      ● 已附着            2                              │
-│ 02   tmux-100002      ○ 已分离            1                              │
-├──────────────────────────────────────────────────────────────────────────┤
-│ Rows: 2 | Enter Accept | Esc Close                                       │ ← PSTui 自带状态栏
-└──────────────────────────────────────────────────────────────────────────┘
-[TMUX] [a]附着  [n]新建  [r]刷新  [s]SSH  [x]删除  [q]退出 >                ← 底部单行动作条
-```
-
-失败态（`Status = Error`）：
-
-```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│ TMUX 管理器 [debian] - E_SSH_TIMEOUT                                     │
-│            [n]新建  [r]重试  [s]直连  [q]退出                           │ ← 失败态文案
-├──────────────────────────────────────────────────────────────────────────┤
-│ No   Session                                          State              │
-│      SSH 连接超时, 未能获取 tmux 会话列表   E_SSH_TIMEOUT · 按 r 重试 · 按 s 直连 SSH │
-├──────────────────────────────────────────────────────────────────────────┤
-│ Rows: 1 | Enter Accept | Esc Close                                       │
-└──────────────────────────────────────────────────────────────────────────┘
-[TMUX] [n]新建  [r]重试  [s]直连  [q]退出 >
-```
-
-三处关键点：
-
-1. **工具条在标题里**：表格打开期间键位也可见，用户不必猜。
-2. **占位面板与正常态共用面板**：失败时屏幕上是"一行说明 + 一个错误码 + 一条降级指引"，而不是留白。占位行的 `Value` 为**空串**——这是契约，主视图据此判定"用户选中的不是会话"，转而进入动作条，而不是误把说明行当成会话名去附着。
-3. **动作条在表格之下**：表格内 `Esc` 进入动作条，动作条 `Esc` 退出管理器——与旧流程"列表 ESC → 菜单 ESC → 退出"的肌肉记忆一致。
-
-### 3.4 回退轨的键位速查表
-
-| 键 | 动作值 | 动作 | 需要会话 | 正常态文案 | 失败态文案 |
-|----|--------|------|----------|------------|------------|
-| `a` | `Attach` | 附着/恢复会话 | **是** | `[a]附着` | `[a]附着` |
-| `n` | `New` | 新建 tmux 会话 | 否 | `[n]新建` | `[n]新建` |
-| `r` | `Refresh` | 刷新会话列表 | 否 | `[r]刷新` | `[r]重试` |
-| `s` | `Ssh` | 直连 SSH | 否 | `[s]SSH` | `[s]直连` |
-| `x` | `Remove` | 删除会话（高危，二次确认在 `Remove-TmuxSession` 内） | **是** | `[x]删除` | `[x]删除` |
-| `q` | `Quit` | 退出管理器 | 否 | `[q]退出` | `[q]退出` |
-
-补充规则：
-
-- **无会话时不暴露** `a`（附着）与 `x`（删除），避免出现"点了没反应"的死键；界面与行为保持一致。
-- **`Context` 只切换文案，不切换键位**：`r` 在任何状态下都是刷新/重试，`s` 在任何状态下都是 SSH/直连。用户的肌肉记忆不因状态切换而失效。
-- **未登记的键**在动作条里提示一次并继续等待（最多 `-MaxAttempts` 次，默认 10）。
-- **`ESC` 退出管理器**；**无输入**（非交互终端 / Ctrl-C / 读取失败）按"用户退出"处理。
-- **表格内**：`↑↓` 选择，`Enter` 附着/恢复所选会话，`Esc` 进入底部动作条。
-
-### 3.5 回退轨的渲染约束
-
-- 唯一渲染实现仍是 [`Invoke-GridViewPrompt`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1) → PSTui `Out-ConsoleGridView`。主视图的正常态与失败态走**同一条**渲染路径（占位行的列名与正常行完全一致）。
-- **未对 Terminal.Gui 做任何反射**：`TableView.Style` / `ColumnStyle.Width` 等 readonly 字段仍是仓库明令禁止改动的区域（见 [`docs/agents/architecture.md`](../agents/architecture.md)）。
-- 底部动作条是**纯控制台输出**（`Write-Host` 单行文本），不是表格视图。它的内联 ANSI 在控制台里真实生效，因此「删除」项可以染成危险色。
-- 主轨可用性把关点不变：`Show-TmuxSessionDashboard` 入口仍统一执行 `Assert-ConsoleUiReady -Feature 'tmux 会话主视图'`，主轨不可用时抛可定位的终止错误，不静默降级。
-
-### 3.6 异步刷新会话列表
-
-回退轨首屏不串行等网络：SSH 探测与标题区 wttr.in 天气都放在**后台线程并行**进行，主线程只在需要结果的那一刻收割。
-
-- **提交端** `Submit-TmuxBackgroundTask` 用 `Start-ThreadJob` 跑脚本块。线程作业运行在**独立 runspace**，拿不到模块作用域里的私有函数，因此依赖必须显式列出（`-DependencyFile`）——这是硬约束，不是可选项。
-- **收割端** `Receive-TmuxBackgroundTask` 把成功/超时/作业内异常归一成统一形状；超时或失败**不会向调用方冒泡**。
-- `Invoke-TmuxSessionFetch` 的三条降级路径（提交失败 / 作业内异常 / 等待超时）**全部退回同步** `Get-TmuxSessions`。后台不可用只影响"快慢"，不影响"准不准"。
-- 天气预取失败静默降级，绝不阻塞首屏。
-
-### 3.7 回退轨的屏幕生命周期
-
-- `Enter-TmuxAlternateScreen` / `Exit-TmuxAlternateScreen`（幂等，状态位 `$script:TmuxAltScreenActive` 守护）包裹 `Start-TmuxSession` 整个 while 主循环，`finally` 恒发 `\e[?1049l`——退出管理器 / 异常 / Ctrl-C 都还原 Shell 现场。
-- **全屏子动作暂停/恢复**：attach、`n` 新建、`s` 直连 SSH 三条会接入全屏 tmux / ssh 的路径在执行前 `Exit` → 执行后 `Enter`，让 tmux 拿到干净画面，detach 后回到管理器备用屏。
-- **绝对坐标重绘**：每轮迭代开头 `Clear-TmuxScreen`（`[Console]::Clear()` + `[Console]::SetCursorPosition(0, 0)`）全量重绘；常驻画面（标题 Y=0 / 动作条 Y=$h-1 / Input 底栏）用绝对坐标定位，不跟随光标下沉。
-- **输入态状态机**：Normal 态维持单键直达；Input 态（新建会话名）只处理 `Enter` / `Esc` / `Backspace` / 可打印字符，其余按键静默忽略——`Read-TmuxActionKey` 把控制字符归一为 `IGNORE` 哨兵，动作条对 `IGNORE` 静默 continue，**绝不打印"未识别的按键"**。
-- **Esc 取消零翻转**：全屏交接放在 `New-TmuxSession` 内部（SSH 启动前 `Exit`、退出后 `Enter`），取消路径不产生屏幕翻转。
-
----
+> **2026-10-30 用户裁定移除。** 回退轨完整结构（`Show-TmuxSessionDashboard` / `Show-TmuxActionBar` / `Read-TmuxActionKey` / `Get-TmuxPlaceholderRow` 与 `UI.DashboardTuiEnabled` / `UI.DashboardFullScreen` 开关、`Start-TmuxSession` 内的主循环）已删除; 编排入口 `ShellPrompt/Public/Start-TmuxSession.ps1` 现为单轨: banner -> 主机选择 -> 天气预取 -> `Show-TmuxTuiDashboard`。
+> **PSTui 依赖本身保留** —— SSH 主机选择器（`Show-HostSelector`）与其他菜单仍走 PSTui GridView，勿把回退轨移除误读为 PSTui 退役。
 
 ## 四、错误码表
 
@@ -354,7 +233,7 @@ $runArgs[1] = $errorHandler
   1. 空态/错误态的"独立空态行"回填证据以文字确认为准（回填截图实际含 1 个会话），未逐字节取证；
   2. 极窄宽度（40–71 列）与 40×10 下限场景未逐档真机复验（无头布局核验零重叠零越界）；
   3. conhost 宿主未验证（本轮仅 Windows Terminal）。
-- 回退轨 `UI.DashboardTuiEnabled = $false`（PSTui GridView）验证通过后**保留待议**：是否移除由用户另行裁定。
+- 回退轨 PSTui GridView 已于 **2026-10-30 按用户裁定移除**（见 §一 与 §三）；若真机再出问题，恢复版本走 git 历史回查，不留在工作树。
 
 - **终端宽度下限 40 列**：仪表盘按 **40×10** 起步（`New-TmuxTuiDashboardWindow` 的 `ValidateRange` 与编排层的屏幕夹取一致）。真实终端窄于 40 列时，仪表盘会按 40 列布局 ⇒ **该极端场景存在横向溢出**。宽度 ≥ 72 列起隐藏 WINDOWS 列、≥ 96 列起隐藏 STATUS 列（见 §2.4），三档目标尺寸（100×30 / 120×35 / 160×45）不受影响。
 - **首次拉起的一次性延迟**：首次进入 `sss` 时 Terminal.Gui 静态初始化 + JIT 约 **0.84 s**（之后稳态 30–45 ms）；模块导入阶段**不**加载 Terminal.Gui/PSTui（惰性），因此不影响 Shell 启动耗时。详见 §2.12。
@@ -362,7 +241,7 @@ $runArgs[1] = $errorHandler
 
 ### 真机验收清单（Windows Terminal + pwsh 7.6+，逐项打勾）
 
-准备：真机置 `UI.DashboardTuiEnabled = $true`（默认），对一台真实 tmux 主机运行 `sss`。
+准备：对一台真实 tmux 主机运行 `sss`（回退轨已移除，无渲染开关）。
 
 | # | 验收点 | 通过标准 |
 |---|--------|----------|
@@ -377,7 +256,7 @@ $runArgs[1] = $errorHandler
 | 8 | 终端还原 | Q/Esc、**Ctrl+C**、Ctrl+C + 异常路径退出后：光标/输入模式正常、Shell 历史完整、无双底栏、无 1049 残留（备用屏单层：TG 独占，模块不发 1049） |
 | 9 | 无 TTY 护栏 | `pwsh -c "Start-TmuxSession deb"`（非交互重定向）不挂死，直接返回并给出跳过警告 |
 
-登记结果时注明日期与窗口宿主（Windows Terminal / conhost），任一项不过按文档第三章回退到 `UI.DashboardTuiEnabled = $false` 上报。
+登记结果时注明日期与窗口宿主（Windows Terminal / conhost）。
 
 ---
 

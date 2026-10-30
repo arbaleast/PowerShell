@@ -62,18 +62,10 @@ $script:Config = [ordered]@{
         # -Width/-Height 尺寸参数(README 实测), 关闭全屏即天然紧凑弹窗。
         # 需要"沉浸式铺满"的用户可在 $HOME/.ShellPrompt/config.ps1 里改回 $true。
         GridViewFullScreen = $false
-        # TGUI 迁移(阶段 B): sss 仪表盘渲染后端。
-        # = $true (默认): 走 Terminal.Gui v2 独立仪表盘(Show-TmuxTuiDashboard,
-        #   真正的全屏 TUI: 状态区/会话表/快捷键栏/空错误辅助区)。
-        # = $false: 回退老 PSTui GridView 主循环(Show-TmuxSessionDashboard +
-        #   Show-TmuxActionBar), 阶段 C 真机验收稳定后再评估移除。
-        DashboardTuiEnabled = $true
-        # tmux 仪表盘(Show-TmuxSessionDashboard)显式全屏渲染(PSTui -FullScreen):
-        # Terminal.Gui 全屏备用屏自带 清屏 + Y=0 锚定 + 尺寸变化自动重绘 +
-        # 底部状态条定位在最后一行。2026-10-30 第四轮修复: 上一轮的 MinUI +
-        # 自绘标题在真终端产生"标题重复/界面下沉/无底部提示"回归, 全部由
-        # 本开关取代。改 $false 应回退内联渲染(不推荐, 为兼容保留)。
-        DashboardFullScreen = $true
+        # 2026-10-30 回退轨移除: sss 仪表盘唯一实现在 Show-TmuxTuiDashboard
+        # (Terminal.Gui v2, 真机验收通过), UI.DashboardTuiEnabled 与
+        # UI.DashboardFullScreen(仅旧 PSTui 仪表盘消费)随回退轨一并移除;
+        # 用户旧配置里遗留的这两个键会被默认值合并时保留但无消费方, 无害。
         # GridView (Terminal.Gui v2) 配色
         Theme   = [ordered]@{
             # 总开关: $false 时 Set-TgColorScheme 直接返回, 不碰 Terminal.Gui 静态 API

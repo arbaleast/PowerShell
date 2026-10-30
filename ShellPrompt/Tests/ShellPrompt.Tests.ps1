@@ -98,10 +98,11 @@ Describe 'Command Export' {
             'Get-TmuxRefreshedSession', 'Get-ConsoleUiBackend', 'Assert-ConsoleUiReady',
             'Invoke-TmuxAttach', 'Invoke-TmuxSessionListView', 'ConvertTo-TmuxSessionSelection',
             # 2026-10-30 TUI 重构: 单视图 + 单行动作条 + 后台取数的内部实现
-            'Show-TmuxSessionDashboard', 'Show-TmuxActionBar',
+            # 2026-10-30 回退轨移除: Show-TmuxSessionDashboard/Show-TmuxActionBar/
+            #   Read-TmuxActionKey/Get-TmuxPlaceholderRow 已随回退轨删除(文件不存在,
+            #   断言改为存在性, 见 Start-TmuxSession.TuiDispatch.Tests.ps1)
             'Get-TmuxActionDefinition', 'Format-TmuxToolbarText',
-            'Resolve-TmuxActionKey', 'Read-TmuxActionKey',
-            'Get-TmuxSessionState', 'Get-TmuxErrorCode', 'Get-TmuxPlaceholderRow',
+            'Get-TmuxSessionState', 'Get-TmuxErrorCode',
             'Submit-TmuxBackgroundTask', 'Receive-TmuxBackgroundTask',
             'Invoke-TmuxSessionFetch', 'Submit-WttrPrefetch', 'Receive-WttrPrefetch',
             # 2026-10-30 第三轮 TUI 修复: Input 态输入机 / 备用屏幕生命周期
@@ -158,9 +159,9 @@ Describe 'Config Access' {
         $keys | Should -Contain 'GridViewFullScreen'
         # 2026-10-30 第四轮修复: GridViewMinUI 撤回, 换成仪表盘显式全屏开关
         $keys | Should -Not -Contain 'GridViewMinUI'
-        $keys | Should -Contain 'DashboardFullScreen'
-        # 2026-10-30 TGUI 迁移: sss 仪表盘渲染分发开关(默认 $true 用 Terminal.Gui v2)
-        $keys | Should -Contain 'DashboardTuiEnabled'
+        # 2026-10-30 回退轨移除: sss 仪表盘唯一实现在 TGUI 轨, 旧开关一并删除
+        $keys | Should -Not -Contain 'DashboardFullScreen'
+        $keys | Should -Not -Contain 'DashboardTuiEnabled'
     }
 
     It 'UI 域不应再提供 Backend 后端选择项' {
@@ -870,10 +871,11 @@ Describe '单轨 GridView 契约 (单轨化回归防护)' {
         $keys | Should -Not -Contain 'Backend'
     }
 
-    It '新的 UI 入口不再提供 -Backend 参数' {
-        # 2026-10-30: Show-SessionManager 已被 Show-TmuxSessionDashboard 取代
-        foreach ($name in @('Show-TmuxSessionDashboard', 'Show-TmuxActionBar')) {
-            $keys = & $script:mod { param($n) (Get-Command $n).Parameters.Keys } $name
+    It '保留的 UI 入口不再提供 -Backend 参数' {
+        # 2026-10-30: Show-SessionManager 与旧回退轨视图已删除(见 TuiDispatch 测试),
+        # 该断言收敛到仍存活的 Show-TmuxSessionList(删除确认链在用)。
+        foreach ($name in @('Show-TmuxSessionList')) {
+            $keys = & $script:mod { param($n) (Get-Command $n -ErrorAction Stop).Parameters.Keys } $name
             $keys | Should -Not -Contain 'Backend'
         }
     }
@@ -928,16 +930,26 @@ Describe '单轨 GridView 契约 (单轨化回归防护)' {
     }
 
     It 'TUI 重构新增的实现文件应存在于模块目录内' {
-        # 2026-10-30: 单主视图 + 单行动作条 + 后台取数的实现文件
+        # 2026-10-30: 单主视图 + 单行动作条 + 后台取数的实现文件;
+        # 2026-10-30 晚回退轨移除: Show-TmuxSessionDashboard/Show-TmuxActionBar/
+        # Resolve-TmuxActionKey/Read-TmuxActionKey/Get-TmuxPlaceholderRow 已删除(见下一条)。
         $privateDir = Join-Path $script:mod.ModuleBase 'Private'
         foreach ($file in @(
-                'Show-TmuxSessionDashboard.ps1', 'Show-TmuxActionBar.ps1',
                 'Get-TmuxActionDefinition.ps1', 'Format-TmuxToolbarText.ps1',
-                'Resolve-TmuxActionKey.ps1', 'Read-TmuxActionKey.ps1',
-                'Get-TmuxSessionState.ps1', 'Get-TmuxPlaceholderRow.ps1',
+                'Get-TmuxSessionState.ps1',
                 'Submit-TmuxBackgroundTask.ps1', 'Receive-TmuxBackgroundTask.ps1',
                 'Invoke-TmuxSessionFetch.ps1', 'Submit-WttrPrefetch.ps1')) {
             Test-Path (Join-Path $privateDir $file) | Should -BeTrue
+        }
+    }
+
+    It '已删除的 PSTui 回退轨源文件不应出现在模块目录内' {
+        # 2026-10-30 晚用户裁定移除: sss 回退轨(main 循环 + 双视图 + 键分发/占位行)
+        $privateDir = Join-Path $script:mod.ModuleBase 'Private'
+        foreach ($file in @(
+                'Show-TmuxSessionDashboard.ps1', 'Show-TmuxActionBar.ps1',
+                'Read-TmuxActionKey.ps1', 'Get-TmuxPlaceholderRow.ps1')) {
+            Test-Path (Join-Path $privateDir $file) | Should -BeFalse
         }
     }
 }

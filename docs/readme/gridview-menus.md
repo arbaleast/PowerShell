@@ -34,39 +34,22 @@
 
 ## 对外契约
 
-[`Show-HostSelector`](../../ShellPrompt/Private/Show-HostSelector.ps1) / [`Show-TmuxSessionDashboard`](../../ShellPrompt/Private/Show-TmuxSessionDashboard.ps1) / [`Show-TmuxSessionList`](../../ShellPrompt/Private/Show-TmuxSessionList.ps1) 是纯分发器，返回 `PSCustomObject`（`.Value` 为选中值，`$null` 表示用户取消）。调用方无需感知渲染实现细节。
+[`Show-HostSelector`](../../ShellPrompt/Private/Show-HostSelector.ps1) / [`Show-TmuxSessionList`](../../ShellPrompt/Private/Show-TmuxSessionList.ps1) 是纯分发器，返回 `PSCustomObject`（`.Value` 为选中值，`$null` 表示用户取消）。调用方无需感知渲染实现细节。
 
-> 原 `Show-SessionManager` 分发器（及 `Get-GridViewManagerRow` / `Write-TmuxAvailabilityNotice`）已于 **2026-10-30** 随「全局操作菜单」一并删除，职责由 `Show-TmuxSessionDashboard` + `Show-TmuxActionBar` 接管。
+> 原 `Show-SessionManager` 分发器（及 `Get-GridViewManagerRow` / `Write-TmuxAvailabilityNotice`）已于 **2026-10-30** 随「全局操作菜单」一并删除。**同日稍后：sss 回退轨（`Show-TmuxSessionDashboard` + `Show-TmuxActionBar` + `Read-TmuxActionKey` + `Get-TmuxPlaceholderRow`）也按用户裁定移除** —— tmux 管理器唯一实现在 Terminal.Gui v2 仪表盘（[tui-dashboard.md](tui-dashboard.md) §二），删除前结构见 git 历史。
 
 ## 交互流程（2026-10-30 TUI 重构起）
 
-`sss` 进入主机后，tmux 管理器的界面结构为：**一个主视图 + 一行动作条**。
+`sss` 进入主机后，tmux 管理器的界面结构为**单一 Terminal.Gui v2 仪表盘**（状态区 + 会话表 + 快捷键栏）。
 
-### tmux 会话主视图（单面板）
+> **2026-10-30 晚**：本节原先描述的 PSTui 回退轨（`Show-TmuxSessionDashboard` 主视图 + `Show-TmuxActionBar` 动作条）已被用户裁定移除，tmux 管理器唯一实现在 [tui-dashboard.md](tui-dashboard.md) §二；删除前的双视图结构描述见 git 历史。
 
-[`Show-TmuxSessionDashboard`](../../ShellPrompt/Private/Show-TmuxSessionDashboard.ps1) 是唯一主视图，标题形如 `TMUX 管理器 [debian] - 会话 2 (附 1 / 分 1)`，并在标题尾部拼上**单行工具条**（`[a]附着  [n]新建  [r]刷新  [s]SSH  [x]删除  [q]退出`）——表格打开期间键位也可见。
-
-- **有会话**时，行数据来自 `Get-TmuxSessionGridRow`（序号 / 会话名 / 状态 / 窗口数）。
-- **探测失败或无会话**时，行数据来自 `Get-TmuxPlaceholderRow`：**与正常态同构**（列名一致），`Session` 列给一句话说明，`State` 列给 `错误码 · 降级指引`（如 `E_SSH_TIMEOUT · 按 r 重试 · 按 s 直连 SSH`）。两条路径走**同一条** `Invoke-GridViewPrompt` 渲染路径，不存在第二套渲染实现。
-- **Enter** 选中某个会话 → 立即对该会话执行附着/恢复（统一由 [`Invoke-TmuxAttach.ps1`](../../ShellPrompt/Private/Invoke-TmuxAttach.ps1) 执行）。
-- **Esc** 从主视图进入底部单行动作条。
-
-### 底部单行动作条（单键）
-
-[`Show-TmuxActionBar`](../../ShellPrompt/Private/Show-TmuxActionBar.ps1) 打印单行状态栏 `[TMUX] <工具条> > ` 并读取**一个**键：
-
-- 登记过的键 → 立即返回对应动作；
-- 未登记的键 → 提示一次并继续等待（最多 `-MaxAttempts` 次，默认 10）；
-- **ESC** 或无输入（非交互终端 / Ctrl-C）→ 退出管理器。
-
-动作条是**纯控制台输出**，不走表格视图；因此这里的内联 ANSI 会被终端真实解析，「删除」项可染成危险色（与 GridView 表格单元格内联 ANSI 会被剥离的行为不同）。
-
-键位契约的唯一事实来源是 [`Get-TmuxActionDefinition.ps1`](../../ShellPrompt/Private/Get-TmuxActionDefinition.ps1)，完整键位表与错误码表见 [tmux 管理器 TUI 仪表盘](tui-dashboard.md)。
+键位契约（n 新建 / r 刷新 / s SSH / x 删除 / q 退出 / Esc 退出）的唯一事实来源仍是 [`Get-TmuxActionDefinition.ps1`](../../ShellPrompt/Private/Get-TmuxActionDefinition.ps1)，完整键位表与错误码表见 [tmux 管理器 TUI 仪表盘](tui-dashboard.md)。
 
 ### 静默与降级
 
 - **成功路径不再输出任何 toast**（原 `[OK] 正在重新获取会话列表 ...` 已删除）；只有失败才提示。
-- **「确实没有会话」与「探测失败」严格区分**：前者渲染操作提示（按 `n` 新建 / 按 `r` 刷新 / 按 `s` 直连），后者渲染错误码 + 降级指引。失败**绝不会**折叠成空列表。
+- **「确实没有会话」与「探测失败」严格区分**：前者在 TGI 仪表盘渲染独立空态行（不伪造表格行，附着/删除标注"不可用"），后者渲染错误码 + 降级指引。失败**绝不会**折叠成空列表。
 
 ## 会话列表的「已附着 / 已分离」状态
 
@@ -172,7 +155,7 @@
 | `Disabled` 行灰显 | 不支持渲染禁用态 | `State` 列标注 + 选中后**阻断**并提示 |
 | 独立「退出」行 | 表格不再放 Exit 行 | `Esc` / `Ctrl-C` 退出，返回 `$null` |
 
-> **2026-10-30 补充**：tmux 管理器底部新增的**单行动作条**（`Show-TmuxActionBar`）是**纯控制台输出**（`Write-Host` 单行文本），不是表格视图的底部帮助区，因此不受"表格视图无底部帮助区"这条限制约束；表格内的按键说明仍由 PSTui 自带状态栏提供。
+> **2026-10-30 补充**：tmux 管理器底部的新版实现是 Terminal.Gui `Shortcut` 快捷键栏（纯 TGUI 渲染，见 [tui-dashboard.md](tui-dashboard.md) §2）；本表此前的回退轨"单行动作条"已移除，其"纯控制台输出不受表格帮助区限制"的讨论随之失效。表格视图（主机选择器等仍存活的 PSTui 视图）内的按键说明仍由 PSTui 自带状态栏提供。
 
 ## 性能特征（GridView 主轨）
 
