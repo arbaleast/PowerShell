@@ -100,48 +100,9 @@ Describe 'tmux 会话状态一致性审计 (2026-10-29)' {
         }
     }
 
-    Context 'Restore-GridViewSelection: 会话名键列的隐藏字段恢复' {
-
-        It '正常会话行按 Session 名找回原行并恢复 Value/Status/Disabled' {
-            # 行形状与 GridView 表格行一致(No/Session/State/Windows/Status/Disabled/Value)
-            $rows = @(
-                [PSCustomObject]@{ No = '01'; Session = 'alpha'; State = '● 已附着'; Windows = 2; Status = 'attached'; Disabled = $false; Value = 'alpha' },
-                [PSCustomObject]@{ No = '02'; Session = 'beta'; State = '○ 已分离'; Windows = 1; Status = 'detached'; Disabled = $false; Value = 'beta' }
-            )
-            # 模拟 Out-ConsoleGridView 返回的"裁剪后"行: 隐藏列已被列裁剪移除
-            $selected = [PSCustomObject]@{ No = '02'; Session = 'beta'; State = '' }
-
-            $restored = & $script:mod {
-                param($sel, $r)
-                Restore-GridViewSelection -Selected $sel -Rows $r -KeyColumn 'Session' `
-                    -HiddenKeys @('Value', 'Status', 'Disabled') `
-                    -HiddenColumns @{ Value = ''; Status = ''; Disabled = $false }
-            } $selected $rows
-
-            $restored.Value | Should -Be 'beta'
-            $restored.Status | Should -Be 'detached'
-            $restored.Disabled | Should -BeFalse
-        }
-
-        It '同名会话行(现实中 tmux 拒绝创建重名会话)时隐藏字段取第一个匹配行 —— 锁定现状' {
-            # 说明: tmux 在创建时拒绝与现有会话同名的新会话("duplicate session"),
-            # 因此该场景在真实远端不可达; 此用例仅锁定 Restore-GridViewSelection
-            # "按键列取第一个匹配行"的现状, 防止后续无意间改变该语义。
-            $rows = @(
-                [PSCustomObject]@{ No = '01'; Session = 'dup'; State = ''; Windows = ''; Status = 'attached'; Disabled = $false; Value = 'dup' },
-                [PSCustomObject]@{ No = '02'; Session = 'dup'; State = ''; Windows = ''; Status = 'detached'; Disabled = $false; Value = 'dup' }
-            )
-            $selected = [PSCustomObject]@{ No = '02'; Session = 'dup' }
-
-            $restored = & $script:mod {
-                param($sel, $r)
-                Restore-GridViewSelection -Selected $sel -Rows $r -KeyColumn 'Session' `
-                    -HiddenKeys @('Value', 'Status') `
-                    -HiddenColumns @{ Value = ''; Status = '' }
-            } $selected $rows
-
-            $restored.Status | Should -Be 'attached'
-            $restored.Value | Should -Be 'dup'
-        }
-    }
 }
+
+# 2026-10-30 PSTui 移除: 原 Context 'Restore-GridViewSelection: 会话名键列的
+# 隐藏字段恢复' 随 Out-ConsoleGridView 轨删除。TGUI 轨的选中读回契约
+# (SelectedCell.Y → 完整行对象)由 Invoke-TguiHostSelector 编排层承担,
+# 返回行即原始行对象, 不存在"隐藏列裁剪/恢复"环节, 无对应用例。

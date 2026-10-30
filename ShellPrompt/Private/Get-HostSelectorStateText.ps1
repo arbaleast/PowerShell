@@ -7,7 +7,7 @@
 #     双轨兼容)
 #
 # 调用方:
-#   - Get-GridViewHostRow(主机选择表格行构造)
+#   - Get-HostSelectorRow(主机选择表格行构造)
 #
 # 依赖:
 #   - 无

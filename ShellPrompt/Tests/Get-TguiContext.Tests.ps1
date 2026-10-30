@@ -5,7 +5,8 @@
 #      Init/Run/Shutdown 静态成员与 Window/TableView/StatusBar/View/FTypes;
 #   3. Window : Terminal.Gui.App.IRunnable (Run[TRunnable] 运行模型的前提);
 #   4. 文案不匹配/目录缺失时抛可定位错误(不静默降级);
-#   5. vendored 归属护栏: TG 与 PSTui 同目录**单副本**(拆成独立依赖目录即失败)。
+#   5. vendored 归属护栏(2026-10-30 PSTui 移除版): TG 独立目录
+#      Modules/Terminal.Gui/<ver>/**单副本**(任何第二份 TG.dll 副本即失败)。
 # 说明: 纯反射级验证, 不触发 Application.Init(无头/无 TTY 环境安全)。
 
 Describe 'Terminal.Gui v2 上下文加载器 (Get-TguiContext)' {
@@ -24,21 +25,21 @@ Describe 'Terminal.Gui v2 上下文加载器 (Get-TguiContext)' {
         $first | Should -Not -BeNullOrEmpty
         $second | Should -BeExactly $first
         $first.Version | Should -Not -BeNullOrEmpty
-        # PSTui 1.0.5 同源钉版 (vendored 2.4.10.0)
+        # vendored 2.4.10.0
         $first.Assembly.GetName().Version.Major | Should -Be 2
     }
 
-    It 'vendored Terminal.Gui 与 PSTui 同目录单副本(依赖归属护栏)' {
-        # 归属结论见 docs/readme/tui-dashboard.md 第三章: Terminal.Gui **不独立管理**,
-        # 与 PSTui 同目录单副本(PSTui 对 TG v2 是模块作用域硬依赖)。
-        # 本用例把该结论变成可执行断言: 有人把 TG 拆到独立目录时会失败,
-        # 强制走一次显式决策, 而不是悄悄引入第二份会漂移的二进制。
+    It 'vendored Terminal.Gui 独立目录单副本(依赖归属护栏)' {
+        # 归属结论(2026-10-30 PSTui 移除): Terminal.Gui **独立目录**管理,
+        # Modules/Terminal.Gui/<ver>/ 只含 TG 及其依赖闭包(PSTui 已整体删除)。
+        # 本用例把该结论变成可执行断言: 有人把 TG 迁回 PSTui、或引入第二份
+        # 副本时会失败, 强制走一次显式决策, 而不是悄悄引入会漂移的二进制。
         $ctx = & $script:mod { Get-TguiContext }
         $sourceDir = $ctx.SourceDir
 
-        # 载入源 = PSTui 版本目录: TG 必须与 PSTui.dll 同目录
+        # 载入源 = 独立版本目录: TG 存在, PSTui.dll 不允许再出现在该目录
         (Test-Path (Join-Path $sourceDir 'Terminal.Gui.dll')) | Should -BeTrue
-        (Test-Path (Join-Path $sourceDir 'PSTui.dll')) | Should -BeTrue
+        (Test-Path (Join-Path $sourceDir 'PSTui.dll')) | Should -BeFalse
         # 版本钉在 2.4.10.0(升级须同步 API 面记录与文档)
         $ctx.Version | Should -Be '2.4.10.0'
 

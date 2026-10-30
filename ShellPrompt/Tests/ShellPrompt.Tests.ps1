@@ -9,16 +9,16 @@
        `ParameterBindingException: Parameter set cannot be resolved using the specified
        named parameters.` (12/12 旧写法全部失败, 仅新写法 `Should -Be` 通过),
        因此必须把旧语法改写为 Pester v5+ 的 `Should -Be` / `Should -Not -Be` 形式。
-    3) 2026-10-18 控制台 UI 单轨化 (仅保留 PSTui GridView 主轨, 自研 ANSI 降级轨已移除),
+    3) 2026-10-18 控制台 UI 单轨化 (自研 ANSI 降级轨移除, 用例按存续实现重写),
        原文件中针对已删除函数 (Test-FilterCharacter / Get-FilteredItems /
        Update-FilterString / New-StatusBadge / Format-StatusBadge / New-MenuItem /
        Write-MenuItem / New-DynamicHelpPanel / Get-SessionActionHelp / New-AnsiLayout /
        Add-MainLine / Set-FooterLine / Write-AnsiLine / Update-InputBuffer /
        Test-InputValidation / Send-MenuKey / ConvertTo-CsiArrowKey) 的用例已按
-       "单轨 GridView 等价实现" 重写, 而不是简单删除。
-    4) 文件末尾追加 "单轨 GridView 契约" 断言组, 覆盖:
-       Backend 恒为 GridView / Assert-ConsoleUiReady 抛错与放行 /
-       三个分发器无 -Backend 参数 / 已删除降级轨函数在模块作用域不存在 /
+       "存续实现等价覆盖" 重写, 而不是简单删除。
+    4) 文件末尾追加 "交互式 UI 单轨契约" 断言组, 覆盖:
+       Backend 恒为 TerminalGui / Assert-ConsoleUiReady 抛错与放行 /
+       已删除降级轨与 PSTui GridView 轨函数在模块作用域不存在 /
        已删除源文件不在模块目录内 (基于 ModuleBase, 不依赖仓库工作区路径)。
 #>
 
@@ -89,10 +89,10 @@ Describe 'Command Export' {
 
     It '不应导出单轨化后新增的内部实现函数' {
         $privateNames = @(
-            'Invoke-GridViewPrompt', 'Invoke-GridViewHostSelector',
-            'Get-GridViewColumnPlan', 'Get-GridViewHostRow',
-            'ConvertTo-GridViewPlainText', 'Get-GridViewRenderParam',
-            'Restore-GridViewSelection',
+            # 2026-10-30 PSTui 移除: GridView 轨实现随 Modules/PSTui 删除,
+            # 主机选择器改由 ALC 原生 Terminal.Gui v2 轨承接(以下均为内部实现)
+            'Invoke-TguiHostSelector', 'New-TguiHostSelectorWindow',
+            'Get-HostSelectorRow', 'Resolve-TguiThemeName',
             'Get-ConsoleUiBackend', 'Assert-ConsoleUiReady',
             'Invoke-TmuxAttach',
             # 2026-10-30 TUI 重构: 单视图 + 单行动作条 + 后台取数的内部实现
@@ -147,10 +147,13 @@ Describe 'Config Access' {
         $config.Contains('UI') | Should -BeTrue
     }
 
-    It 'UI 域应保留 GridView 行为配置' {
+    It 'UI 域应保留 Theme 配置且不再存在 PSTui 双轨开关' {
         $keys = & $script:mod { @($script:Config.UI.Keys) }
-        $keys | Should -Contain 'GridViewFocus'
-        $keys | Should -Contain 'GridViewFullScreen'
+        $keys | Should -Contain 'Theme'
+        # 2026-10-30 PSTui 移除: GridViewFocus / GridViewFullScreen 是
+        # PSTui Out-ConsoleGridView 专用开关, 随该轨删除一并移除
+        $keys | Should -Not -Contain 'GridViewFocus'
+        $keys | Should -Not -Contain 'GridViewFullScreen'
         # 2026-10-30 第四轮修复: GridViewMinUI 撤回, 换成仪表盘显式全屏开关
         $keys | Should -Not -Contain 'GridViewMinUI'
         # 2026-10-30 回退轨移除: sss 仪表盘唯一实现在 TGUI 轨, 旧开关一并删除
@@ -317,11 +320,11 @@ Describe 'Resolve-ColorTable (颜色语义解析)' {
     }
 }
 
-Describe 'Get-GridViewHostRow (主机选择表格行)' {
+Describe 'Get-HostSelectorRow (主机选择表格行)' {
 
     It '应按输入顺序生成行' {
         $rows = & $script:mod {
-            Get-GridViewHostRow -Hosts @('debian', 'ubuntu')
+            Get-HostSelectorRow -Hosts @('debian', 'ubuntu')
         }
         $rows.Count | Should -Be 2
         $rows[0].Host | Should -Be 'debian'
@@ -331,38 +334,38 @@ Describe 'Get-GridViewHostRow (主机选择表格行)' {
     It '列属性集应不再包含 Desc(2026-10-19 P0 删除冗余列)' {
         # 旧 Desc 列内容'SSH 远程主机'与 Host 列重复, 已随 P0 改进移除。
         # 锁定回归: 任何让 Desc 字段再次出现的改动都视为破坏本契约。
-        $rows = & $script:mod { Get-GridViewHostRow -Hosts @('debian') }
+        $rows = & $script:mod { Get-HostSelectorRow -Hosts @('debian') }
         $rows[0].PSObject.Properties.Name | Should -Not -Contain 'Desc'
     }
 
     It 'Value 应等于主机名' {
-        $rows = & $script:mod { Get-GridViewHostRow -Hosts @('debian') }
+        $rows = & $script:mod { Get-HostSelectorRow -Hosts @('debian') }
         $rows[0].Value | Should -Be 'debian'
     }
 
     It 'LastHost 应被置顶' {
         $rows = & $script:mod {
-            Get-GridViewHostRow -Hosts @('debian', 'ubuntu', 'arch') -LastHost 'ubuntu'
+            Get-HostSelectorRow -Hosts @('debian', 'ubuntu', 'arch') -LastHost 'ubuntu'
         }
         $rows[0].Host | Should -Be 'ubuntu'
     }
 
     It 'LastHost 行应标注 ● last(兼容 ★ 最近变体)' {
         $rows = & $script:mod {
-            Get-GridViewHostRow -Hosts @('debian', 'ubuntu') -LastHost 'ubuntu'
+            Get-HostSelectorRow -Hosts @('debian', 'ubuntu') -LastHost 'ubuntu'
         }
         $rows[0].State | Should -Match '● last|★ 最近'
     }
 
     It '非 LastHost 行的 State 应为空' {
         $rows = & $script:mod {
-            Get-GridViewHostRow -Hosts @('debian', 'ubuntu') -LastHost 'ubuntu'
+            Get-HostSelectorRow -Hosts @('debian', 'ubuntu') -LastHost 'ubuntu'
         }
         $rows[1].State | Should -Be ''
     }
 
     It 'Disabled 应恒为 false' {
-        $rows = & $script:mod { Get-GridViewHostRow -Hosts @('debian') }
+        $rows = & $script:mod { Get-HostSelectorRow -Hosts @('debian') }
         $rows[0].Disabled | Should -BeFalse
     }
 }
@@ -393,227 +396,27 @@ Describe '已删除的全局操作菜单实现(2026-10-30 TUI 重构)' {
     }
 }
 
-Describe 'Get-GridViewRenderParam (渲染参数装配)' {
 
-    It '默认应装配单选模式且不带 FullScreen' {
-        # 2026-10-30: GridViewFullScreen 默认 $false, 轻量菜单不再铺满全屏。
-        $params = & $script:mod { Get-GridViewRenderParam -Title 'TMUX 全局操作' }
-        $params | Should -BeOfType [hashtable]
-        $params['Title'] | Should -Be 'TMUX 全局操作'
-        $params['OutputMode'] | Should -Be 'Single'
-        $params['Focus'] | Should -Be 'Table'
-        $params.ContainsKey('FullScreen') | Should -BeFalse
-    }
+Describe '交互式 UI 单轨契约 (Terminal.Gui v2 回归防护)' {
 
-    It '配置为全屏时应装配 FullScreen 开关' {
-        $params = & $script:mod {
-            $original = $script:Config.UI.GridViewFullScreen
-            try {
-                $script:Config.UI.GridViewFullScreen = $true
-                Get-GridViewRenderParam -Title 'T'
-            } finally {
-                $script:Config.UI.GridViewFullScreen = $original
-            }
-        }
-        $params['FullScreen'] | Should -BeTrue
-    }
-
-    It '显式 -FullScreen 开关不经全局配置也生效(仪表盘路径)' {
-        # 2026-10-30 第四轮修复: 仪表盘经 UI.DashboardFullScreen(默认 $true)传开关,
-        # 全局 GridViewFullScreen(默认 $false)此时不生效
-        $params = & $script:mod { Get-GridViewRenderParam -Title 'T' -FullScreen }
-        $params['FullScreen'] | Should -BeTrue
-    }
-}
-
-Describe 'ConvertTo-GridViewPlainText (送入 Terminal.Gui 前的 ANSI 净化)' {
-
-    # 2026-10-30 修复: TG TableView 不解析单元格内联 ANSI 且转义字节会干扰
-    # Wcwidth 宽字符列宽计算, 因此行数据送入 Out-ConsoleGridView 前必须净化。
-    It '应剥离非键列 string 属性里的 SGR 序列' {
-        $rows = & $script:mod {
-            $esc = [char]27
-            ConvertTo-GridViewPlainText -Rows @(
-                [PSCustomObject]@{
-                    Action   = '删除 tmux 会话'
-                    State    = "$esc[38;2;220;90;90m⚠ 危险$esc[0m"
-                    Disabled = $false
-                    Value    = 'Remove'
-                }
-            ) -KeyColumn 'Action'
-        }
-        $rows[0].State | Should -Be '⚠ 危险'
-    }
-
-    It '键列原样保留(隐藏字段回填依赖键列匹配)' {
-        $rows = & $script:mod {
-            $esc = [char]27
-            ConvertTo-GridViewPlainText -Rows @(
-                [PSCustomObject]@{
-                    Action   = "$esc[32m染色键$esc[0m"
-                    State    = ''
-                    Disabled = $false
-                    Value    = 'Remove'
-                }
-            ) -KeyColumn 'Action'
-        }
-        $rows[0].Action | Should -Be ("$([char]27)[32m染色键$([char]27)[0m")
-    }
-
-    It '非 string 属性与空串保持原样' {
-        $rows = & $script:mod {
-            ConvertTo-GridViewPlainText -Rows @(
-                [PSCustomObject]@{
-                    Action   = '创建新 tmux 会话'
-                    State    = ''
-                    Disabled = $false
-                    Value    = 'New'
-                }
-            ) -KeyColumn 'Action'
-        }
-        $rows[0].State | Should -Be ''
-        $rows[0].Disabled | Should -BeFalse
-        $rows[0].Value | Should -Be 'New'
-    }
-
-    It '无 ANSI 的行集合经处理后无残留 ESC 字节' {
-        $rows = & $script:mod {
-            ConvertTo-GridViewPlainText -Rows @(
-                [PSCustomObject]@{
-                    Action   = '刷新会话列表'
-                    State    = '⟳ 手动'
-                    Disabled = $false
-                    Value    = 'Refresh'
-                }
-            ) -KeyColumn 'Action'
-        }
-        # 输出数组不允许引入任何 ESC 控制字符
-        @($rows | ForEach-Object { $_.PSObject.Properties.Value }) |
-            ForEach-Object { $_ | Should -Not -Match ([regex]::Escape([char]27)) }
-    }
-}
-
-Describe 'Get-GridViewColumnPlan (列裁剪计划)' {
-
-    It '应优先选 Session 作为键列' {
-        $plan = & $script:mod {
-            Get-GridViewColumnPlan -Rows @(
-                [PSCustomObject]@{ No = '01'; Session = 'a'; Status = 'attached' }
-            ) -HiddenColumns @{ Status = '' }
-        }
-        $plan.KeyColumn | Should -Be 'Session'
-    }
-
-    It '应优先选 Host 作为键列' {
-        $plan = & $script:mod {
-            Get-GridViewColumnPlan -Rows @(
-                [PSCustomObject]@{ Host = 'debian'; Desc = 'x' }
-            ) -HiddenColumns @{ Value = '' }
-        }
-        $plan.KeyColumn | Should -Be 'Host'
-    }
-
-    It '无可用自然键列时应回退到 _RowIdx' {
-        $plan = & $script:mod {
-            Get-GridViewColumnPlan -Rows @(
-                [PSCustomObject]@{ Foo = 'a' }
-                [PSCustomObject]@{ Foo = 'b' }
-            )
-        }
-        $plan.KeyColumn | Should -Be '_RowIdx'
-    }
-
-    It '隐藏列不应出现在可见列中' {
-        $plan = & $script:mod {
-            Get-GridViewColumnPlan -Rows @(
-                [PSCustomObject]@{ Session = 'a'; Status = 'attached'; Disabled = $false; Value = 'a' }
-            ) -HiddenColumns @{ Status = ''; Disabled = $false; Value = '' }
-        }
-        $plan.VisibleColumns | Should -Not -Contain 'Status'
-        $plan.VisibleColumns | Should -Not -Contain 'Disabled'
-        $plan.VisibleColumns | Should -Not -Contain 'Value'
-        $plan.VisibleColumns | Should -Contain 'Session'
-    }
-
-    It '裁剪后的行不应再带隐藏字段' {
-        $plan = & $script:mod {
-            Get-GridViewColumnPlan -Rows @(
-                [PSCustomObject]@{ Session = 'a'; Status = 'attached'; Disabled = $false; Value = 'a' }
-            ) -HiddenColumns @{ Status = ''; Disabled = $false; Value = '' }
-        }
-        $plan.TrimmedRows[0].PSObject.Properties.Name | Should -Not -Contain 'Status'
-        $plan.TrimmedRows[0].PSObject.Properties.Name | Should -Not -Contain 'Value'
-    }
-
-    It '裁剪后的行数应与原始行数一致' {
-        $plan = & $script:mod {
-            Get-GridViewColumnPlan -Rows @(
-                [PSCustomObject]@{ Session = 'a' }
-                [PSCustomObject]@{ Session = 'b' }
-            ) -HiddenColumns @{ Value = '' }
-        }
-        $plan.TrimmedRows.Count | Should -Be 2
-    }
-}
-
-Describe 'Restore-GridViewSelection (选中结果归一化与隐藏字段恢复)' {
-
-    It '单对象形态应直接返回' {
-        $sel = & $script:mod {
-            param($r) Restore-GridViewSelection -Selected $r -Rows @() -KeyColumn 'Session'
-        } ([PSCustomObject]@{ Session = 'a' })
-        $sel.Session | Should -Be 'a'
-    }
-
-    It '单元素集合形态应归一化为单对象' {
-        $sel = & $script:mod {
-            param($r) Restore-GridViewSelection -Selected $r -Rows @() -KeyColumn 'Session'
-        } @([PSCustomObject]@{ Session = 'a' })
-        $sel.Session | Should -Be 'a'
-    }
-
-    It '应从原始行恢复隐藏字段' {
-        $sel = & $script:mod {
-            $rows = @(
-                [PSCustomObject]@{ Session = 'a'; Status = 'attached'; Disabled = $false; Value = 'a' }
-            )
-            $trimmed = [PSCustomObject]@{ Session = 'a' }
-            Restore-GridViewSelection -Selected $trimmed -Rows $rows -KeyColumn 'Session' `
-                -HiddenKeys @('Status', 'Disabled', 'Value') -HiddenColumns @{ Status = ''; Disabled = $false; Value = '' }
-        }
-        $sel.Status | Should -Be 'attached'
-        $sel.Value | Should -Be 'a'
-        $sel.Disabled | Should -BeFalse
-    }
-
-    It '原始行缺失该列时应使用默认值' {
-        $sel = & $script:mod {
-            $rows = @([PSCustomObject]@{ Session = 'a' })
-            $trimmed = [PSCustomObject]@{ Session = 'a' }
-            Restore-GridViewSelection -Selected $trimmed -Rows $rows -KeyColumn 'Session' `
-                -HiddenKeys @('Value') -HiddenColumns @{ Value = 'DEFAULT' }
-        }
-        $sel.Value | Should -Be 'DEFAULT'
-    }
-}
-
-Describe '单轨 GridView 契约 (单轨化回归防护)' {
-
-    It 'Get-ConsoleUiBackend 的 Backend 恒为 GridView' {
+    It 'Get-ConsoleUiBackend 的 Backend 恒为 TerminalGui' {
         $state = & $script:mod { Get-ConsoleUiBackend }
-        $state.Backend | Should -Be 'GridView'
+        $state.Backend | Should -Be 'TerminalGui'
     }
 
-    It 'Get-ConsoleUiBackend 不得返回 AnsiFallback 降级轨' {
+    It 'Get-ConsoleUiBackend 不得返回 AnsiFallback / GridView 旧轨名' {
         $state = & $script:mod { Get-ConsoleUiBackend }
         $state.Backend | Should -Not -Be 'AnsiFallback'
+        $state.Backend | Should -Not -Be 'GridView'
     }
 
-    It 'Get-ConsoleUiBackend 应返回统一的字段集合' {
+    It 'Get-ConsoleUiBackend 应返回统一的字段集合(不再有 PSTui 专用字段)' {
         $state = & $script:mod { Get-ConsoleUiBackend }
-        foreach ($field in @('Backend', 'Available', 'Reason', 'Conflicts', 'PstuiVersion', 'TerminalGuiVersion')) {
+        foreach ($field in @('Backend', 'Available', 'Reason', 'TerminalGuiVersion')) {
             $state.PSObject.Properties.Name | Should -Contain $field
         }
+        $state.PSObject.Properties.Name | Should -Not -Contain 'PstuiVersion'
+        $state.PSObject.Properties.Name | Should -Not -Contain 'Conflicts'
     }
 
     It 'Assert-ConsoleUiReady 在主轨可用时不应抛错' {
@@ -624,7 +427,7 @@ Describe '单轨 GridView 契约 (单轨化回归防护)' {
                 $original = $script:ConsoleUiBackend
                 try {
                     $script:ConsoleUiBackend = [PSCustomObject]@{
-                        Backend   = 'GridView'
+                        Backend   = 'TerminalGui'
                         Available = $true
                         Reason    = '测试注入的可用状态'
                     }
@@ -644,7 +447,7 @@ Describe '单轨 GridView 契约 (单轨化回归防护)' {
             $original = $script:ConsoleUiBackend
             try {
                 $script:ConsoleUiBackend = [PSCustomObject]@{
-                    Backend   = 'GridView'
+                    Backend   = 'TerminalGui'
                     Available = $false
                     Reason    = '测试注入的不可用原因'
                 }
@@ -697,17 +500,44 @@ Describe '单轨 GridView 契约 (单轨化回归防护)' {
                 'New-AnsiLayout.ps1', 'Clear-AnsiScreen.ps1', 'Write-MenuItem.ps1',
                 'New-MenuItem.ps1', 'New-StatusBadge.ps1', 'Format-StatusBadge.ps1',
                 'New-DynamicHelpPanel.ps1', 'Get-TmuxSessionMenuOption.ps1',
-                'Get-KeyboardFilter.ps1', 'Show-InputPrompt.ps1')) {
+                'Get-KeyboardFilter.ps1', 'Show-InputPrompt.ps1',
+                # 2026-10-30 PSTui 移除: GridView 轨实现文件全部删除
+                'Invoke-GridViewMenu.ps1', 'Get-GridViewColumnPlan.ps1',
+                'Restore-GridViewSelection.ps1', 'Initialize-GridViewColorScheme.ps1',
+                'Set-TgColorScheme.ps1', 'Get-GridViewHostRow.ps1')) {
             Test-Path (Join-Path $privateDir $file) | Should -BeFalse
         }
     }
 
-    It 'GridView 主轨实现文件应存在于模块目录内' {
+    It '已删除的 PSTui GridView 轨函数在模块作用域内应不存在' {
+        $removed = @(
+            'Invoke-GridViewMenu', 'Invoke-GridViewPrompt', 'Invoke-GridViewHostSelector',
+            'Get-GridViewColumnPlan', 'Get-GridViewHostRow',
+            'Get-GridViewRenderParam', 'Get-GridViewFocus',
+            'ConvertTo-GridViewPlainText', 'Restore-GridViewSelection',
+            'Initialize-GridViewColorScheme',
+            'Set-TgColorScheme', 'New-TgColor', 'New-TgAttribute',
+            'Set-TgSchemeSlot', 'Get-TgTargetScheme', 'Resolve-TgThemeName',
+            'Sync-TgSchemeSlot', 'Test-TgColorSchemeSupport', 'Get-TgAssemblyPath',
+            'Get-ConsoleUiModuleOnDisk', 'Test-ConsoleUiHostPrerequisite',
+            'Test-ConsoleUiCommandConflict', 'Test-ConsoleUiTerminalGuiConflict'
+        )
+        foreach ($name in $removed) {
+            $found = & $script:mod {
+                param($n) [bool](Get-Command $n -CommandType Function -ErrorAction SilentlyContinue)
+            } $name
+            $found | Should -BeFalse
+        }
+    }
+
+    It 'TerminalGui 主轨实现文件应存在于模块目录内' {
         $privateDir = Join-Path $script:mod.ModuleBase 'Private'
         foreach ($file in @(
-                'Invoke-GridViewMenu.ps1', 'Get-GridViewColumnPlan.ps1',
-                'Get-GridViewHostRow.ps1',
-                'Get-ConsoleUiBackend.ps1')) {
+                'New-TguiHostSelectorWindow.ps1', 'Invoke-TguiHostSelector.ps1',
+                'Get-HostSelectorRow.ps1', 'Get-HostSelectorStateText.ps1',
+                'Show-HostSelector.ps1', 'Get-ConsoleUiBackend.ps1',
+                'Set-TguiTheme.ps1', 'Resolve-TguiThemeName.ps1',
+                'Get-TguiContext.ps1')) {
             Test-Path (Join-Path $privateDir $file) | Should -BeTrue
         }
     }

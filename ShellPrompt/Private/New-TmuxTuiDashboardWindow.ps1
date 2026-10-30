@@ -229,12 +229,13 @@ function New-TmuxTuiDashboardWindow {
     # ---- 主题配色 + 方案绑定(2026-10-30 真机验收补修) ----
     # 真机现象: 仪表盘只剩边框、内容全无。根因(探针 p51 实测):
     #   TG 内置 'Base' 方案 Normal = fg(255,255,255) bg(255,255,255) —— **白对白**,
-    #   文字与背景同色 ⇒ 完全隐形; 仪表盘轨从未套用仓库主题(主题只在 PSTui
-    #   默认上下文那条轨生效), 而 'ansi' 驱动不做终端颜色探测, Base 永远白对白。
-    # 另: Set-TgColorScheme 经 Add-Type 走**默认加载上下文**, 与本 ALC 的
-    #   Terminal.Gui 是"同名类型两套身份" —— 跨程序集赋值抛
-    #   "Cannot convert ... Scheme to ... Scheme"。故必须用 ALC 原生的
-    #   Set-TguiTheme(同配置、同幂等契约)覆写槽位。
+    #   文字与背景同色 ⇒ 完全隐形; 'ansi' 驱动不做终端颜色探测, Base 永远白对白。
+    #   (2026-10-30 起 PSTui 默认加载上下文配色轨已删除, 配色只剩 ALC 原生的
+    #   Set-TguiTheme 一条路径; 任何经 Add-Type 载入的 Terminal.Gui 副本与
+    #   本 ALC 类型身份互不兼容, 不允许再引入。)
+    # 另: 同名类型跨程序集(Add-Type 默认上下文 vs 本 ALC)互不兼容 ——
+    #   跨程序集赋值抛 "Cannot convert ... Scheme to ... Scheme"。
+    #   故必须用 ALC 原生的 Set-TguiTheme(同配置、同幂等契约)覆写槽位。
     # 绑定策略: 主体(窗口/状态行/表格)取 'Base', 快捷键栏取 'Menu'
     #   —— 与仓库配色契约一致(表格主体取 Base, 底部状态栏取 Menu);
     #   且绑定前用 Test-TguiSchemeVisible 过滤"前景=背景"的不可见方案。

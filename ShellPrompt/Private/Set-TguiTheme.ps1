@@ -1,14 +1,14 @@
 # Set-TguiTheme.ps1 - Terminal.Gui v2 **独立 ALC** 的主题装配与方案可见性保障
 #
 # ============================ 为什么需要独立一套 ============================
-# 仓库里已有两套 Terminal.Gui 加载方式, 二者**不能混用**:
-#   1) PSTui 主轨: Set-TgColorScheme 经 Add-Type 走**默认加载上下文**;
-#   2) sss 仪表盘轨: Get-TguiContext 用**独立 AssemblyLoadContext(ALC)** 载入
-#      Modules/PSTui/<ver>/Terminal.Gui.dll。
-# 同名类型跨程序集是**两套类型身份**: 默认上下文的 Terminal.Gui.Drawing.Scheme
-# 与 ALC 里的 Scheme 不是同一个类型, 互相赋值会抛
-# "Cannot convert ... Scheme to ... Scheme"(真机实测)。
-# ⇒ 仪表盘轨必须有一套**ALC 原生**的配色装配, 即本文件。
+# 交互式 UI 单轨 = 独立 ALC 的 Terminal.Gui v2(Get-TguiContext 载入
+# Modules/Terminal.Gui/<ver>/Terminal.Gui.dll)。2026-10-30 起 PSTui 默认
+# 加载上下文轨(Set-TgColorScheme 经 Add-Type)随 Modules/PSTui 删除一并移除,
+# 配色装配只剩本文件这一条 ALC 原生路径。
+# 注意PowerShell 类型身份隔离仍然是要点: 任何经 Add-Type 载入的 Terminal.Gui
+# 副本(同名类型, 默认上下文)与本 ALC 的 Scheme/Color 互不兼容,
+# 互相赋值会抛 "Cannot convert ... Scheme to ... Scheme"(真机实测)。
+# ⇒ 所有 TGUI 视图的配色必须走本文件的 ALC 原生装配。
 #
 # ============================ 真机故障与根因 ============================
 # 2026-10-30 真机验收(Windows Terminal): 仪表盘**只剩边框、内容全无**。
@@ -24,7 +24,7 @@
 # ============================ 关键实现约束 ============================
 #   - 只取**已存在**的方案实例(SchemeManager.GetScheme(name))就地改写;
 #     绝不新增方案名、绝不写 ThemeManager.Theme —— 该组合会打坏 SchemeManager
-#     内部字典与 Theme 的对应关系(见 Set-TgColorScheme.ps1 文件头实测记录)。
+#     内部字典与 Theme 的对应关系(SchemeManager 内部实测记录, 2026-10)。
 #   - 逐槽位"先读后比、等值跳过": TG 2.4.10 把与现值相同的 Attribute 再写一遍
 #     不是幂等 no-op, 而是触发一次 Scheme 重建并把槽位打回内置默认
 #     (实测 4 轮严格交替)。跳过等值写入同时避免翻转。
@@ -159,7 +159,7 @@ function Set-TguiSlot {
         就地改写 ALC Scheme 的单个槽位(先读后比, 等值跳过)。
 
     .DESCRIPTION
-        与 Set-TgSchemeSlot 相同的幂等契约: "写入与现值相同的 Attribute" 会触发
+        幂等契约(ALC Scheme 实测): "写入与现值相同的 Attribute" 会触发
         Scheme 重建并把槽位打回内置默认(实测 4 轮交替翻转), 必须等值跳过。
         未知/只读槽位按 Verbose 跳过不抛错 —— 配色部分生效优于完全不生效。
 
@@ -228,7 +228,7 @@ function Set-TguiTheme {
         把 UI.Theme 槽位集覆写到 ALC SchemeManager 的方案实例上(幂等)。
 
     .DESCRIPTION
-        与 Set-TgColorScheme 同语义、同约束:
+        同约束(幂等 + 降级):
           - 只取**已存在**的方案实例(优先配置里的方案名, 缺失回退 'Base'),
             不新增方案名、不写 ThemeManager.Theme;
           - 逐槽位等值跳过(Sync-TgSchemeSlot 同语义);
@@ -261,8 +261,8 @@ function Set-TguiTheme {
         return $false
     }
 
-    # 方案名集合(与 Resolve-TgThemeName 同语义: undefined->'Base'; 多名字支持)
-    $names = Resolve-TgThemeName -Name $theme.Name
+    # 方案名集合(与 Resolve-TguiThemeName 同语义: undefined->'Base'; 多名字支持)
+    $names = Resolve-TguiThemeName -Name $theme.Name
 
     # GetScheme(string) 反射查找(不依赖类型字面量, 防跨程序集解析)
     $getScheme = $schemeManagerType.GetMethod('GetScheme', [type[]]@([string]))

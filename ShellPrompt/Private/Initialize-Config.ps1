@@ -49,39 +49,33 @@ $script:Config = [ordered]@{
         Enabled              = $true
         ExtraWeatherDescMap  = [ordered]@{}
     }
-    # UI 域: 控制台 UI 主轨 (PSTui GridView) 行为配置
-    # 注: 自研 ANSI 降级轨已于 2026-10-18 移除, 不再存在后端选择项;
-    #     可用性由 Get-ConsoleUiBackend 现场检测, 不可用时抛明确错误。
+    # UI 域: 交互式 UI 主轨 (Terminal.Gui v2, 独立 ALC) 行为配置
+    # 注: 自研 ANSI 降级轨(2026-10-18)与 PSTui 轨(2026-10-30)均已移除, 不存在
+    #     后端选择项; 可用性由 Get-ConsoleUiBackend 现场检测, 不可用时抛明确错误。
     UI     = [ordered]@{
-        # GridView 初始焦点: 'Table' = 光标在表格; 'Filter' = 光标在过滤输入框
-        # (后者更接近旧版 Q1=A 打字即搜的手感, 但交互手感未在自动化环境验证)
-        GridViewFocus   = 'Table'
-        # GridView 是否以全屏(alternate screen)方式渲染。
-        # 2026-10-30 起默认 $false: 3~4 行的轻量全局操作菜单全屏渲染会产生
-        # 大面积黑底空洞; PSTui 1.0.5 的 Out-ConsoleGridView 默认内联渲染且未暴露
-        # -Width/-Height 尺寸参数(README 实测), 关闭全屏即天然紧凑弹窗。
-        # 需要"沉浸式铺满"的用户可在 $HOME/.ShellPrompt/config.ps1 里改回 $true。
-        GridViewFullScreen = $false
+        # 2026-10-30 PSTui 移除: UI.GridViewFocus / UI.GridViewFullScreen 是
+        # PSTui Out-ConsoleGridView 专用开关, 随该轨删除一并移除;
+        # 用户旧配置里遗留的这些键会被默认值合并时保留但无消费方, 无害。
         # 2026-10-30 回退轨移除: sss 仪表盘唯一实现在 Show-TmuxTuiDashboard
         # (Terminal.Gui v2, 真机验收通过), UI.DashboardTuiEnabled 与
         # UI.DashboardFullScreen(仅旧 PSTui 仪表盘消费)随回退轨一并移除;
         # 用户旧配置里遗留的这两个键会被默认值合并时保留但无消费方, 无害。
-        # GridView (Terminal.Gui v2) 配色
+        # Terminal.Gui v2 配色(ALC 原生 Set-TguiTheme 消费)
         Theme   = [ordered]@{
-            # 总开关: $false 时 Set-TgColorScheme 直接返回, 不碰 Terminal.Gui 静态 API
+            # 总开关: $false 时 Set-TguiTheme 直接返回, 不碰 Terminal.Gui 静态 API
             Enabled = $true
             # 覆写目标(可多个): 依次取 [SchemeManager]::GetScheme(<名字>) 返回的
             # **已存在**实例并就地改写。刻意不新增方案名 + 不写 ThemeManager.Theme ——
             # 实测 TG 2.4.10 下该组合会让 SchemeManager 内部字典与 Theme 失配,
             # 之后所有 GetScheme 抛异常。
             #
-            # 为什么必须多 Scheme: 真终端颜色指纹探针实测(PSTui 1.0.5 + TG 2.4.10.0)
+            # 为什么必须多 Scheme: 真终端颜色指纹探针实测(TG 2.4.10.0)
             #   - 表格主体(正文/焦点行/边框/列头) 取自 Scheme 'Base';
             #   - 底部状态栏(Rows: n | Enter Accept | Esc Close) 取自 Scheme 'Menu';
             #   - ThemeManager.Theme = 'Default' 解析到的正是 'Base'。
             # 单个名字不存在时自动回退 'Base'。
             #
-            # 兼容旧配置: 既有配置里 Name 可能是单个字符串, 由 Resolve-TgThemeNames
+            # 兼容旧配置: 既有配置里 Name 可能是单个字符串, 由 Resolve-TguiThemeName
             # 规范化成单元素数组, 不需要用户手工迁移。
             Name    = [string[]]@('Base', 'Menu')
             # 槽位配色: 键为 Terminal.Gui.Drawing.Scheme 的属性名,
@@ -110,7 +104,7 @@ $script:Config = [ordered]@{
             #
             # 4) 底部状态栏 —— 取自 Scheme 'Menu'(已由 Name 一并覆写), 不读 Focus/Active。
             #
-            # 任何槽位若在某个 TG 版本上不可写, Set-TgSchemeSlot 会跳过而不报错,
+            # 任何槽位若在某个 TG 版本上不可写, Set-TguiSlot 会跳过而不报错,
             # 配色部分生效优于完全不生效。
             # ---------------------------------------------------------------------------
             Slots   = [ordered]@{

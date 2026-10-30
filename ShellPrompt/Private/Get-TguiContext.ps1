@@ -3,8 +3,8 @@
 # 背景 (2026-10-30 TGUI 迁移 · 阶段 A):
 #   目标: 把 sss 的 tmux 仪表盘迁移到 Terminal.Gui v2 真正的全屏界面,
 #   不引第二套自研 ANSI 渲染系统、不对 PSTui 内部反射。
-#   载入源: 复用仓库内 vendored 的 Modules/PSTui/<ver>/Terminal.Gui.dll
-#   (PS 7.6+.NET 10 同家族, 版本钉 2.4.10.0 = PSTui 1.0.5 已验证同版),
+#   载入源: 仓库内 vendored 的 Modules/Terminal.Gui/<ver>/Terminal.Gui.dll
+#   (PS 7.6+.NET 10 同家族, 版本钉 2.4.10.0),
 #   用独立 AssemblyLoadContext + 路径解析回调加载 TG 及其依赖:
 #     Testably.Abstractions.FileSystem.Interface  System.IO.Abstractions
 #     Wcwidth  ColorHelper (均与 Terminal.Gui.dll 同目录)
@@ -53,7 +53,7 @@ function Get-TguiContext {
         加载(或复用)仓库内 vendored 的 Terminal.Gui v2 程序集上下文。
 
     .DESCRIPTION
-        从 <仓库根>/Modules/PSTui/<最高版本目录>/ 载入 Terminal.Gui.dll
+        从 <仓库根>/Modules/Terminal.Gui/<最高版本目录>/ 载入 Terminal.Gui.dll
         及其同目录依赖, 返回 PSCustomObject:
           .Alc         AssemblyLoadContext(持有解析回调与全部已载程序集)
           .Assembly    Terminal.Gui 程序集对象
@@ -67,7 +67,7 @@ function Get-TguiContext {
         仅影响版本号, 不需要改代码。
 
     .PARAMETER RootDirectory
-        可选: 自定义 vendored 目录(测试隔离注入)。缺省用仓库根 Modules/PSTui。
+        可选: 自定义 vendored 目录(测试隔离注入)。缺省用仓库根 Modules/Terminal.Gui。
 
     .OUTPUTS
         [PSCustomObject] .Alc/.Assembly/.Version/.Types
@@ -85,24 +85,24 @@ function Get-TguiContext {
 
     if ($script:TguiContext) { return $script:TguiContext }
 
-    # ---- 1. 定位 vendored 目录 (仓库根/Modules/PSTui/<ver>/Terminal.Gui.dll) ----
+    # ---- 1. 定位 vendored 目录 (仓库根/Modules/Terminal.Gui/<ver>/Terminal.Gui.dll) ----
     $privateRoot = $PSScriptRoot
     $repoRoot = Split-Path -Path (Split-Path -Path $privateRoot -Parent) -Parent
     if ([string]::IsNullOrWhiteSpace($RootDirectory)) {
         $RootDirectory = Join-Path -Path $repoRoot -ChildPath 'Modules'
     }
-    $pstuiDir = Join-Path -Path $RootDirectory -ChildPath 'PSTui'
-    if (-not (Test-Path -Path $pstuiDir)) {
-        throw "TGUI 载入失败: 未找到 vendored PSTui 目录 ($pstuiDir)。仪表迁移需要仓库内 Modules/PSTui。"
+    $tguiDir = Join-Path -Path $RootDirectory -ChildPath 'Terminal.Gui'
+    if (-not (Test-Path -Path $tguiDir)) {
+        throw "TGUI 载入失败: 未找到 vendored Terminal.Gui 目录 ($tguiDir)。交互式 UI 需要仓库内 Modules/Terminal.Gui。"
     }
 
     # 选最高版本子目录(目录名即版本), 取其一含 Terminal.Gui.dll
-    $versionDir = Get-ChildItem -Path $pstuiDir -Directory |
+    $versionDir = Get-ChildItem -Path $tguiDir -Directory |
         Where-Object { Test-Path (Join-Path $_.FullName 'Terminal.Gui.dll') } |
         Sort-Object { [version]$_.Name } -Descending |
         Select-Object -First 1
     if ($null -eq $versionDir) {
-        throw "TGUI 载入失败: $pstuiDir 下没有包含 Terminal.Gui.dll 的版本目录。"
+        throw "TGUI 载入失败: $tguiDir 下没有包含 Terminal.Gui.dll 的版本目录。"
     }
     $dllDir = $versionDir.FullName
 

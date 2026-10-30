@@ -47,7 +47,7 @@ Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" | Sort-Object Name | ForEach-O
     }
 }
 
-# 控制台 UI 主轨 (PSTui GridView) 可用性检测 —— 惰性执行
+# 交互式 UI 主轨 (Terminal.Gui v2 独立 ALC) 可用性检测 —— 惰性执行
 # - 加载期**不再**执行检测: 实测该检测是模块导入阶段的最大单一热点(约 500ms),
 #   而它在 profile 启动阶段根本没有被使用(菜单要等用户主动触发)。
 # - 检测结果改为惰性计算: 首次被真正需要时(Get-ConsoleUiState / Assert-ConsoleUiReady)
