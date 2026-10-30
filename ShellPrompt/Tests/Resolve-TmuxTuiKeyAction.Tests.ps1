@@ -55,10 +55,14 @@ Describe 'TGUI 键位动作映射 (Resolve-TmuxTuiKeyAction)' {
 
     It '未命中键(方向键/未知字母)返回空串, 交给 TG 内建导航' {
         $left = Get-KeyStub -Key 'LeftArrow' -KeyChar ([char]0)
+        # stub 形状自检: Windows/Linux 对 [char]0 的求值必须一致 —— 若 Windows
+        # 出偏差会在这里以具体 char 码暴露, 而不是 puzzling 地命中 Quit。
+        [int]$left.KeyChar | Should -Be 0
         (& $script:mod { param($k) Resolve-TmuxTuiKeyAction -KeyInfo $k -HasSessions $true } $left) |
             Should -BeExactly ''
 
         $z = Get-KeyStub -KeyChar ([char]'z')
+        [int]$z.KeyChar | Should -Be 122
         (& $script:mod { param($k) Resolve-TmuxTuiKeyAction -KeyInfo $k -HasSessions $true } $z) |
             Should -BeExactly ''
     }

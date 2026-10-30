@@ -57,8 +57,13 @@ function Resolve-TmuxTuiKeyAction {
     $keyName = [string]$KeyInfo.Key
     $keyChar = try { [char]$KeyInfo.KeyChar } catch { [char]0 }
 
-    # Esc(two表达: Key=Escape 或 KeyChar\x1b)与 Q 都映射 Quit(Goal 三-3)
-    if ($keyName -eq 'Escape' -or "$keyChar" -eq "`e") { return 'Quit' }
+    # Esc(两种表达: Key=Escape/Esc 或 KeyChar=ESC)与 Q 都映射 Quit(Goal 三-3)
+    # ★ 2026-10-30 CI(windows-latest)实测教训: 不要用 `"$keyChar"`(char 转字符串)
+    #   与 ESC 字面 `` `e `` 做 -eq 比较 —— Windows 宿主上 LeftArrow stub
+    #   (KeyChar=NUL)曾被误判命中 Quit(Linux 正确) —— char 比较 必须
+    #   char-to-char 精确进行, 不经任何字符串插值。
+    $escChar = [char]27
+    if (($keyName -in @('Escape', 'Esc')) -or ($keyChar -eq $escChar)) { return 'Quit' }
 
     if ($keyName -eq 'Enter') {
         if ($HasSessions) { return 'Attach' }
@@ -66,9 +71,10 @@ function Resolve-TmuxTuiKeyAction {
     }
 
     # 单字母键: 复用键位契约的唯一事实来源(与旧动作条/工具条一致)
-    if ($keyChar -ne "`0") {
+    if ($keyChar -ne [char]0) {
         $definitions = @(Get-TmuxActionDefinition -HasSessions $HasSessions -Context 'Normal')
-        $needle = "$keyChar".ToLowerInvariant()
+        $needle = "{0}" -f $keyChar
+        $needle = $needle.ToLowerInvariant()
         foreach ($d in $definitions) {
             if ($d.Key -eq $needle) { return [string]$d.Value }
         }
