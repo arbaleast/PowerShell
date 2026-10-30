@@ -19,3 +19,7 @@
 # PSUseProcessBlockForPipelineCommand | ShellPrompt/Private/ConvertTo-SshEscapedString.ps1 | Command accepts pipeline input but has not defined a process block. | 1
 # PSUseSingularNouns | ShellPrompt/Private/Get-SshArgs.ps1 | The cmdlet 'Get-SshArgs' uses a plural noun. A singular noun should be used instead. | 1
 # PSUseSingularNouns | ShellPrompt/Private/Get-SshConfigHosts.ps1 | The cmdlet 'Get-SshConfigHosts' uses a plural noun. A singular noun should be used instead. | 1
+# --- 2026-10-30 TGUI 迁移阶段B 新增(lead): 局部条目 ---
+# See Show-TmuxTuiDashboard.Tests.ps1 键盘注入用例: TG 事件循环回调会换 runtime 会话,
+# 记数通道必须走 global(与生产 $global:TguiPendingAction 同一设计), 无法降为 script 作用域。
+# PSAvoidGlobalVars | ShellPrompt/Tests/Show-TmuxTuiDashboard.Tests.ps1 | Found global variable 'global:TguiTestHits'. | 3

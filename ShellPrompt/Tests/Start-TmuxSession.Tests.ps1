@@ -24,6 +24,9 @@ Describe 'Start-TmuxSession (单主视图 + 单行动作条)' {
     }
 
     BeforeEach {
+        # TGUI 迁移阶段 B: 本套测的是 legacy 主路径(渲染分发开关关掉),
+        # 否则默认 DashboardTuiEnabled=$true 会走 Show-TmuxTuiDashboard
+        & $script:mod { $script:Config.UI.DashboardTuiEnabled = $false }
         # 通用静音: 交互输出/横幅/天气预取不参与断言
         Mock -CommandName Write-Host -ModuleName ShellPrompt -MockWith { }
         Mock -CommandName Write-Warning -ModuleName ShellPrompt -MockWith { }
@@ -97,7 +100,6 @@ Describe 'Start-TmuxSession (单主视图 + 单行动作条)' {
                     Version   = '3.3a'
                 }
             }
-
             & $script:mod { Start-TmuxSession -HostName 'mock-host' }
 
             Should -Invoke -CommandName Show-TmuxSessionDashboard -ModuleName ShellPrompt -Exactly 1
@@ -111,6 +113,37 @@ Describe 'Start-TmuxSession (单主视图 + 单行动作条)' {
             Should -Invoke -CommandName Exit-TmuxAlternateScreen -ModuleName ShellPrompt -Exactly 1
             # 绝对的全量重绘: 每次迭代开头一次 Clear-TmuxScreen(单轮循环 = 恰好一次)
             Should -Invoke -CommandName Clear-TmuxScreen -ModuleName ShellPrompt -Exactly 1
+        }
+
+        It '按 n 走新建动作: New-TmuxSession 内部自理全屏交接, 编排层不做屏幕翻转' {
+            # 2026-10-30 第六轮修复: Esc 取消输入后白翻一次屏幕(闪现 Shell 历史)
+            # 的根因是编排层无条件 Exit/Enter; 现在全屏交接移入 New-TmuxSession,
+            # 编排层对 New 动作不得触碰备用屏(其中内部才自理)。
+            Mock -CommandName Invoke-TmuxSessionFetch -ModuleName ShellPrompt -MockWith {
+                return @{
+                    Sessions  = @([PSCustomObject]@{ Name = 'work'; Status = 'detached'; Windows = 1 })
+                    Available = $true
+                    Version   = '3.3a'
+                }
+            }
+            Mock -CommandName Show-TmuxSessionDashboard -ModuleName ShellPrompt -MockWith { return $null }
+            $script:newCount = 0
+            Mock -CommandName Show-TmuxActionBar -ModuleName ShellPrompt -MockWith {
+                $script:newCount++
+                if ($script:newCount -eq 1) {
+                    return [PSCustomObject]@{ Value = 'New'; Key = 'n' }
+                }
+                return $null
+            }
+            Mock -CommandName New-TmuxSession -ModuleName ShellPrompt -MockWith { }
+
+            & $script:mod { Start-TmuxSession -HostName 'mock-host' }
+
+            Should -Invoke -CommandName New-TmuxSession -ModuleName ShellPrompt -Exactly 1
+            # 编排层零翻转(修复前 New 会多一次 Exit/Enter 对, 这里各为 2/2):
+            # Enter 仅来自循环开屏, Exit 仅来自退出 finally —— 各恰好一次。
+            Should -Invoke -CommandName Exit-TmuxAlternateScreen -ModuleName ShellPrompt -Exactly 1
+            Should -Invoke -CommandName Enter-TmuxAlternateScreen -ModuleName ShellPrompt -Exactly 1
         }
 
         It '刷新后行序保持稳定: 远端返回顺序变化时, 主视图仍按上一轮顺序展示' {

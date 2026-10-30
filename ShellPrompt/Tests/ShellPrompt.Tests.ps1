@@ -107,9 +107,19 @@ Describe 'Command Export' {
             # 2026-10-30 第三轮 TUI 修复: Input 态输入机 / 备用屏幕生命周期
             # 2026-10-30 第四轮修复: MinUI 撤回(Get-GridViewMinUiEnabled 已删),
             #   改为 UI.DashboardFullScreen 显式全屏
+            # 2026-10-30 第四轮修复: MinUI 撤回(Get-GridViewMinUiEnabled 已删),
+            #   改为 UI.DashboardFullScreen 显式全屏
             # 2026-10-30 第五轮修复: Clear-TmuxScreen(绝对的全量重绘原语)
+            # 2026-10-30 TGUI 迁移阶段 A: Terminal.Gui 上下文加载器
+            # + UI 视图模型/键位动作纯函数映射
             'Read-TmuxConsoleLine', 'Enter-TmuxAlternateScreen', 'Exit-TmuxAlternateScreen',
-            'Clear-TmuxScreen'
+            'Clear-TmuxScreen', 'Get-TguiContext',
+            'ConvertTo-TmuxTuiViewModel', 'Resolve-TmuxTuiKeyAction',
+            'New-TmuxTuiColumnPlan', 'New-TmuxTuiSessionTable', 'Show-TmuxTuiDashboard',
+            # 2026-10-30 TGUI 迁移阶段 B: 仪表盘编排/工厂/动作分发(导出盲区收口)
+            'New-TmuxTuiShortcutList', 'New-TmuxTuiDashboardWindow',
+            'Invoke-TmuxSessionDeletion', 'Invoke-TmuxTuiAction',
+            'ConvertTo-TguiKeyInfo', 'New-TmuxTuiLayoutPlan', 'Test-TmuxTuiInteractive'
         )
         $exported = @(Get-Command -Module ShellPrompt | Select-Object -ExpandProperty Name)
         foreach ($name in $privateNames) {
@@ -149,6 +159,8 @@ Describe 'Config Access' {
         # 2026-10-30 第四轮修复: GridViewMinUI 撤回, 换成仪表盘显式全屏开关
         $keys | Should -Not -Contain 'GridViewMinUI'
         $keys | Should -Contain 'DashboardFullScreen'
+        # 2026-10-30 TGUI 迁移: sss 仪表盘渲染分发开关(默认 $true 用 Terminal.Gui v2)
+        $keys | Should -Contain 'DashboardTuiEnabled'
     }
 
     It 'UI 域不应再提供 Backend 后端选择项' {

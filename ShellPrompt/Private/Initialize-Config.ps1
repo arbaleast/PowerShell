@@ -62,6 +62,12 @@ $script:Config = [ordered]@{
         # -Width/-Height 尺寸参数(README 实测), 关闭全屏即天然紧凑弹窗。
         # 需要"沉浸式铺满"的用户可在 $HOME/.ShellPrompt/config.ps1 里改回 $true。
         GridViewFullScreen = $false
+        # TGUI 迁移(阶段 B): sss 仪表盘渲染后端。
+        # = $true (默认): 走 Terminal.Gui v2 独立仪表盘(Show-TmuxTuiDashboard,
+        #   真正的全屏 TUI: 状态区/会话表/快捷键栏/空错误辅助区)。
+        # = $false: 回退老 PSTui GridView 主循环(Show-TmuxSessionDashboard +
+        #   Show-TmuxActionBar), 阶段 C 真机验收稳定后再评估移除。
+        DashboardTuiEnabled = $true
         # tmux 仪表盘(Show-TmuxSessionDashboard)显式全屏渲染(PSTui -FullScreen):
         # Terminal.Gui 全屏备用屏自带 清屏 + Y=0 锚定 + 尺寸变化自动重绘 +
         # 底部状态条定位在最后一行。2026-10-30 第四轮修复: 上一轮的 MinUI +

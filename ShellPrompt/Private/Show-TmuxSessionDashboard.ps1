@@ -86,8 +86,10 @@ function Show-TmuxSessionDashboard {
     # 仪表盘是否全屏由 UI.DashboardFullScreen 控制(默认 $true);
     # 轻量菜单(主机选择器等)仍走内联, 不受影响。
     $dashFullScreen = $true
-    if ($script:Config -and $script:Config.UI -and $script:Config.UI.PSObject.Properties['DashboardFullScreen']) {
-        $dashFullScreen = [bool]$script:Config.UI.DashboardFullScreen
+    # UI 是 [ordered] OrderedDictionary —— 条目不是 PowerShell 属性,
+    # 判键存在必须用 .Contains(), 用 .PSObject.Properties[...] 恒为 $null。
+    if ($script:Config -and $script:Config.UI -and $script:Config.UI.Contains('DashboardFullScreen')) {
+        $dashFullScreen = [bool]$script:Config.UI['DashboardFullScreen']
     }
 
     $rows = if ($hasSessions) {

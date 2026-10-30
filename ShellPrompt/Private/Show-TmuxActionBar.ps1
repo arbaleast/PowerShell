@@ -59,6 +59,12 @@ function Show-TmuxActionBar {
         [ValidateSet('Normal', 'Error')]
         [string]$Context = 'Normal',
 
+        # 常驻标题(2026-10-30 第六轮修复): 全屏弹窗关闭的瞬间渲染在 Y=0,
+        # 保证常驻画面不是"只剩一行底栏的空屏"。空串/未提供时跳过。
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyString()]
+        [string]$TitleLine = '',
+
         [Parameter(Mandatory = $false)]
         [scriptblock]$KeyReader,
 
@@ -69,10 +75,21 @@ function Show-TmuxActionBar {
 
     $toolbar = Format-TmuxToolbarText -HasSessions $HasSessions -Context $Context -HighlightDanger
 
+    # 常驻标题(第六轮修复): 弹窗(表格)只负责列表渲染, 关闭后标题由这里补画,
+    # 消除"内容全消失/只剩底栏空屏"的观感。
+    if (-not [string]::IsNullOrWhiteSpace($TitleLine)) {
+        try {
+            [Console]::SetCursorPosition(0, 0)
+        } catch {
+            Write-Verbose "[Show-TmuxActionBar] SetCursorPosition 不可用: $($_.Exception.Message)"
+        }
+        Write-Host "  $TitleLine"
+    }
+
     # 绝对坐标底栏(2026-10-30 第五轮修复): 底栏恒定渲染在屏幕最后一行
     # (Y = $h - 1, $h = [Console]::WindowHeight), 不再"从当前光标位置往下画"
     # —— 那是状态切换后残影/双底栏的直接成因。主循环迭代开头有
-    # Clear-TmuxScreen(\e[2J\e[H) 全量重绘, 此处再把光标钉到底行。
+    # Clear-TmuxScreen(.NET 原生清屏 + 归位) 全量重绘, 此处再把光标钉到底行。
     try {
         $height = [Console]::WindowHeight
         if ($height -gt 1) {

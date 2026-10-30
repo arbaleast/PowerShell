@@ -86,7 +86,11 @@ function Start-TmuxSession {
     # P2-6: 入口处显示欢迎 banner, 使用与 Show-UserScoopLogo 一致的样式
     Write-TmuxWelcomeBanner
 
-    # 主机选择: 委托 Show-HostSelector(实时过滤 + LastHost 徽章)
+    # ---- 主机选择: 委托 Show-HostSelector(实时过滤 + LastHost 徽章) ----
+    # 必须**先于**渲染分支(2026-10-30 TGUI 阶段 B 修正):
+    #   仪表盘需要一个确定的 HostName, 且 LastHost 记忆要在任何分支都写回。
+    #   之前的实现把 TGUI 分支放在主机选择之前 —— 不带 -HostName 调用 sss 会直接
+    #   因必填参数缺失而抛错, 且 LastHost 永远记不上。
     if (-not $HostName) {
         # P2-4: 包裹 spinner 保持 UX 一致性(缓存命中会一闪而过, 未命中会有动画)
         $hosts = Invoke-WithProgress -Message "加载主机列表" -ScriptBlock { Get-SshConfigHosts }
@@ -97,11 +101,30 @@ function Start-TmuxSession {
 
     $script:Config.SSH.LastHost = $HostName
 
-    Write-Host "`n [SSH] 目标主机: $HostName" -ForegroundColor Cyan
-
     # 2026-10-30 异步: 天气预取与随后的 SSH 探测在后台并行, 首屏不等网络。
     # 预取失败静默降级(标题区不显示天气), 不影响主流程。
     $null = Submit-WttrPrefetch
+
+    # ---- 渲染分发 (TGUI 迁移阶段 B) ----
+    # UI.DashboardTuiEnabled(默认 $true) = $true: 走 Terminal.Gui v2 仪表盘
+    # (独立 TGUI 主循环, 唯一终端所有者, 上下导航/Enter 附着/N 新建/R 刷新
+    # /S SSH/X 删除/Q 退出, 全部沿用既有业务链路)。
+    # = $false: 回退老 PSTui GridView 主循环(阶段 C 真机验收后才移除)。
+    #
+    # ★ 配置读取坑(实测): $script:Config.UI 是 [ordered] OrderedDictionary,
+    #   它的条目**不是 PowerShell 属性** —— 用 `.PSObject.Properties['X']` 判存在
+    #   恒为 $null, 于是开关永远不生效(测试里关掉 TGUI 仍然进了 TGUI 主循环并挂死)。
+    #   OrderedDictionary 判键存在要用 `.Contains('X')`, 取值用 `['X']`。
+    $useTui = $true
+    if ($script:Config -and $script:Config.UI -and $script:Config.UI.Contains('DashboardTuiEnabled')) {
+        $useTui = [bool]$script:Config.UI['DashboardTuiEnabled']
+    }
+    if ($useTui) {
+        Show-TmuxTuiDashboard -HostName $HostName | Out-Null
+        return
+    }
+
+    Write-Host "`n [SSH] 目标主机: $HostName" -ForegroundColor Cyan
 
     # 当前主视图使用的状态对象; $null 表示"需要重新取数"。
     # 'Attach' 回到列表时复用它(不再多打一次 SSH), 其余动作执行后置空触发重取。
@@ -158,7 +181,15 @@ function Start-TmuxSession {
 
         # ---------- 底部单行动作条(单键事件循环) ----------
         $hasSessions = $state.Status -eq 'Ok'
-        $action = Show-TmuxActionBar -HasSessions $hasSessions -Context $state.Context
+        # 常驻标题(第六轮修复): 弹窗关闭瞬间补画标题行, 填补"只剩底栏的空屏"
+        $persistTitle = if ($hasSessions) {
+            "TMUX 管理器 [$HostName] - " + (Get-TmuxSessionSummary -Sessions @($state.Sessions)).TitleSuffix
+        } elseif ($state.Context -eq 'Error') {
+            "TMUX 管理器 [$HostName] - $($state.ErrorCode)"
+        } else {
+            "TMUX 管理器 [$HostName] - 会话 0"
+        }
+        $action = Show-TmuxActionBar -HasSessions $hasSessions -Context $state.Context -TitleLine $persistTitle
         if ($null -eq $action) {
             # ESC / 无输入: 退出管理器
             Write-Host " [OK] 已从 $HostName 断开连接" -ForegroundColor Cyan
@@ -171,10 +202,10 @@ function Start-TmuxSession {
                 continue
             }
             'New' {
-                # 暂停管理器备用屏: 创建走交互输入 + 全屏 tmux, 需要主讲画面
-                Exit-TmuxAlternateScreen
+                # 全屏交接由 New-TmuxSession 内部自理(2026-10-30 第六轮修复):
+                # Esc 取消输入不发生屏幕翻转, 只有真正进 SSH/tmux 才暂停管理器屏。
+                # 上一版在这里无条件 Exit/Enter, 是"Esc 后闪现 Shell 历史"的根因。
                 New-TmuxSession -HostName $HostName
-                Enter-TmuxAlternateScreen
                 $state = $null
             }
             'Refresh' {
