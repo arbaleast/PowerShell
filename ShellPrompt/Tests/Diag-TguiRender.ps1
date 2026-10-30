@@ -93,6 +93,8 @@ $diag = & $mod {
     }
 
     # ---- 子视图帧 + 各子视图配色(关键: fg==bg 则内容隐形) ----
+    # ★ TG 2.4.10 没有 ColorScheme 属性(实测), 取色只能用 GetScheme();
+    #   旧写法 $v.ColorScheme 恒抛异常 → 配色证据整段不可读。
     $w = $result.Window
     $out.Add("window.BorderStyle=$($w.BorderStyle)")
     try {
@@ -107,11 +109,13 @@ $diag = & $mod {
             if ($t.Length -gt 60) { $t = $t.Substring(0, 60) + '...' }
             $csInfo = '配色不可读'
             try {
-                $cs = $v.ColorScheme
+                $has = $v.HasScheme
+                $cs = $v.GetScheme()
                 if ($null -ne $cs) {
                     $f = $cs.Normal.Foreground
                     $b = $cs.Normal.Background
-                    $csInfo = "fg=$($f.R),$($f.G),$($f.B) bg=$($b.R),$($b.G),$($b.B)"
+                    $visible = -not ($f.R -eq $b.R -and $f.G -eq $b.G -and $f.B -eq $b.B)
+                    $csInfo = "hasScheme=$has fg=$($f.R),$($f.G),$($f.B) bg=$($b.R),$($b.G),$($b.B) 可见=$visible"
                 }
             } catch {
                 $csInfo = "配色读取异常: $($_.Exception.Message)"
@@ -120,6 +124,25 @@ $diag = & $mod {
         }
     } catch {
         $out.Add("children.error=$($_.Exception.Message)")
+    }
+
+    # ---- 主题装配状态(ALC 方案实例) ----
+    try {
+        $applied = Set-TguiTheme -Tgui $tg
+        $out.Add("theme.applied=$applied")
+        $getSchemeM = $tg.Types.SchemeManager.GetMethod('GetScheme', [type[]]@([string]))
+        foreach ($sn in @('Base', 'Menu')) {
+            $sc3 = $getSchemeM.Invoke($null, @($sn))
+            $f = $sc3.Normal.Foreground
+            $b = $sc3.Normal.Background
+            $out.Add("theme.$sn Normal fg=$($f.R),$($f.G),$($f.B) bg=$($b.R),$($b.G),$($b.B) 可见=$(-not ($f.R -eq $b.R -and $f.G -eq $b.G -and $f.B -eq $b.B))")
+        }
+        $body = Resolve-TguiScheme -Tgui $tg -Names @('Base', 'Menu', 'Dialog')
+        $bf = $body.Normal.Foreground
+        $bb = $body.Normal.Background
+        $out.Add("theme.bound fg=$($bf.R),$($bf.G),$($bf.B) bg=$($bb.R),$($bb.G),$($bb.B)")
+    } catch {
+        $out.Add("theme.error=$($_.Exception.Message)")
     }
 
     try {
@@ -132,24 +155,20 @@ $diag = & $mod {
         $out.Add("table.error=$($_.Exception.Message)")
     }
 
-    # ---- Scheme 全 slot 配色 ----
+    # ---- ALC 方案各槽位配色(选中行取 Focus/Active, 列头取 Focus/Normal) ----
     try {
-        $appSchemeP = $appType.GetProperty('Scheme', $static)
-        $s = if ($appSchemeP) { $appSchemeP.GetValue($null) } else { $null }
-        if ($s) {
-            foreach ($slotName in @('Normal', 'Focus', 'HotNormal', 'HotFocus')) {
-                $sl = $s.GetType().GetProperty($slotName)
-                if ($null -ne $sl) {
-                    $sc2 = $sl.GetValue($s)
-                    if ($null -ne $sc2) {
-                        $f = $sc2.Normal.Foreground
-                        $b = $sc2.Normal.Background
-                        $out.Add("scheme.$slotName fg=$($f.R),$($f.G),$($f.B) bg=$($b.R),$($b.G),$($b.B)")
-                    }
+        $getSchemeM2 = $tg.Types.SchemeManager.GetMethod('GetScheme', [type[]]@([string]))
+        $baseScheme = $getSchemeM2.Invoke($null, @('Base'))
+        foreach ($slotName in @('Normal', 'Focus', 'Active', 'Highlight', 'Disabled')) {
+            $sl = $tg.Types.Scheme.GetProperty($slotName)
+            if ($null -ne $sl) {
+                $sc2 = $sl.GetValue($baseScheme, $null)
+                if ($null -ne $sc2) {
+                    $f = $sc2.Foreground
+                    $b = $sc2.Background
+                    $out.Add("scheme.Base.$slotName fg=$($f.R),$($f.G),$($f.B) bg=$($b.R),$($b.G),$($b.B)")
                 }
             }
-        } else {
-            $out.Add('scheme=不可达(无静态 Scheme 属性)')
         }
     } catch {
         $out.Add("scheme.error=$($_.Exception.Message)")
