@@ -1,15 +1,14 @@
-# Get-WttrTitleSuffix.ps1 - PSTui 菜单标题区单行天气后缀(由 GridView 顶部居中显示)
+# Get-WttrTitleSuffix.ps1 - 交互菜单标题区单行天气后缀(TGUI 标题行拼接)
 #
 # 职责:
 #   - 走 wttr.in ?format=j1&lang=zh 端点, 客户端字典中文化 weatherDesc,
-#     拼成 " - CityName: 中文描述 温度°C" 形式, 供 Invoke-GridView* 拼到 PSTui Title 末尾
+#     拼成 " - CityName: 中文描述 温度°C" 形式, 由调用方拼到窗标题末尾
 #   - HTTP/JSON/字段缺失等任何失败一律返回空串, 由调用方静默降级
 #   - 用户扩展由 $script:Config.Weather.ExtraWeatherDescMap 注入
 #
 # 调用方:
-#   - Invoke-GridViewHostSelector
-#   - Invoke-GridViewSessionManager
-#   - Invoke-GridViewSessionList
+#   - Show-HostSelector
+#
 # 依赖:
 #   - Get-WttrWeather (HTTP + 缓存)
 #   - Get-WttrWeatherDescMap (本目录同会话文件, 提供中英映射)
@@ -22,7 +21,7 @@ $script:_WttrTitleUrl = 'https://wttr.in/?format=j1&lang=zh'
 function Get-WttrTitleSuffix {
     <#
     .SYNOPSIS
-        获取 PSTui -Title 区使用的单行天气后缀(如 " - Chiuhuahsien: 烟雾 26°C")。
+        获取交互窗标题区使用的单行天气后缀(如 " - Chiuhuahsien: 烟雾 26°C")。
 
     .DESCRIPTION
         端点选择动机:

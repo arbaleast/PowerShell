@@ -107,7 +107,8 @@ function Clear-TmuxScreen {
 
         重定向控制台(测试/管道)上 Clear 会抛"句柄无效"异常 —— 回退为
         等效 ANSI 序列, 行为永不中断。主事件循环 while 的**每一次迭代
-        开头**调用本函数; PSTui 全屏弹窗独占渲染期间由它自己管理屏幕。
+        开头**调用本函数; 主事件循环期间备用屏由 Show-TmuxTuiDashboard 的
+        TG Init/Run/Shutdown 独占管理。
 
     .EXAMPLE
         while ($true) {

@@ -1,5 +1,5 @@
 # New-WelcomeBanner.ps1 - 欢迎横幅构建器
-# P2-2: 统一风格化的欢迎 banner, 与 GridView 表格头部视觉一致
+# P2-2: 统一风格化的欢迎 banner, 与 TGUI 表格头部视觉一致
 # 设计原则:
 # 1. 纯函数 New-WelcomeBanner 返回行数组, 便于 Pester 测试
 # 2. Show-UserScoopLogo (Public) 内部委托给 New-WelcomeBanner, 保持向后兼容
@@ -72,7 +72,7 @@ function New-WelcomeBanner {
         构造欢迎横幅(纯函数, 返回行数组, 不做 I/O)
 
     .DESCRIPTION
-        风格与 GridView 表格的 Header 区域保持一致:
+        风格与 TGUI 表格的 Header 区域保持一致:
           ╔══< user@host >══[ cwd ]══[ title ] [badge1] [badge2]
           ║
           ║  ~ quote
