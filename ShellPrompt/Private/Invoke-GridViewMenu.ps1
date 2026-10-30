@@ -54,17 +54,109 @@ function Get-GridViewFocus {
     return $focus
 }
 
+function ConvertTo-GridViewPlainText {
+    <#
+    .SYNOPSIS
+        剥离 GridView 可见列文本中的内联 ANSI SGR 转义序列。
+
+    .DESCRIPTION
+        2026-10-30 根因修复: Terminal.Gui v2 的 TableView 基于 ConsoleDriver Cell
+        Attribute 矩阵绘制, **不解析单元格内的内联 ANSI SGR 序列**(染色无效);
+        且不可见的转义字节会干扰 Wcwidth 对 '⚠' 宽字符的列宽计算,
+        导致 '⚠ 危险' 中间的半角空格被吞、终端里粘连显示。
+        Format-GridViewStateText 的染色契约(含其 Pester 测试)保持不变, 它仍返回
+        带色文本; 本函数仅在行数据**送入 Out-ConsoleGridView 之前**把可见列净化为
+        纯文本。键列(KeyColumn)原样保留 —— Restore-GridViewSelection 依赖键列值
+        与原始行匹配, 一旦键列被改写, 隐藏字段(Disabled/Value/Status)就回填不上。
+
+    .PARAMETER Rows
+        裁剪后的行数据(PSCustomObject 数组)
+
+    .PARAMETER KeyColumn
+        唯一键列名(原样保留, 不参与剥离)
+
+    .OUTPUTS
+        PSCustomObject 数组(非键列的 string 属性已剥离 ANSI SGR)
+
+    .EXAMPLE
+        $cleanRows = ConvertTo-GridViewPlainText -Rows $trimmedRows -KeyColumn 'Action'
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject[]])]
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Rows,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$KeyColumn
+    )
+
+    # 仅剥离 SGR 染色序列(\e\[38;2;...m / \e\[0m 这类), 与 Format-GridViewStateText
+    # 的产出形态一一对应; 仓库内其它可见列不产生 SGR, 该模式足够覆盖。
+    $ansiPattern = [regex]::Escape([char]27) + '\[[0-9;]*m'
+    $clean = [System.Collections.Generic.List[PSCustomObject]]::new($Rows.Count)
+    foreach ($row in $Rows) {
+        $clone = [ordered]@{}
+        foreach ($prop in $row.PSObject.Properties) {
+            $value = $prop.Value
+            if ($prop.Name -ne $KeyColumn -and $value -is [string]) {
+                $value = [regex]::Replace($value, $ansiPattern, '')
+            }
+            $clone[$prop.Name] = $value
+        }
+        $clean.Add([PSCustomObject]$clone)
+    }
+    return $clean.ToArray()
+}
+
+function Get-GridViewRenderParam {
+    <#
+    .SYNOPSIS
+        组装 Out-ConsoleGridView 的渲染参数(单选模式 + 焦点 + 可选全屏)。
+
+    .DESCRIPTION
+        从 Invoke-GridViewPrompt 拆出, 保证入口函数不超过 ~80 行(见
+        docs/agents/development.md 的函数拆分规约), 同时让参数装配可单独验证。
+        全屏开关取自 $script:Config.UI.GridViewFullScreen: 默认 $false 时走 PSTui
+        内联渲染, 3~4 行的轻量菜单不会被拉成整屏黑底空洞。
+
+    .PARAMETER Title
+        表格标题
+
+    .OUTPUTS
+        [hashtable] 可直接 splat 给 Out-ConsoleGridView 的参数表
+
+    .EXAMPLE
+        $gvParams = Get-GridViewRenderParam -Title 'TMUX 全局操作'
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()][string]$Title
+    )
+
+    $gvParams = @{
+        Title      = $Title
+        OutputMode = 'Single'
+        Focus      = Get-GridViewFocus
+    }
+    if ($script:Config -and $script:Config.UI -and $script:Config.UI.GridViewFullScreen) {
+        $gvParams['FullScreen'] = $true
+    }
+    return $gvParams
+}
+
 function Invoke-GridViewPrompt {
     <#
     .SYNOPSIS
         统一的 GridView 弹窗调用与结果归一化入口。
 
     .DESCRIPTION
-        负责三件事:
-          1. 组装 Out-ConsoleGridView 的参数(单选模式 + 焦点 + 可选全屏);
+        负责四件事:
+          1. 组装 Out-ConsoleGridView 的参数(单选模式 + 焦点 + 可选全屏),
+             由 Get-GridViewRenderParam 承担;
           2. 裁剪隐藏列(防止内部字段泄漏到用户可见表格);
-          3. 捕获异常(输入被重定向等场景下 Out-ConsoleGridView 会抛可捕获错误
-             并返回 $null, 不会挂起), 并在返回前恢复隐藏字段。
+          3. 把可见列送入 Terminal.Gui 前剥离内联 ANSI SGR(TG TableView 不解析
+             单元格内联转义且会引发宽字符列宽计算错误, 见 ConvertTo-GridViewPlainText);
+          4. 捕获异常(输入被重定向等场景下 Out-ConsoleGridView 会抛可捕获错误
+              并返回 $null, 不会挂起), 并在返回前恢复隐藏字段。
 
     .PARAMETER Rows
         行数据(PSCustomObject 数组), 建议包含 Value 列用于回传结果
@@ -96,9 +188,9 @@ function Invoke-GridViewPrompt {
     $plan = Get-GridViewColumnPlan -Rows $Rows -HiddenColumns $HiddenColumns
     $keyColumn = $plan.KeyColumn
     $hiddenKeys = $plan.HiddenKeys
-    $trimmedRows = $plan.TrimmedRows
-
-    $focus = Get-GridViewFocus
+    # 2026-10-30: 送入 Terminal.Gui 前剥离可见列的内联 ANSI(键列保留,
+    # 隐藏字段回填依赖键列匹配)。Format-GridViewStateText 染色契约不受影响。
+    $trimmedRows = ConvertTo-GridViewPlainText -Rows $plan.TrimmedRows -KeyColumn $keyColumn
 
     # 构建 Out-ConsoleGridView 参数, 用管道传数组(每个元素单独流入)
     # 注意: 不使用 -InputObject $Rows(数组整体), 因为 InputObject 类型是 [psobject]
@@ -107,14 +199,7 @@ function Invoke-GridViewPrompt {
     # 属性(Action/State/Value)。改用管道传参后, 数组元素逐个流入, 行为正确。
     # 注: Desc 列已于 2026-10-19 删除(与 Action / Host 重复), 行对象的列集合为
     #     Action/Host/State/No/Session 这类"用户可见键", 内部字段则走 -HiddenColumns。
-    $gvParams = @{
-        Title      = $Title
-        OutputMode = 'Single'
-        Focus      = $focus
-    }
-    if ($script:Config -and $script:Config.UI -and $script:Config.UI.GridViewFullScreen) {
-        $gvParams['FullScreen'] = $true
-    }
+    $gvParams = Get-GridViewRenderParam -Title $Title
 
     # 配色属于纯视觉增强, 失败只告警一次并继续弹菜单(细节见 Initialize-GridViewColorScheme)
     Initialize-GridViewColorScheme
@@ -214,9 +299,11 @@ function Invoke-GridViewSessionManager {
     .DESCRIPTION
         方案 A (2026-10-29): tmux 管理器主界面改为真实会话列表
         (Invoke-GridViewSessionList), 本视图降阶为全局操作菜单:
-        只列出 删除 / 创建 / 直连 / 刷新 四类全局动作, 不再提供"附着"项 --
-        附着必须针对会话列表中明确选中的会话执行, 不能脱离真实会话选择。
-        会话为空时隐藏"删除"行(只对真实选中的会话生效)。
+        只列出 创建 / 刷新 / 直连 / 删除(按防呆语序排列) 四类全局动作,
+        不再提供"附着"项 -- 附着必须针对会话列表中明确选中的会话执行,
+        不能脱离真实会话选择。会话为空时隐藏"删除"行(只对真实选中的会话生效)。
+        防呆语序 (2026-10-30): 创建置顶(默认焦点), 删除垫底, 连按 Enter 也不会
+        触达高危动作; State 列由 Get-GridViewManagerRow 统一补齐徽章文案与对齐。
         因 PSTui 无行级配色, 删除动作的危险语义改由 State 列的 ⚠ 符号表达,
         并且真正的二次确认由 Remove-TmuxSession 用 Read-SpectreConfirm 阻断。
 

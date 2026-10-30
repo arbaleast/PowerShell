@@ -41,7 +41,7 @@
 `sss` 进入主机后，**tmux 管理器主界面 = 真实会话列表**（`Show-TmuxSessionList`，标题「TMUX 管理器」）：
 
 - **Enter** 选中某个会话 → 立即对该会话执行附着/恢复（远端 `tmux has-session … && tmux attach -d … || tmux new-session -A …`，统一由 [`Invoke-TmuxAttach.ps1`](../../ShellPrompt/Private/Invoke-TmuxAttach.ps1) 执行）。
-- **Esc** 从会话列表进入**轻量全局操作菜单**（删除 / 创建 / 直连 SSH / 刷新）；全局操作菜单的 **Esc** 才是退出管理器。
+- **Esc** 从会话列表进入**轻量全局操作菜单**（创建 / 刷新 / 直连 SSH / 删除，防呆语序：安全动作置顶、删除垫底）；全局操作菜单的 **Esc** 才是退出管理器。
 - 无会话或 tmux 探测失败时**不弹空表格**：先给出明确提示（区分"没有会话"与"数据获取失败"），再直接进入全局操作菜单。
 - "附着/恢复"不再是独立菜单动作——它只能针对列表中明确选中的会话执行。
 
@@ -51,12 +51,14 @@
 
 > **说明列（Desc）已于 2026-10-19 删除**（与 Action 重复，释放约 16 字宽度）。文档中不再出现 Desc 列。
 
-| Action（可见文案） | Value（隐藏列，选中返回值） | State 徽章 |
-|--------|-------|------|
-| `删除 tmux 会话` | `Remove` | `⚠ 危险` |
-| `创建新 tmux 会话` | `New` | — |
-| `直接 SSH 登录` | `Ssh` | `⚠ 备选` |
-| `刷新会话列表` | `Refresh` | — |
+> **行序即防呆（2026-10-30 起）**：GridView 焦点默认在表格（第 0 行吃 Enter 直达），因此**安全高频动作置顶、高危动作垫底**——「创建」永远是第 0 行，「删除」只在有会话时出现在最后一行；二次确认仍由 `Remove-TmuxSession` 用 `Read-SpectreConfirm` 阻断。State 徽章一律为「符号 + 两汉字」同构形态（含纯文本中性徽章），保证列宽对齐不空洞。
+
+| 行序 | Action（可见文案） | Value（隐藏列，选中返回值） | State 徽章 |
+|----|--------|-------|------|
+| 0 | `创建新 tmux 会话` | `New` | `✓ 推荐` |
+| 1 | `刷新会话列表` | `Refresh` | `⟳ 手动` |
+| 2 | `直接 SSH 登录` | `Ssh` | `⚠ 备选` |
+| 3 | `删除 tmux 会话`（仅在有会话时） | `Remove` | `⚠ 危险` |
 
 > 仅在有会话时才出现「删除」一行（无会话时菜单只含「创建」「SSH 登录」「刷新」）；附着操作**不在**此菜单。菜单实现见 [`Invoke-GridViewMenu.ps1`](../../ShellPrompt/Private/Invoke-GridViewMenu.ps1)，行构造见 [`Get-GridViewManagerRow.ps1`](../../ShellPrompt/Private/Get-GridViewManagerRow.ps1)。修改文案时在 `Get-GridViewManagerRow.ps1` 内调整。
 
@@ -118,7 +120,7 @@
 | 键 | 默认 | 说明 |
 |----|------|------|
 | `UI.GridViewFocus` | `Table` | `Table` = 焦点在表格; `Filter` = 焦点在筛选框（对应旧 ANSI 菜单的 `Q1=A` 实时过滤手感） |
-| `UI.GridViewFullScreen` | `$true` | `Out-ConsoleGridView` 是否全屏渲染（alternate screen buffer；标题/提示在弹窗后不可见，退出后恢复） |
+| `UI.GridViewFullScreen` | `$false` | `Out-ConsoleGridView` 是否全屏渲染（alternate screen buffer）。**2026-10-30 起默认 `$false`**：PSTui 1.0.5 内联渲染天然紧凑弹窗，避免 3~4 行的轻量菜单铺满全屏产生大面积黑底空洞；命令未暴露 `-Width`/`-Height` 尺寸参数（`Get-Command`/README 实测），需要沉浸式铺满可改回 `$true` |
 
 ## GridView 配色（Terminal.Gui `Scheme` 槽位）
 
@@ -132,23 +134,24 @@
 
 槽位（TG 2.4.10 上反射实测可写，共 10 个可视槽位；`Code*` 语法高亮槽位不参与菜单故不配置）：
 
-槽位 | 默认色 | 作用 |
+槽位 | 默认色（Fg / Bg） | 作用 |
 |------|--------|------|
-`Normal` | `137,209,133` / `30,30,30` | 正文单元格、无焦点时的列头、列间竖线 |
-`HotNormal` | `159,177,159` / `30,30,30` | 快捷键热区 |
-`Focus` | `137,209,133` / `40,40,40` | **聚焦列头 + 表格有焦点时的选中行**（亮绿字 + 稍亮底） |
-`HotFocus` | `20,20,20` / `130,215,220` | 其它 View 的聚焦热区（TableView 不读取） |
-`Active` | `137,209,133` / `40,40,40` | **焦点不在表格时的选中行**（同 `Focus`） |
-`HotActive` | `20,20,20` / `130,215,220` | 激活项热区（TableView 不读取） |
-`Highlight` | `137,209,133` / `40,40,40` | 高亮标记（鼠标热区，与 `Focus` / `Active` 同色） |
-`Editable` | `137,209,133` / `20,20,20` | 可编辑区（过滤框，亮绿字 + 近黑底） |
-`ReadOnly` | `159,177,159` / `30,30,30` | 只读行 |
-`Disabled` | `100,100,100` / `30,30,30` | 禁用行 |
+`Normal` | `205,214,244` / `24,24,37` | 正文单元格、无焦点时的列头、列间竖线（Mocha Text + Base 统一暗底） |
+`HotNormal` | `137,220,235` / `24,24,37` | 标题/表头/快捷键强调（Sky 冰青） |
+`Focus` | `255,255,255` / `69,71,90` | **聚焦列头 + 表格有焦点时的选中行**（亮白字 + Surface1 高亮条） |
+`HotFocus` | `166,227,161` / `69,71,90` | 其它 View 的聚焦热区（TableView 不读取） |
+`Active` | `255,255,255` / `69,71,90` | **焦点不在表格时的选中行**（同 `Focus`） |
+`HotActive` | `166,227,161` / `69,71,90` | 激活项热区（同 `HotFocus`） |
+`Highlight` | `255,255,255` / `69,71,90` | 高亮标记（鼠标热区，与 `Focus` / `Active` 同色） |
+`Editable` | `205,214,244` / `49,50,68` | 可编辑区（过滤框，正文字 + Surface0 深一档底） |
+`ReadOnly` | `127,132,156` / `24,24,37` | 只读行（Overlay1 弱化灰紫） |
+`Disabled` | `108,112,134` / `24,24,37` | 禁用行（Overlay0 暗灰） |
 
-**迁移说明（绿主题列头配色，2026-10-18 起）**：TG 2.4.10 的 `TableView.RenderRow` 用 `hasFocus ? scheme.Focus : scheme.Active` 决定选中行取色，而 `RenderHeaderMidline` 用 `scheme.Focus` 画聚焦列头——`Focus` 被**列头与选中行共用**。v2.1 把 `Focus` / `Active` 设为同色（Cyan 底 + 近黑字）以统一高亮，但带来"列头青色 + 正文绿字"的视觉割裂。本轮调整（2026-10-18）把 `Focus` / `Active` / `Highlight` 改为**亮绿字 (`137,209,133`) + 稍亮底 (`40,40,40`)**，`Editable` 改为**亮绿字 + 近黑底 (`20,20,20`)**：
-- **两种焦点状态下的选中行高亮一致**（保留 v2.1 的不变量）；
-- **列头与正文同为绿字**，与绿主题统一；
-- **过滤框可读**：`Editable` 槽位为亮绿字配近黑底，对比度高，输入文字始终清晰。
+**迁移说明（Mocha 暗色分层配色，2026-10-30 起）**：本轮把 `UI.Theme.Slots` 从"满屏单一亮绿（137,209,133）+ 三档灰黑底"整体迁移到 Catppuccin Mocha 风格的暗色分层——正文用柔和灰白（Mocha Text）、强调用冰青（Sky）、选中行用亮白 + 蓝灰高亮条（Surface1）、禁用/只读自动退到灰紫（Overlay0/1），**所有槽位背景统一到 `24,24,37` 暗灰蓝底**，消除"全屏亮绿无层级 + 斑马纹"的观感：
+
+- **两种焦点状态下的选中行高亮一致**（保留原不变量：`Focus` / `Active` / `Highlight` 三者完全相同）；
+- **层级分明**：正文（灰白）/ 强调（冰青）/ 选中（亮白 + 高亮条）/ 禁用（暗灰）四个前景层级互不重叠；
+- **过滤框可读**：`Editable` 用正文字色 + 深一档 Surface0 底，输入文字始终清晰。
 
 > 只想自定义高亮色：改 `UI.Theme.Slots` 里的 `Focus` / `Active` / `Highlight`（三者保持完全相同），可任选底色。未知或不可写的槽位名会被静默跳过，不会报错。
 
@@ -156,7 +159,7 @@
 
 | 能力项 | GridView 主轨现状 | 补偿手段 |
 |---|---|---|
-| 行级红色 / 危险项高亮 | PSTui 未开放 Color/Theme API | `State` 列文本（`⚠ 危险` / `⚠ 备选` / `★ 最近`） |
+| 行级红色 / 危险项高亮 | PSTui 未开放 Color/Theme API，且 TG TableView **不解析**单元格内的内联 ANSI SGR | `State` 列文本（`⚠ 危险` / `⚠ 备选` / `★ 最近`）；文本由 `Format-GridViewStateText` 染色，但在**送入 Terminal.Gui 前**由 `ConvertTo-GridViewPlainText` 剥离 SGR——转义字节会干扰 Wcwidth 宽字符列宽计算导致 `'⚠ 危险'` **吞空格**（2026-10-30 修复） |
 | 底部帮助文本行 | 表格视图无底部帮助区 | 按键说明由 **PSTui 自带状态栏**（`Rows: n \| Enter Accept \| Esc Close`）提供；提示行草案 A.2 已于 2026-10-19 撤回——alternate screen 下菜单上方的提示用户看不到；仓库内 `Write-GridViewHint` 函数随之于 2026-10-29 一并删除 |
 | 实时增量过滤 | 无键盘级过滤回调 | `-Focus Filter` 表格筛选框（`UI.GridViewFocus = 'Filter'`） |
 | `Disabled` 行灰显 | 不支持渲染禁用态 | `State` 列标注 + 选中后**阻断**并提示 |

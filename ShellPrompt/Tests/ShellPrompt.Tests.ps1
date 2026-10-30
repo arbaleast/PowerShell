@@ -92,6 +92,7 @@ Describe 'Command Export' {
             'Invoke-GridViewPrompt', 'Invoke-GridViewHostSelector',
             'Invoke-GridViewSessionManager', 'Invoke-GridViewSessionList',
             'Get-GridViewColumnPlan', 'Get-GridViewHostRow', 'Get-GridViewManagerRow',
+            'ConvertTo-GridViewPlainText', 'Get-GridViewRenderParam',
             'Get-TmuxSessionGridRow', 'Get-TmuxSessionStateText', 'Get-TmuxSessionSummary',
             'Restore-GridViewSelection', 'ConvertTo-TmuxRefreshSelection',
             'Get-TmuxRefreshedSession', 'Get-ConsoleUiBackend', 'Assert-ConsoleUiReady',
@@ -432,6 +433,28 @@ Describe 'Get-GridViewManagerRow (tmux 全局操作菜单表格行)' {
         $rows[0].PSObject.Properties.Name | Should -Not -Contain 'Desc'
     }
 
+    It '防呆语序: 创建置顶, 删除垫底(高安全动作拿默认焦点)' {
+        # 2026-10-30 防呆修复: 默认 Focus='Table' 时第 0 行吃 Enter 直达,
+        # 高危的删除动作绝不能排第 0 行, 必须垫底。
+        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true }
+        $rows[0].Value | Should -Be 'New'
+        $rows[1].Value | Should -Be 'Refresh'
+        $rows[2].Value | Should -Be 'Ssh'
+        $rows[3].Value | Should -Be 'Remove'
+    }
+
+    It '非删除动作的 State 应为同构中性徽章(消除 State 列空洞)' {
+        # 2026-10-30: New/Refresh 原先是空串, 表格 State 列大段留白;
+        # 改为与 '⚠ 危险' 同构的「符号 + 两汉字」纯文本徽章(不带 ANSI)。
+        $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true }
+        $new = @($rows | Where-Object { $_.Value -eq 'New' })[0]
+        $refresh = @($rows | Where-Object { $_.Value -eq 'Refresh' })[0]
+        $new.State | Should -Be '✓ 推荐'
+        $refresh.State | Should -Be '⟳ 手动'
+        $new.State | Should -Not -Match ([regex]::Escape([char]27))
+        $refresh.State | Should -Not -Match ([regex]::Escape([char]27))
+    }
+
     It '删除动作应以 ⚠ 危险 标注危险语义' {
         $rows = & $script:mod { Get-GridViewManagerRow -HasSessions $true }
         $remove = @($rows | Where-Object { $_.Value -eq 'Remove' })[0]
@@ -446,6 +469,99 @@ Describe 'Get-GridViewManagerRow (tmux 全局操作菜单表格行)' {
         # P1.3: 备选文字现在包裹 Colors.Warning ANSI 码, 用 -Match 兼容
         $ssh.State | Should -Match '⚠ 备选'
         $ssh.State | Should -Match '\[38;2;220;180;80m'
+    }
+}
+
+Describe 'Get-GridViewRenderParam (渲染参数装配)' {
+
+    It '默认应装配单选模式且不带 FullScreen' {
+        # 2026-10-30: GridViewFullScreen 默认 $false, 轻量菜单不再铺满全屏。
+        $params = & $script:mod { Get-GridViewRenderParam -Title 'TMUX 全局操作' }
+        $params | Should -BeOfType [hashtable]
+        $params['Title'] | Should -Be 'TMUX 全局操作'
+        $params['OutputMode'] | Should -Be 'Single'
+        $params['Focus'] | Should -Be 'Table'
+        $params.ContainsKey('FullScreen') | Should -BeFalse
+    }
+
+    It '配置为全屏时应装配 FullScreen 开关' {
+        $params = & $script:mod {
+            $original = $script:Config.UI.GridViewFullScreen
+            try {
+                $script:Config.UI.GridViewFullScreen = $true
+                Get-GridViewRenderParam -Title 'T'
+            } finally {
+                $script:Config.UI.GridViewFullScreen = $original
+            }
+        }
+        $params['FullScreen'] | Should -BeTrue
+    }
+}
+
+Describe 'ConvertTo-GridViewPlainText (送入 Terminal.Gui 前的 ANSI 净化)' {
+
+    # 2026-10-30 修复: TG TableView 不解析单元格内联 ANSI 且转义字节会干扰
+    # Wcwidth 宽字符列宽计算, 因此行数据送入 Out-ConsoleGridView 前必须净化。
+    It '应剥离非键列 string 属性里的 SGR 序列' {
+        $rows = & $script:mod {
+            $esc = [char]27
+            ConvertTo-GridViewPlainText -Rows @(
+                [PSCustomObject]@{
+                    Action   = '删除 tmux 会话'
+                    State    = "$esc[38;2;220;90;90m⚠ 危险$esc[0m"
+                    Disabled = $false
+                    Value    = 'Remove'
+                }
+            ) -KeyColumn 'Action'
+        }
+        $rows[0].State | Should -Be '⚠ 危险'
+    }
+
+    It '键列原样保留(隐藏字段回填依赖键列匹配)' {
+        $rows = & $script:mod {
+            $esc = [char]27
+            ConvertTo-GridViewPlainText -Rows @(
+                [PSCustomObject]@{
+                    Action   = "$esc[32m染色键$esc[0m"
+                    State    = ''
+                    Disabled = $false
+                    Value    = 'Remove'
+                }
+            ) -KeyColumn 'Action'
+        }
+        $rows[0].Action | Should -Be ("$([char]27)[32m染色键$([char]27)[0m")
+    }
+
+    It '非 string 属性与空串保持原样' {
+        $rows = & $script:mod {
+            ConvertTo-GridViewPlainText -Rows @(
+                [PSCustomObject]@{
+                    Action   = '创建新 tmux 会话'
+                    State    = ''
+                    Disabled = $false
+                    Value    = 'New'
+                }
+            ) -KeyColumn 'Action'
+        }
+        $rows[0].State | Should -Be ''
+        $rows[0].Disabled | Should -BeFalse
+        $rows[0].Value | Should -Be 'New'
+    }
+
+    It '无 ANSI 的行集合经处理后无残留 ESC 字节' {
+        $rows = & $script:mod {
+            ConvertTo-GridViewPlainText -Rows @(
+                [PSCustomObject]@{
+                    Action   = '刷新会话列表'
+                    State    = '⟳ 手动'
+                    Disabled = $false
+                    Value    = 'Refresh'
+                }
+            ) -KeyColumn 'Action'
+        }
+        # 输出数组不允许引入任何 ESC 控制字符
+        @($rows | ForEach-Object { $_.PSObject.Properties.Value }) |
+            ForEach-Object { $_ | Should -Not -Match ([regex]::Escape([char]27)) }
     }
 }
 

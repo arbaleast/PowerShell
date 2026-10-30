@@ -56,9 +56,13 @@ $script:Config = [ordered]@{
         # GridView 初始焦点: 'Table' = 光标在表格; 'Filter' = 光标在过滤输入框
         # (后者更接近旧版 Q1=A 打字即搜的手感, 但交互手感未在自动化环境验证)
         GridViewFocus   = 'Table'
-        # GridView 是否以全屏方式渲染
-        GridViewFullScreen = $true
-        # GridView (Terminal.Gui v2) 配色: 让表格视觉尽量贴近旧 ANSI 菜单
+        # GridView 是否以全屏(alternate screen)方式渲染。
+        # 2026-10-30 起默认 $false: 3~4 行的轻量全局操作菜单全屏渲染会产生
+        # 大面积黑底空洞; PSTui 1.0.5 的 Out-ConsoleGridView 默认内联渲染且未暴露
+        # -Width/-Height 尺寸参数(README 实测), 关闭全屏即天然紧凑弹窗。
+        # 需要"沉浸式铺满"的用户可在 $HOME/.ShellPrompt/config.ps1 里改回 $true。
+        GridViewFullScreen = $false
+        # GridView (Terminal.Gui v2) 配色
         Theme   = [ordered]@{
             # 总开关: $false 时 Set-TgColorScheme 直接返回, 不碰 Terminal.Gui 静态 API
             Enabled = $true
@@ -71,7 +75,6 @@ $script:Config = [ordered]@{
             #   - 表格主体(正文/焦点行/边框/列头) 取自 Scheme 'Base';
             #   - 底部状态栏(Rows: n | Enter Accept | Esc Close) 取自 Scheme 'Menu';
             #   - ThemeManager.Theme = 'Default' 解析到的正是 'Base'。
-            # 早期实现只覆写 'Menu', 结果只染了状态栏、主体毫无变化 —— 即"配色完全没生效"。
             # 单个名字不存在时自动回退 'Base'。
             #
             # 兼容旧配置: 既有配置里 Name 可能是单个字符串, 由 Resolve-TgThemeNames
@@ -79,7 +82,6 @@ $script:Config = [ordered]@{
             Name    = [string[]]@('Base', 'Menu')
             # 槽位配色: 键为 Terminal.Gui.Drawing.Scheme 的属性名,
             # 值为 @{ Fg = 'R,G,B'; Bg = 'R,G,B' }。
-            # 取值全部来自上方 Colors 域同一套 RGB, 保证表格配色与其他 Spectre 输出观感一致。
             #
             # ---- 槽位清单(2026-10 IL 级实测, TG 2.4.10.0) --------------------------
             # 本清单**只保留反射实测可写的槽位名**。Scheme 在 2.4.10 上的 public
@@ -88,43 +90,19 @@ $script:Config = [ordered]@{
             #
             # ---- 表格各部位实际取色来源(IL 调用序列实测, 非推测) -------------------
             # 1) 正文单元格 —— TableView.RenderRow(全文 IL 逐条比对):
-            #      bool hasFocus = this.HasFocus;
-            #      整行背景: FullRowSelect && IsSelected
-            #                 -> new Attribute(hasFocus ? scheme.Focus : scheme.Active)
-            #                 否则   -> new Attribute(Enabled ? scheme.Normal : scheme.Active)
-            #      单元格:   未选中 -> Enabled ? cellScheme.Normal : cellScheme.Disabled
-            #                 已选中 -> hasFocus ? cellScheme.Focus : cellScheme.Active
-            #                 (cellScheme = ColumnStyle.ColorGetter?.Invoke(..) ?? 行 scheme)
-            #    => **焦点在表格时选中行取 Focus; 焦点离开表格时选中行取 Active。**
+            #      焦点在表格 -> 选中行取 Focus; 焦点离开表格时选中行取 Active。
             #    该方法**从不读取 HotFocus / HotNormal / HotActive**。
-            #    这就是上一轮"把 Cyan 底近黑字写进 HotFocus 却毫无变化"的根因:
-            #    Hot* 系列在 TableView 渲染路径上根本不被读取。
             #
             # 2) 列头 —— TableView.RenderHeaderMidline:
-            #      scheme = Style.HeaderScheme ?? GetScheme()
-            #      列头文字 = scheme.Focus(表格有焦点) / scheme.Normal(表格无焦点)
-            #    PSTui 的 OutGridViewWindow 构造函数硬编码
-            #    set_SchemeName(SchemesToSchemeName(Schemes.Base)) = "Base",
-            #    AddTableView 也从不给 TableStyle 赋 HeaderScheme(默认 $null),
-            #    因此这里的 scheme 就是 'Base'。
+            #      列头文字 = scheme.Focus(表格有焦点) / scheme.Normal(表格无焦点)。
             #    => **Focus 同时被"聚焦列头"和"有焦点时的选中行"共用**,
-            #       这正是"前几项高亮与最后一项高亮不一致"的根因:
-            #       焦点在表格 -> 选中行走 Focus(浅色); 焦点在过滤框 -> 选中行走 Active(青色)。
-            #    => 解决方式(仅配置层): 让 Focus 与 Active 取**完全相同**的颜色,
-            #       两种焦点状态下的选中行高亮即视觉统一。
-            #    => 新契约 (2026-10-18 起): Focus / Active / Highlight 改为
-            #       **亮绿字 (FreshGreen 137,209,133) + 稍亮底 (40,40,40)**。
-            #       与 Normal 相比仅底色亮度差 1 级(30 -> 40), 列头与正文均为绿字,
-            #       整张表与绿主题统一; 选中行高亮在两种焦点状态下也仍然一致。
-            #       Editable 调整为**亮绿字 + 近黑底 (20,20,20)**, 即过滤框在
-            #       焦点态下用暗底承托绿字, 确保输入文字始终可读。
+            #       边框/标题不必因此迁就 —— 列头本身就该比正文醒目。
+            #    => 新契约 (2026-10-30 起): 配色从"满屏单一亮绿"迁移到
+            #       Catppuccin Mocha 风格暗色分层(PSTui 内联弹窗自带深色底,
+            #       统一背景色即可消除斑马纹观感)。
             #
-            # 3) 过滤输入框 —— TextField.OnGettingAttributeForRole:
-            #      请求 role 0(Normal) 时**返回 role 2(Focus)**,
-            #      且 OnDrawingContent 用 GetAttributeForRole(0) 绘制输入文字。
-            #    => 过滤框文字取 Focus 槽位; 新契约下 Focus = 亮绿字 + 稍亮底,
-            #       Editable 槽位则承载"输入区本身"的取色(亮绿字 + 近黑底),
-            #       两种角色叠加后过滤框在焦点态下仍清晰可读。
+            # 3) 过滤输入框 —— TextField 输入文字取 Focus 槽位;
+            #    Editable 槽位承载输入区取色, 用深一档底色承托正文色, 保证可读。
             #
             # 4) 底部状态栏 —— 取自 Scheme 'Menu'(已由 Name 一并覆写), 不读 Focus/Active。
             #
@@ -133,18 +111,18 @@ $script:Config = [ordered]@{
             # ---------------------------------------------------------------------------
             Slots   = [ordered]@{
                 # 正文单元格 + 无焦点时的列头 + 列间竖线
-                Normal            = @{ Fg = '137,209,133'; Bg = '30,30,30' }  # 正文主色 FreshGreen + 暗背景
-                HotNormal         = @{ Fg = '159,177,159'; Bg = '30,30,30' }  # 快捷键热区 SageGreen
+                Normal            = @{ Fg = '205,214,244'; Bg = '24,24,37' }  # 正文主色 Mocha Text + Base 暗灰蓝底
+                HotNormal         = @{ Fg = '137,220,235'; Bg = '24,24,37' }  # 标题/表头强调 Sky 冰青
                 # 聚焦态列头 + **有焦点时的选中行**; 与 Active 保持一致以统一高亮
-                Focus             = @{ Fg = '137,209,133'; Bg = '40,40,40' }   # 亮绿字 + 稍亮底(同 Active/Highlight)
-                HotFocus          = @{ Fg = '20,20,20';   Bg = '130,215,220' } # 其他 View 的聚焦热区(TableView 不读取)
+                Focus             = @{ Fg = '255,255,255'; Bg = '69,71,90' }  # 亮白字 + Surface1 高亮条(同 Active/Highlight)
+                HotFocus          = @{ Fg = '166,227,161'; Bg = '69,71,90' } # 其他 View 的聚焦热区(TableView 不读取)
                 # 选中行(焦点不在表格时): RenderRow 取 new Attribute(scheme.Active)
-                Active            = @{ Fg = '137,209,133'; Bg = '40,40,40' }   # 选中行: 亮绿字 + 稍亮底(同 Focus)
-                HotActive         = @{ Fg = '20,20,20';   Bg = '130,215,220' } # 激活项热区
-                Highlight         = @{ Fg = '137,209,133'; Bg = '40,40,40' }   # 高亮标记(同 Focus/Active)
-                Editable          = @{ Fg = '137,209,133'; Bg = '20,20,20' }   # 可编辑(过滤框) 亮绿字 + 近黑底
-                ReadOnly          = @{ Fg = '159,177,159'; Bg = '30,30,30' }  # 只读行 弱化绿
-                Disabled          = @{ Fg = '100,100,100'; Bg = '30,30,30' }  # 禁用行 MidGray
+                Active            = @{ Fg = '255,255,255'; Bg = '69,71,90' }  # 选中行: 亮白字 + 高亮条(同 Focus)
+                HotActive         = @{ Fg = '166,227,161'; Bg = '69,71,90' } # 激活项热区(同 HotFocus)
+                Highlight         = @{ Fg = '255,255,255'; Bg = '69,71,90' }  # 高亮标记(同 Focus/Active)
+                Editable          = @{ Fg = '205,214,244'; Bg = '49,50,68' }   # 可编辑(过滤框) 正文字 + Surface0 深一档底
+                ReadOnly          = @{ Fg = '127,132,156'; Bg = '24,24,37' }  # 只读行 Overlay1 弱化灰紫
+                Disabled          = @{ Fg = '108,112,134'; Bg = '24,24,37' }  # 禁用行 Overlay0 暗灰
             }
         }
     }

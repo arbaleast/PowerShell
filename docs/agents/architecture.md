@@ -36,13 +36,21 @@
 - 结论: PSTui TableView 的"行少时下方留白"是**上游行为约束**, 不在 `ShellPrompt/` 模块可控范围。任何"修复留白"的尝试都属于本项目边界外, 不进入版本控制。
 - 实施纪律: `Private/` 内**禁止**新增/修改 PSTui 反射代码 (`TableView.Style` / `ColumnStyle.Width` 等 readonly 字段硬写)。如未来 PSTui 暴露相关公开参数, 再单独评估。
 
-### GridView 主题配色 (2026-10-18 起)
+### GridView 主题配色 (2026-10-30 起)
 
-- `UI.Theme.Slots.Focus` / `Active` / `Highlight` 均为 **亮绿字 (`137,209,133`) + 稍亮底 (`40,40,40`)** —— 与 `Normal` (`137,209,133`/`30,30,30`) 相比仅底色亮度差 1 级, 列头与正文均为绿字, 整张表与绿主题统一; 同时保留 v2.1 的不变量"两种焦点状态下的选中行高亮一致"。
-- `UI.Theme.Slots.Editable` 为 **亮绿字 (`137,209,133`) + 近黑底 (`20,20,20`)** —— 过滤框在焦点态下用暗底承托绿字, 输入文字始终清晰可读。
-- `HotFocus` / `HotActive` (其他 View 的聚焦热区, TableView 不读取) 仍保留 v2.1 的浅色不变 —— 它们不影响 GridView 视觉, 改它们属于无收益改动。
-- 详见 [`README.md`](../../README.md) 的「GridView 配色 (Terminal.Gui `Scheme` 槽位)」与槽位定义源码
-  [`ShellPrompt/Private/Initialize-GridViewColorScheme.ps1`](../../ShellPrompt/Private/Initialize-GridViewColorScheme.ps1)
+- `UI.Theme.Slots` 已从"满屏单一亮绿 + 三档灰黑底"迁移到 **Catppuccin Mocha 风格暗色分层**:
+  正文 `Normal` = 用户可见主色 `205,214,244` + Base 暗底 `24,24,37`; `HotNormal` 强调色为 Sky 冰青 `137,220,235`;
+  选择高亮 `Focus` / `Active` / `Highlight` 均为 **亮白字 (`255,255,255`) + Surface1 蓝灰高亮条 (`69,71,90`)**;
+  所有槽位背景统一到 `24,24,37`(高亮条与过滤框除外), 消除斑马纹观感。
+- `UI.Theme.Slots.Editable` 为 **正文字 (`205,214,244`) + Surface0 深一档底 (`49,50,68`)** —— 过滤框输入文字始终清晰可读。
+- 不变量**保留**: `Focus` / `Active` / `Highlight` 三槽位**完全同色** (见下方"新契约"), 否则两种焦点状态下选中行高亮不一致。
+- `HotFocus` / `HotActive` (其他 View 的聚焦热区, TableView 不读取) 与高亮条取同色 `69,71,90` 底, 保持视觉一致。
+- State 列的 `⚠ 危险` / `⚠ 备选` 一类带 ANSI 染色徽章在**送入 Terminal.Gui 前**由
+  `ConvertTo-GridViewPlainText`(定义在 `Invoke-GridViewMenu.ps1`)剥离 SGR —— TG TableView 不解析单元格内联
+  ANSI, 且转义字节会干扰 Wcwidth 宽字符列宽计算导致 `'⚠ 危险'` 吞空格。染色契约
+  (`Format-GridViewStateText`) 不变, 仅在渲染边界净化。
+- 详见 [`docs/readme/gridview-menus.md`](../readme/gridview-menus.md) 的「GridView 配色」表格与槽位定义源码
+  [`ShellPrompt/Private/Initialize-Config.ps1`](../../ShellPrompt/Private/Initialize-Config.ps1)
   （CHANGELOG 已收拢为存根, 历史条目不作现行设计依据）。
 
 ## 启动期时序 (2026-10-18)
@@ -69,10 +77,10 @@ profile 加载分为 3 个阶段, 各阶段目标与耗时归因:
 
 | 类别 | 键名 | RGB 默认 | 消费方 | 备注 |
 |---|---|---|---|---|
-| 主绿色系 | `FreshGreen` | 137,209,133 | Tables / 状态行 / TG Scheme `Normal/Focus/Active/Highlight/Editable` | 表格正文主色；语义 `Primary` / `Border` |
-| 主绿色系 | `SageGreen` | 159,177,159 | TG Scheme `HotNormal/ReadOnly` | 弱化绿, 热区与只读行；语义 `Accent` |
+| 主绿色系 | `FreshGreen` | 137,209,133 | Tables / 状态行（Spectre/ANSI 渲染） | 旧表格正文主色；2026-10-30 起 TG Scheme 槽位改用 Mocha 暗色分层 RGB 字面量, 不再引用本键 |
+| 主绿色系 | `SageGreen` | 159,177,159 | 弱化绿语义 `Accent` | 旧 TG Scheme `HotNormal/ReadOnly` 取色来源; 2026-10-30 起槽位改用字面量, 键保留供 Spectre 输出 |
 | 灰阶层 | `DarkGray` | 50,50,50 | 语义 `Dark`（当前无调用方请求） | 语义位保留, 未预热 |
-| 灰阶层 | `MidGray` | 100,100,100 | TG Scheme `Disabled` | 禁用态；语义 `Muted` |
+| 灰阶层 | `MidGray` | 100,100,100 | 禁用态语义 `Muted` | 旧 TG Scheme `Disabled` 取色来源; 2026-10-30 起槽位改用 Overlay0 字面量 |
 | 标题色 | `Cyan` | 112,199,209 | 语义 `Cyan`（当前无调用方请求） | Title 区配色已由 TG Scheme 接管 |
 | 状态色 | `Danger` | 220,90,90 | State 列 `⚠ 危险` 文字染色 (`Format-GridViewStateText` ← `Get-GridViewManagerRow`) | PSTui 无行级配色, 语义落在 State 文本 |
 | 状态色 | `Warning` | 220,180,80 | State 列 `⚠ 备选` 文字染色 (同上) | 同上 |
@@ -89,18 +97,18 @@ profile 加载分为 3 个阶段, 各阶段目标与耗时归因:
 
 | Scheme 槽位 | 用途 | 引用 Colors 键 |
 |---|---|---|
-| `Normal` | 正文单元格 / 无焦点列头 / 列间竖线 | FreshGreen + 暗背景 |
-| `HotNormal` | 快捷键热区 | SageGreen |
-| `Focus` | 聚焦列头 / 有焦点时选中行 | FreshGreen + 暗背景(40,40,40) |
+| `Normal` | 正文单元格 / 无焦点列头 / 列间竖线 | Mocha Text `205,214,244` + Base 暗底(24,24,37) |
+| `HotNormal` | 标题/表头强调 | Sky 冰青 `137,220,235` + 暗底 |
+| `Focus` | 聚焦列头 / 有焦点时选中行 | 亮白 `255,255,255` + Surface1(69,71,90) |
 | `HotFocus` | 其他 View 的聚焦热区 (TableView 不读取) | — |
-| `Active` | 无焦点时选中行 | FreshGreen + 暗背景(40,40,40) |
+| `Active` | 无焦点时选中行 | 亮白 `255,255,255` + Surface1(69,71,90) |
 | `HotActive` | 激活项热区 (TableView 不读取) | — |
-| `Highlight` | 高亮标记 | FreshGreen + 暗背景(40,40,40) |
-| `Editable` | 过滤框输入区 | FreshGreen + 近黑底 |
-| `ReadOnly` | 只读行 | SageGreen |
-| `Disabled` | 禁用行 | MidGray |
+| `Highlight` | 高亮标记 | 亮白 `255,255,255` + Surface1(69,71,90) |
+| `Editable` | 过滤框输入区 | 正文字 `205,214,244` + Surface0 底 |
+| `ReadOnly` | 只读行 | Overlay1 `127,132,156` |
+| `Disabled` | 禁用行 | Overlay0 `108,112,134` |
 
-> **新契约 (2026-10-18)**: `Focus` / `Active` / `Highlight` 三个槽位**必须取同一颜色** (`137,209,133` + `40,40,40`), 否则"焦点在表格"与"焦点在过滤框"两种状态下选中行高亮不一致, 且 IL 级实测确认 Focus 被聚焦列头和"有焦点时选中行"**共用**。
+> **不变量 (2026-10-18 建立, 2026-10-30 换色后仍适用)**: `Focus` / `Active` / `Highlight` 三个槽位**必须取同一颜色** (现为 `255,255,255` + `69,71,90`), 否则"焦点在表格"与"焦点在过滤框"两种状态下选中行高亮不一致, 且 IL 级实测确认 Focus 被聚焦列头和"有焦点时选中行"**共用**。Scheme 槽位颜色以 RGB 字面量直接配置在 `Initialize-Config.ps1`, 不经 `Colors.*` 键; 后两键 (`Danger`/`Warning`) 仍用于 State 列文本染色(渲染前剥离)。
 
 实际装配入口: [`Private/Set-TgColorScheme.ps1`](../../ShellPrompt/Private/Set-TgColorScheme.ps1)；幂等性 / 翻转防护 / TG 字典失配修复 详见该文件头部关键实现决策。
 

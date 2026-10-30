@@ -122,9 +122,10 @@ Describe 'TG 配色方案' {
         $active = $slots['Active']
         $focus.Fg | Should -Be $active.Fg
         $focus.Bg | Should -Be $active.Bg
-        # 新契约 (2026-10-18): Focus / Active 不再是 Cyan 底, 改为亮绿字 + 稍亮底
-        $focus.Fg | Should -Be '137,209,133'
-        $focus.Bg | Should -Be '40,40,40'
+        # 新契约 (2026-10-30): Focus / Active 不再是亮绿字 + 稍亮底,
+        # 改为亮白字 + Surface1 蓝灰高亮条(Catppuccin Mocha 分层)
+        $focus.Fg | Should -Be '255,255,255'
+        $focus.Bg | Should -Be '69,71,90'
     }
 
     It 'Focus 槽位底色应不再含 Cyan(让列头融入绿主题)' {
@@ -138,13 +139,29 @@ Describe 'TG 配色方案' {
         $slots['Highlight'].Bg | Should -Be $focusBg
     }
 
-    It 'Editable 槽位应配为亮绿字 + 暗底(过滤框可读)' {
-        # 回归防护: v2.1 之前 Editable 是警告黄 (230,180,80) + 30,30,30,
-        # 与"绿主题 + 列头亮绿字"的整体观感割裂; 新契约下前景亮绿 + 近黑底。
+    It 'Editable 槽位应配为正文字 + 深一档底(过滤框可读)' {
+        # 回归防护: 过滤框输入文字取 Focus 槽位, 输入区取 Editable 槽位。
+        # 新契约 (2026-10-30): Mocha 分层下用正文字色 + Surface0 深一档底,
+        # 与大面积 Base 底色拉开层级, 输入文字始终清晰。
         $slots = & $script:mod { $script:Config.UI.Theme.Slots }
-        $slots['Editable'].Fg | Should -Be '137,209,133'
-        $slots['Editable'].Bg | Should -Be '20,20,20'
+        $slots['Editable'].Fg | Should -Be '205,214,244'
+        $slots['Editable'].Bg | Should -Be '49,50,68'
     }
+
+    It '默认配色应为 Mocha 暗色分层(不再满屏单一亮绿)' {
+        # 2026-10-30 契约: 正文/选中/强调/禁用四个层级前景色必须拉开,
+        # 全部背景统一到 Base 暗灰蓝底, 消除"全屏亮绿无层级 + 斑马纹"观感。
+        $slots = & $script:mod { $script:Config.UI.Theme.Slots }
+        # 统一暗底: 10 个槽位背景里, 除高亮条(69,71,90)与过滤框(49,50,68)外全部为 24,24,37
+        $plainBg = @('Normal', 'HotNormal', 'ReadOnly', 'Disabled') | ForEach-Object { $slots[$_].Bg }
+        $plainBg | Should -Be @('24,24,37', '24,24,37', '24,24,37', '24,24,37')
+        # 层级前景: 正文 != 强调 != 禁用, 三者互不相同
+        $fgs = @($slots['Normal'].Fg, $slots['HotNormal'].Fg, $slots['Disabled'].Fg) | Select-Object -Unique
+        $fgs.Count | Should -Be 3
+        # 正文不再使用旧绿主题主色 137,209,133
+        $slots['Normal'].Fg | Should -Not -Be '137,209,133'
+    }
+
 
     It '应用后 Base/Menu 的 Focus 与 Active 槽位应完全一致' {
         # 复核: 写入 TG 之后, 两个 Scheme 上的 Focus 与 Active 也必须同色,
@@ -266,7 +283,7 @@ Describe 'TG 配色方案' {
         }
         if ($result -ne 'TG-UNAVAILABLE') {
             $want, $observed = $result -split '\|'
-            # observed 形如 'Base=137,209,133;Menu=137,209,133', 取出前缀与 RGB 两段分别断言
+            # observed 形如 'Base=205,214,244;Menu=205,214,244', 取出前缀与 RGB 两段分别断言
             $pairs = @{}
             foreach ($item in $observed -split ';') {
                 $k, $v = $item -split '=', 2
@@ -312,7 +329,7 @@ Describe 'TG 配色方案' {
             $result | Should -Not -Be 'NO-SCHEME'
             $ok, $rgb = $result -split '\|'
             $ok | Should -Be 'True'
-            $rgb | Should -Be '137,209,133'
+            $rgb | Should -Be '205,214,244'
         }
     }
 
@@ -333,11 +350,12 @@ Describe 'TG 配色方案' {
             $true | Should -Be $true
         } else {
             $result | Should -BeOfType [PSCustomObject]
-            # Normal 前景 137,209,133 => #89D185
-            $result.Normal | Should -Match '#89D185'
-            # 选中行槽位 Active (新契约 2026-10-18): 前景 137,209,133 => #89D185, 背景 40,40,40 => #282828
-            $result.Active | Should -Match '#89D185'
-            $result.Active | Should -Match '#282828'
+            # Normal 前景 205,214,244 => #CDD6F4 (Mocha Text, 2026-10-30 新契约)
+            $result.Normal | Should -Match '#CDD6F4'
+            # 选中行槽位 Active: 前景 255,255,255 -- TG 会把纯白归一化为命名色 'White';
+            # 背景 69,71,90 => #45475A
+            $result.Active | Should -Match '\[White,'
+            $result.Active | Should -Match '#45475A'
         }
     }
 
