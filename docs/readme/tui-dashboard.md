@@ -406,6 +406,8 @@ Enter 连接 │ / 搜索 │ Tab 切换区域 │ ↑↓ 选择主机 │ ←�
 
 #### 2.13.7 无头渲染取证（已验证）
 
+> **本节只验视图层**。编排层（真事件循环）的端到端取证见 [§2.13.8](#2138-编排层端到端取证已验证)。
+
 Terminal.Gui 2.4.10 未暴露 `FakeDriver`，但**渲染结果先落在 `driver.Contents`
 (`Cell[,]`)** 再写给终端 —— 因此 `Init + Begin + LayoutAndDraw` 之后，
 缓冲区里就是"本该画到屏幕上的那一屏"，可以**逐格**导出文本与属性取证。
@@ -426,7 +428,33 @@ Terminal.Gui 2.4.10 未暴露 `FakeDriver`，但**渲染结果先落在 `driver.
 > 上述结论中"未选中行底色 = Black、选中行 = Magenta"是**逐格读 `Cell.Attribute`**
 > 得到的硬证据，不是目测。
 
-#### 2.13.8 已知限制
+#### 2.13.8 编排层端到端取证（已验证）
+
+§2.13.7 验的是**视图层**。为了证明"真正跑起来的那条链
+（`Show-HostSelector` → `Show-SshHostDashboard` → `Invoke-SshHostDashboard`）
+产出的是新仪表盘而不是旧单表格"，另做了一轮**编排层**取证：让
+`Invoke-SshHostDashboard` 走完它自己的 `Init → AddTimeout → Run → Shutdown`，
+在**事件循环运行中**抓帧并注入按键。
+
+手法（可复现，不需要真终端）：给两个模块作用域内的函数打**影子** ——
+`Test-TmuxTuiInteractive` 恒 `$true`（容器无 TTY，否则护栏直接返回），
+以及 `Update-SshHostDashboardProbe`（编排层每 120ms 在**主循环**里被调用的
+心跳回调）改为"先调原实现、再抓一帧 `driver.Contents`、再注入下一个按键"。
+于是"抓帧 + 注键"都发生在 **UI 线程的主循环**上，不需要任何跨线程原语。
+
+抓到的三帧（合成 6 台主机：AWS×2 / DigitalOcean / 本机 / 无 Provider / 中文名）：
+
+| 帧 | 触发 | 观测 |
+|---|---|---|
+| frame1 | 首屏 | 标题带 + 分类条(`All AWS DigitalOcean Local Other`) + 主机列表 + 分隔线 + Connection/Activity/Tags 卡片；详情 `Host=deb / Address=10.0.0.11 / Port=22 / User=root`；连接状态 **`● 探测中`**（远端未到，**不提前显示在线**） |
+| frame2 | `↓` | 选中切到 `do-dev`，详情面板**同步**换成 `do-dev / 10.0.0.2 / dev`，列表与详情保持一致 |
+| frame3 | `→` | 分类切到 `AWS`，列表**只剩** `deb` + `db-prod`（`do-dev`/`local-box`/`bare-host`/中文主机被过滤掉），详情回到 `deb` |
+
+⇒ 键位、分类过滤、异步态、详情联动在**真实事件循环**里均按契约工作。
+
+> 取证脚本是一次性诊断产物（`.agent_cache/dash-probe/p41-orchestrator.ps1`），**不随仓库分发**。
+
+#### 2.13.9 已知限制
 
 - **状态点只对"探测过的"主机着色**：选中主机会立即探测，可视窗口内的其余主机由心跳
   逐台巡检。没探测过的显示灰色 `● 未知` —— 这是**如实**呈现，不是缺陷。
