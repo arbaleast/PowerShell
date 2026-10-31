@@ -28,7 +28,7 @@ $HOME/.ShellPrompt/config.ps1
 | `Paths` | 数据文件路径 | 本页 |
 | `Colors` | ANSI 文本颜色 | 本页 |
 | `SSH` | SSH 主机使用状态 | 本页 |
-| `Weather` | 主机选择器标题行天气 | [功能特点 · 天气](features.md#交互菜单标题区天气) |
+| `Weather` | SSH 主机仪表盘标题带天气 | [功能特点 · 天气](features.md#交互菜单标题区天气) |
 | `UI` | TUI 主题 | 本页 + [TUI 仪表盘 · 配置](tui-dashboard.md#27-配置) |
 
 ### Paths 域
@@ -57,7 +57,7 @@ $HOME/.ShellPrompt/config.ps1
 
 | 键 | 类型 | 默认值 | 说明 |
 |----|------|--------|------|
-| `LastHost` | string | `$null` | 上次使用的 SSH 主机；在主机选择器中置顶并标记 `★ 最近` |
+| `LastHost` | string | `$null` | 上次使用的 SSH 主机；在 SSH 主机仪表盘中置顶并在标题带显示 `上次: <host>` |
 
 运行一次 `sss` 并选择主机后，该值会在**当前 PowerShell 会话内**自动更新；它不会写回配置文件。如果希望每次启动都预置置顶主机，请手动在 `config.ps1` 中设置 `$Config.SSH.LastHost`。
 
@@ -65,7 +65,7 @@ $HOME/.ShellPrompt/config.ps1
 
 | 键 | 类型 | 默认值 | 说明 |
 |----|------|--------|------|
-| `Enabled` | bool | `$true` | 是否在主机选择器标题行显示天气 |
+| `Enabled` | bool | `$true` | 是否在 SSH 主机仪表盘标题带显示天气 |
 | `ExtraWeatherDescMap` | ordered dict | `{}` | 自定义天气描述英文 → 中文映射，同名键覆盖内置字典 |
 
 ```powershell
@@ -103,7 +103,7 @@ $Config.UI.Theme.Enabled = $false   # 使用组件默认配色
 # 主色调改成亮绿色
 $Config.Colors.FreshGreen = "`e[38;2;0;255;0m"
 
-# 关闭主机选择器标题行的天气
+# 关闭 SSH 主机仪表盘标题带的天气
 $Config.Weather.Enabled = $false
 
 # 预置置顶主机

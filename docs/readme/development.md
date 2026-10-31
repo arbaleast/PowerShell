@@ -52,7 +52,7 @@ pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-ProfileSmoke.ps1
 
 ## 人工测试
 
-涉及 **profile 加载 / SSH / tmux / prompt 渲染** 的改动，必须在 PR 描述中标记 `[人工测试必做]`，并按 [`docs/agents/testing.md`](../agents/testing.md) 的最小真机验证集执行（SSH 主机选择器与 tmux 仪表盘各走一轮，测试用会话验证删除路径与终端还原）。
+涉及 **profile 加载 / SSH / tmux / prompt 渲染** 的改动，必须在 PR 描述中标记 `[人工测试必做]`，并按 [`docs/agents/testing.md`](../agents/testing.md) 的最小真机验证集执行（SSH 主机仪表盘与 tmux 仪表盘各走一轮，测试用会话验证删除路径与终端还原）。
 
 ## 文档同步
 

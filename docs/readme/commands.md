@@ -38,7 +38,7 @@ Show-UserScoopLogo
 ### `Start-TmuxSession`
 
 ```powershell
-sss                 # 打开主机选择器
+sss                 # 打开 SSH 主机仪表盘
 sss deb             # 跳过选择器，直接管理 ~/.ssh/config 中的 deb
 ```
 

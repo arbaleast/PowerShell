@@ -72,7 +72,8 @@ PowerShell/
     │   ├── Tmux-SshFailure.Tests.ps1
     │   ├── Update-Weather.Tests.ps1
     │   └── pssa-warning-baseline.txt               # PSSA Warning 指纹基线
-    └── Private/                       # 内部辅助函数(不暴露给用户, 共 52 个 .ps1, 2026-10-31 核对)
+    └── Private/                       # 内部辅助函数(不暴露给用户, 共 64 个 .ps1, 2026-10-31 核对)
+        ├── Add-SshHostActivity.ps1            # [新] 记录一次 SSH 主机连接活动(本地 JSON, 原子写)
         ├── ConvertTo-SshArgumentLine.ps1      # SSH 命令行参数拼接
         ├── ConvertTo-SshEscapedString.ps1     # SSH 单引号转义
         ├── ConvertTo-TmuxTuiViewModel.ps1     # 仪表盘视图模型(状态区 + 表格数据)
@@ -83,6 +84,11 @@ PowerShell/
         ├── Get-SpinnerStyleMapping.ps1        # ShellPrompt 样式名 → Spectre.Spinner.Known 成员名
         ├── Get-SshArgs.ps1                    # SSH 参数生成器
         ├── Get-SshConfigHosts.ps1             # SSH config 主机解析
+        ├── Get-SshHostActivity.ps1            # [新] 主机本地连接活动读数(最后活跃/最近/按天直方图)
+        ├── Get-SshHostDashboardRow.ps1        # [新] 仪表盘行视图模型(过滤/排序/相对时间, 纯函数)
+        ├── Get-SshHostDashboardTheme.ps1      # [新] 仪表盘语义 Scheme 集合(ColorName16, 绕过 16 色量化)
+        ├── Get-SshHostDetail.ps1              # [新] 远端详情探测(一次 SSH 往返拿 hostname/uptime/load/tmux)
+        ├── Get-SshHostProfile.ps1             # [新] ~/.ssh/config 结构化档案 + 分类推导(含 Include)
         ├── Get-TguiContext.ps1                # Terminal.Gui v2 独立 ALC 加载器(vendored DLL)
         ├── Get-TguiTerminalSize.ps1           # 仪表盘布局用的终端尺寸解析(事件报数 > 终端自身 > TG Screen > 缺省)
         ├── Get-TguiTextWidth.ps1              # 终端显示宽度测量(全角计 2, 零宽计 0; 底栏宽度预算用)
@@ -96,13 +102,17 @@ PowerShell/
         ├── Initialize-FnmEnvironment.ps1      # fnm 环境缓存初始化 (fnm-env.json)
         ├── Invoke-SshCaptureOutput.ps1        # SSH 异步输出捕获
         ├── Invoke-SshCommand.ps1              # SSH 命令调度(主线逻辑)
-        ├── Invoke-TguiHostSelector.ps1        # 主机选择器 TGUI 编排(过滤 → 组装 → Init → Run → Shutdown)
+        ├── Invoke-TguiHostSelector.ps1        # [旧轨, 保留] 单表格主机选择器 TGUI 编排(非默认路径)
+        ├── Invoke-SshHostDashboard.ps1        # [新] SSH 主机仪表盘编排(键盘/异步详情/缩放/请求标识)
         ├── Invoke-TmuxAttach.ps1              # tmux 会话附着/恢复执行
         ├── Invoke-TmuxSessionDeletion.ps1     # 删除 tmux 会话的唯一屏障(二次确认 + kill-session)
         ├── Invoke-TmuxSessionFetch.ps1        # 后台取数(远程 tmux 探测与会话列表)
         ├── Invoke-TmuxTuiAction.ps1           # 仪表盘业务动作分发
         ├── Invoke-WithProgress.ps1            # 进度封装 (Spectre 单轨)
-        ├── New-TguiHostSelectorWindow.ps1     # 主机选择器整窗组装(标题/搜索框/主机表/提示行, 无头可测)
+        ├── New-TguiHostSelectorWindow.ps1     # [旧轨, 保留] 单表格主机选择器整窗组装(无头可测)
+        ├── New-SshHostDashboardWindow.ps1     # [新] SSH 主机仪表盘整窗组装(标题带/分类栏/列表/详情/底栏)
+        ├── New-SshHostListView.ps1            # [新] 主机列表自定义行(每行 6 Label) + 局部刷新原语
+        ├── New-SshHostDetailPanel.ps1         # [新] 右侧详情卡片(FrameView × 4) + 就地更新原语
         ├── New-TmuxSession.ps1                # 创建新 tmux 会话
         ├── New-TmuxTuiColumnPlan.ps1          # 仪表盘表格列裁剪计划
         ├── New-TmuxTuiDashboardWindow.ps1     # 仪表盘窗口(表格 + 快捷键栏)构造
@@ -117,8 +127,10 @@ PowerShell/
         ├── Resolve-TguiThemeName.ps1          # UI.Theme 名称规范化(未知名回退默认)
         ├── Save-OriginalTerminalState.ps1     # 终端状态保存
         ├── Set-TguiTheme.ps1                  # Terminal.Gui 主题设置 (ALC 原生, 唯一配色路径)
-        ├── Show-HostSelector.ps1              # 主机选择菜单(分发器, Terminal.Gui v2 TGUI)
+        ├── Show-HostSelector.ps1              # 主机选择菜单(分发器: 断言 + 天气后缀 + 归一返回值)
+        ├── Show-SshHostDashboard.ps1          # [新] SSH 主机仪表盘分发器(档案 + 活动历史 → 编排层)
         ├── Show-TmuxTuiDashboard.ps1          # TGUI 仪表盘编排(sss 唯一渲染轨)
+        ├── Start-SshHostDetailTask.ps1        # [新] 远端详情后台任务(提交 + 非阻塞收割, 绝不 Wait)
         ├── Submit-TmuxBackgroundTask.ps1      # 后台取数任务提交
         ├── Submit-WttrPrefetch.ps1            # 天气预取任务提交
         ├── Test-SshHostName.ps1               # 主机名校验

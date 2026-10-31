@@ -28,11 +28,11 @@
 
 ### sss 仪表盘单轨与终端所有权 (2026-10-30 TGUI 迁移)
 
-- `sss` (`Start-TmuxSession`) 的仪表盘**唯一渲染轨**是 Terminal.Gui v2 应用 `Private/Show-TmuxTuiDashboard.ps1`, 布局/表格/键盘/缩放/备用屏全部由 TG 自管; 结构与键位契约见 [`docs/readme/tui-dashboard.md`](../readme/tui-dashboard.md)。SSH 主机选择器同走 Terminal.Gui v2 (`Show-HostSelector` → `Invoke-TguiHostSelector`, 全屏 TGUI); 删除流程走仪表盘当前选中行, 二次确认在业务层。
+- `sss` (`Start-TmuxSession`) 的仪表盘**唯一渲染轨**是 Terminal.Gui v2 应用 `Private/Show-TmuxTuiDashboard.ps1`, 布局/表格/键盘/缩放/备用屏全部由 TG 自管; 结构与键位契约见 [`docs/readme/tui-dashboard.md`](../readme/tui-dashboard.md)。SSH 主机选择同走 Terminal.Gui v2, 且 2026-10-31 起改为**多区域主机仪表盘**: `Show-HostSelector` → `Show-SshHostDashboard` → `Invoke-SshHostDashboard` (分类导航 / 主机列表 / 详情卡片 / 快捷键栏, 见 tui-dashboard.md §2.13); 旧单表格轨 (`Show-HostSelector` → `Invoke-TguiHostSelector`) **保留可用但不是默认路径**。删除流程走仪表盘当前选中行, 二次确认在业务层。
 - **终端所有权不变量**: `$script:TmuxTerminalOwner` 标记当前谁在管终端 ('Legacy' 默认 / 'Tgui' = TG 独占)。
   - 'Tgui' 下 `Enter-TmuxAlternateScreen` / `Exit-TmuxAlternateScreen` / `Clear-TmuxScreen` **整体静音** —— 不发 `\e[?1049h/l`、不做 `[Console]::Clear`、不改 `$script:TmuxAltScreenActive`, 备用屏生命周期由 TG 的 `Init/Run/Shutdown` 独占 (禁止双层嵌套, 契约测试在 `Enter-TmuxAlternateScreen.Tests.ps1` / `Show-TmuxTuiDashboard.Tests.ps1`)。
   - 业务动作 (附着/新建/SSH/删除) 只在 `Run` 已返回 + `Shutdown` 已交还终端之后, 于主屏幕执行。
-- 主机选择 (`Show-HostSelector`) **先于**渲染分支: 无 `-HostName` 时先选主机, 取消选择不进任何仪表盘 (`Start-TmuxSession.TuiDispatch.Tests.ps1`)。
+- 主机选择 (`Show-HostSelector` → `Show-SshHostDashboard`) **先于**渲染分支: 无 `-HostName` 时先选主机, 取消选择不进任何仪表盘 (`Start-TmuxSession.TuiDispatch.Tests.ps1`)。
 
 ### PSTui TableView 留白约束 (P1.7, 2026-10-19 记录; **已存档**)
 
@@ -123,7 +123,7 @@ profile 加载分为 3 个阶段, 各阶段目标与耗时归因:
 
 - **TG v2 `TableView` 未暴露 per-row 染色的轻量入口** (`ColumnStyle.ColorGetter` 路线 α 反射实测可行但风险高, 当前**未启用**)。语义靠 State 列文本承担: `●` 已附着 / `⚠` 危险 / `⚠` 备选 / `✗` 不可用。
 - 行级配色的 路线 α (反射 TG `ColumnStyle.ColorGetter`) 已实测可行但风险高 (依赖 TG IL 行为, 升级即可能破), 当前**未启用**, 留作 P1 候选。
-- SSH 主机选择器与 `sss` 仪表盘共享同一套 `Focus == Active == Highlight` 语义, 因此配色改动只需调整 `UI.Theme.Slots` 一处。
+- `sss` tmux 仪表盘沿用 `UI.Theme.Slots` 的 `Focus == Active == Highlight` 语义; 而 **SSH 主机仪表盘自带一套语义 Scheme** ([`Private/Get-SshHostDashboardTheme.ps1`](../../ShellPrompt/Private/Get-SshHostDashboardTheme.ps1), 用 `ColorName16` 直接构造 `Attribute` 绕过 16 色量化), 两套配色**互不影响** —— 后者只挂到自己的视图上、不注册进 `SchemeManager`(理由见 tui-dashboard.md §2.9 / §2.13.2)。
 
 ### 主题切换约束
 
@@ -145,10 +145,10 @@ profile 加载分为 3 个阶段, 各阶段目标与耗时归因:
 
 ## 交互 UI 标题行天气（2026-10-18 起, 方案 R2）
 
-SSH 主机选择器的 TGUI **标题行**（整窗行 0）自动追加一行 wttr 天气短串 (如 ` - Shanghai: 🌫 +18°C`). 拼装入口在 [`Private/Show-HostSelector.ps1`](../../ShellPrompt/Private/Show-HostSelector.ps1) 分发器拼装 `-Title` 参数之前的 `Get-WttrTitleSuffix` 调用点:
+SSH 主机仪表盘的**标题带左半**（整窗行 0，2026-10-31 重构后为标题带而非单行标题）自动追加一行 wttr 天气短串 (如 ` - Shanghai: 🌫 +18°C`). 拼装入口在 [`Private/Show-HostSelector.ps1`](../../ShellPrompt/Private/Show-HostSelector.ps1) 分发器：`Get-WttrTitleSuffix` 算出后缀后作为 `-TitleSuffix` 传给 `Show-SshHostDashboard` → `Invoke-SshHostDashboard`，由编排层拼进标题文本:
 
-- 在拼装 `-Title` 参数之前, 由 [`Private/Get-WttrTitleSuffix.ps1`](../../ShellPrompt/Private/Get-WttrTitleSuffix.ps1) 判定 `$script:Config.Weather.Enabled` 并调用 `Get-WttrWeather -Format CustomUrl -Url 'https://wttr.in/?format=j1&lang=zh' -CacheMinutes 10 -ErrorAction SilentlyContinue`, 自解析 j1 JSON 拼出 ` - <City>: <中文描述> <Temp>°C` 片段;
-- 启用且 wttr 非空时, 把 ` - <wttr>` 拼到原标题末尾; 否则 `$wttrSuffix` 留空, 标题原样渲染;
+- 在拼装标题之前, 由 [`Private/Get-WttrTitleSuffix.ps1`](../../ShellPrompt/Private/Get-WttrTitleSuffix.ps1) 判定 `$script:Config.Weather.Enabled` 并调用 `Get-WttrWeather -Format CustomUrl -Url 'https://wttr.in/?format=j1&lang=zh' -CacheMinutes 10 -ErrorAction SilentlyContinue`, 自解析 j1 JSON 拼出 ` - <City>: <中文描述> <Temp>°C` 片段;
+- 启用且 wttr 非空时, 把 ` - <wttr>` 拼到标题文本末尾; 否则 `$wttrSuffix` 留空, 标题原样渲染; 窄终端下标题带会被按显示宽度裁剪(右侧"上次: &lt;host&gt;"优先保留);
 - `Get-WttrWeather` 自带超时/失败兜底(返回 `''`), 此处再加 `IsNullOrWhiteSpace` 兜底, 永不抛异常, 永不破坏标题行;
 - 数据源: [`Private/Get-WttrWeather.ps1`](../../ShellPrompt/Private/Get-WttrWeather.ps1) (`$script:_WttrCache` 缓存键 = `"Format|Url"`);
 - 副作用: 提示行草案 A.2 已撤回, `Write-GridViewHint` 已**不再**渲染天气片段 (上一轮挂在提示行末尾的逻辑已撤掉), 避免与标题区重复显示; 该函数本身已于 2026-10-29 一并删除(无生产调用方).

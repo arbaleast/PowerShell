@@ -25,22 +25,26 @@
 
 以下为界面结构的文本示意（不是截图），实际配色、列宽会随终端尺寸变化。
 
-**SSH 主机选择器**（运行 `sss`）：
+**SSH 主机仪表盘**（运行 `sss`）：
 
 ```text
-SSH 主机选择器 (3) - Chiuhuahsien: 烟雾 26°C
-搜索: _
-┌──────────────────────┬──────────┐
-│HOST                  │STATE     │
-├──────────────────────┼──────────┤
-│debian                │★ 最近    │
-│dev-box               │          │
-│build-arm             │          │
-└──────────────────────┴──────────┘
-↑↓ 选择 · Enter 确认 · Esc 取消 · Tab 切焦点
+ShellPrompt · SSH 主机                         上次: deb
+ All  AWS  DigitalOcean  Local  Other
+┌─ ● deb       ▸prod  #prod #web   2h   ┐ ┌ Connection ────────┐
+│  ● web       ▸prod  #prod         刚刚  │ │ Host     deb       │
+│  ● local                             3d │ │ Address  10.0.0.1  │
+│  ● do1       ▸dev   #dev           —    │ │ Port     22        │
+└────────────────────────────────────────┘ │ User     root      │
+                                           │ Status   ● 在线    │
+                                           └────────────────────┘
+分类 All · 4 台
+Enter 连接 │ / 搜索 │ Tab 切换区域 │ ↑↓ 选择主机 │ ←→ 切换分类 │ Esc 退出
 ```
 
-输入文字即实时过滤主机；当前会话上次使用的主机会置顶并标记 `★ 最近`；标题行可显示 wttr.in 天气。
+顶部分类来自 ssh config 里**真实**的 `# @provider` 元数据（没写就归到 `Other`）；
+左侧列表显示状态点 / 主机名 / 分组 / 标签 / 最后活跃；右侧详情分
+Connection / Activity / Tags / Infrastructure 四张卡片，远端状态**异步**加载、
+加载中与失败都有明确提示。输入 `/` 实时过滤主机；上次使用的主机会置顶并在标题带右侧显示。
 
 **tmux 会话仪表盘**：
 
@@ -78,7 +82,7 @@ Enter  附着 │ n  新建 │ r  刷新 │ s  SSH │ x  删除 │ q  退出
 | **交互式 TUI** | 全屏终端界面（Terminal.Gui v2），支持方向键、单键快捷键、搜索过滤和窗口缩放，无需额外安装 UI 依赖 |
 | **终端体验增强** | 启动欢迎 Banner + 随机语录、PSReadLine 历史补全增强、Starship 提示符、fnm 自动切换 Node 版本 |
 | **公钥部署** | `Copy-SshPublicKey` / `ssh-copy-id` 自动按 `ed25519 > ecdsa > rsa > dsa` 顺序查找公钥并推送到远端 `authorized_keys` |
-| **天气** | 主机选择器标题行显示 wttr.in 天气；`Update-Weather` 可手动绕过缓存刷新一次 |
+| **天气** | SSH 主机仪表盘标题带显示 wttr.in 天气；`Update-Weather` 可手动绕过缓存刷新一次 |
 | **配置管理** | 通过 `$HOME/.ShellPrompt/config.ps1` 覆盖颜色、路径、天气、SSH 记忆和 TUI 主题 |
 
 ## 系统要求与依赖
@@ -186,7 +190,7 @@ Get-Command -Module ShellPrompt
 在已配置好 `$PROFILE` 的交互式 PowerShell 中：
 
 ```powershell
-# 1. 打开 SSH 主机选择器，选择主机后进入 tmux 仪表盘
+# 1. 打开 SSH 主机仪表盘，选择主机后进入 tmux 仪表盘
 sss
 
 # 2. 跳过选择器，直接管理指定主机（主机名来自 ~/.ssh/config）
@@ -222,7 +226,7 @@ $HOME/.ShellPrompt/config.ps1
 # ~/.ShellPrompt/config.ps1
 # 注意：PowerShell 双引号字符串不解析 \e，用反引号转义 `e
 $Config.Colors.FreshGreen = "`e[38;2;0;255;0m"   # 覆盖主色调
-$Config.Weather.Enabled   = $false                # 关闭主机选择器标题行天气
+$Config.Weather.Enabled   = $false                # 关闭 SSH 主机仪表盘标题带天气
 $Config.SSH.LastHost      = 'my-server'           # 预置置顶主机
 ```
 

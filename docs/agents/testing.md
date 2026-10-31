@@ -85,7 +85,7 @@ CI 强制以下四条不变量，任何一条不满足都会让 CI 变红：
 - **必标场景**: 涉及 **profile 加载 / SSH / tmux / prompt 渲染** 的改动,
   必须在 **PR 描述**中标注 `[人工测试必做]`(CHANGELOG 已冻结, 不进 CHANGELOG)。
 - **最小真机验证集**:
-  - 重启 pwsh 跑 `sss` / `Start-TmuxSession`, SSH 主机选择器的 TGUI 标题行应仍显示 `城市名: 中文描述 +温度°C`
+  - 重启 pwsh 跑 `sss` / `Start-TmuxSession`, SSH 主机仪表盘的标题带应仍显示 `城市名: 中文描述 +温度°C`
     (Get-WttrTitleSuffix 拆分前后行为必须完全一致)。
   - SSH 主机选择菜单 / tmux 管理器两处交互式 UI 各 1 轮交互(完整走一遍过滤与选行/取消路径)。
   - 用一个**测试用** tmux 会话验证删除路径: 删除成功显示 `[OK]`, **失败(例如会话名不存在)必须显示警告且不显示 `[OK]`**。
