@@ -131,7 +131,7 @@ function Invoke-SshHostDashboard {
 
     if (-not $Profiles -or @($Profiles).Count -eq 0) { return $null }
 
-    # ---- 主机白名单(Show-HostSelector 的 -Hosts 契约: 只显示被点名的���机) ----
+    # ---- 主机白名单(Show-HostSelector 的 -Hosts 契约: 只显示被点名的主机) ----
     $effectiveProfiles = @($Profiles)
     if ($AllowedHosts -and @($AllowedHosts).Count -gt 0) {
         $allowed = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
