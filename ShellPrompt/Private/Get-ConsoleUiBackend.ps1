@@ -69,10 +69,13 @@ function Test-ConsoleUiInteractive {
         (实测: 无 TTY 环境 Terminal.Gui 的 Init 不抛异常, Run 永不返回),
         因此非交互宿主(管道 / CI / 重定向)无法使用 Terminal.Gui 主轨。
 
-        判断策略(与 Test-TmuxTuiInteractive 一致, 优先 PowerShell 宿主层
-        而非 .NET Console API):
-        - 第一信号: $host.Name -eq 'ConsoleHost' 代表真实交互终端
-        - 第二信号: $host.UI.RawUI 是否可正常访问(BufferSize / CursorPosition)
+        判断策略(与 Test-TmuxTuiInteractive / 两条 TGUI 编排护栏同口径):
+        - 第一信号(前置): 输入或输出被重定向(Pester / CI / 管道)必然非交互 ——
+          复用 Test-TmuxTuiInteractive 判定, 避免断言层与护栏层出现分歧
+          (2026-10-31 Windows CI 实证: 仅用宿主层判定时, ConPTY 下 RawUI 可用
+          会判"可用", 而 TGUI 编排层按重定向判禁用, Assert-ConsoleUiReady 不再抛错)。
+        - 第二信号: $host.Name -eq 'ConsoleHost' 代表真实交互终端
+        - 第三信号: $host.UI.RawUI 是否可正常访问(BufferSize / CursorPosition)
         - 辅助信号: [Console]::IsInputRedirected (在 scoop pwsh 下有 bug, 仅作非 ConsoleHost 的 fallback)
 
         注: [Console]::IsInputRedirected 在 scoop pwsh / Windows Terminal 环境下
@@ -85,7 +88,17 @@ function Test-ConsoleUiInteractive {
     [OutputType([PSCustomObject])]
     param()
 
-    # 第一信号: PowerShell Host 名称
+    # 第一信号(前置): 重定向终端(与 TGUI 编排护栏 Test-TmuxTuiInteractive 同口径)。
+    # 断言层必须与编排层同判: 否则上层放行、下层在触碰 TG 前静默跳过,
+	# Assert-ConsoleUiReady 的"可定位终止错误"契约就落空(CI 实证)。
+    if (-not (Test-TmuxTuiInteractive)) {
+        return [PSCustomObject]@{
+            Ok     = $false
+            Reason = '输入/输出已重定向, Terminal.Gui 事件循环会永久阻塞 (Test-TmuxTuiInteractive)'
+        }
+    }
+
+    # 第二信号: PowerShell Host 名称
     $isConsoleHost = ($host.Name -eq 'ConsoleHost')
 
     # 第二信号: 尝试访问 RawUI(只有在真实控制台下才完全可用)
