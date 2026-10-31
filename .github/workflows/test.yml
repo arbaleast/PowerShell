@@ -1,16 +1,20 @@
 name: CI
 
-# 触发条件: 只在代码 / 测试 / 静态分析配置 / 本 workflow 变更时跑。
+# 触发条件: 只在代码 / 测试 / 静态分析配置 / vendored 依赖 / 本 workflow 变更时跑。
 # 文档改动不触发 (docs/ 不在 paths 里), 避免无谓的 runner 消耗。
 on:
   push:
     paths:
       - 'ShellPrompt/**'
+      # vendored 依赖(PSTui / Terminal.Gui 等)是 TGUI 仪表盘的输入:
+      # 升级 Modules/ 下的 DLL 会改变仪表盘行为, 必须同样触发 CI。
+      - 'Modules/**'
       - 'Microsoft.PowerShell_profile.ps1'
       - '.github/workflows/test.yml'
   pull_request:
     paths:
       - 'ShellPrompt/**'
+      - 'Modules/**'
       - 'Microsoft.PowerShell_profile.ps1'
       - '.github/workflows/test.yml'
   workflow_dispatch:
