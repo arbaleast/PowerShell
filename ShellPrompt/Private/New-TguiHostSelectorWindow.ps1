@@ -283,7 +283,6 @@ function New-TguiHostSelectorWindow {
         Write-Verbose "[New-TguiHostSelectorWindow] ALC 主题配色失败(继续 TG 默认): $($_.Exception.Message)"
     }
     $bodyScheme = Resolve-TguiScheme -Tgui $tg -Names @('Base', 'Menu', 'Dialog')
-    $barScheme = Resolve-TguiScheme -Tgui $tg -Names @('Menu', 'Base', 'Dialog')
     foreach ($view in @($window, $ltTitle, $ltPrompt, $field, $table, $ltHint)) {
         if ($null -eq $bodyScheme) { continue }
         try {
@@ -292,9 +291,12 @@ function New-TguiHostSelectorWindow {
             Write-Verbose "[New-TguiHostSelectorWindow] 子视图 SetScheme 失败: $($_.Exception.Message)"
         }
     }
-    if ($null -ne $barScheme) {
+    # 底栏与 sss 仪表盘**同取 Base**(键名 = Base.HotNormal 冰青, 标签 = Base.Normal 亮白):
+    #   两个屏幕的底栏观感一致; 且不再受 'Menu' 差异化槽位影响
+    #   (Menu 现专供 sss 的标题带 + 表头 —— 见 Initialize-Config 的 SchemeOverrides)。
+    if ($null -ne $bodyScheme) {
         try {
-            [void]$statusBar.SetScheme($barScheme)
+            [void]$statusBar.SetScheme($bodyScheme)
         } catch {
             Write-Verbose "[New-TguiHostSelectorWindow] 底栏 SetScheme 失败: $($_.Exception.Message)"
         }

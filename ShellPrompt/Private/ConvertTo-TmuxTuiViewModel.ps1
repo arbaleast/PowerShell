@@ -112,6 +112,24 @@ function ConvertTo-TmuxTuiViewModel {
         }
     }
 
+    # ---- 提示行文案(Empty/Error): 由动作定义驱动(2026-10-31 UI 升级) ----
+    # 此前 Empty 态提示写死 "n 新建会话 / r 刷新 / s 直连", 与底部快捷键栏的
+    # Context='Normal' 文案(刷新 / SSH)不一致; 现以 Get-TmuxActionDefinition
+    # 为唯一事实来源按上下文拼装(键位语义与键值完全不变, 只改展示文案来源),
+    # 空态/错误态与快捷键栏的语境从此天然一致; $null 兜底错误态同样有指引。
+    # 文案形如 "n 新建 · r 刷新 · s 直连" —— 与底部快捷键栏逐项同形, 居中一行
+    # 就能读出"现在能按什么键", 不必在两处维护两套说法。
+    if ($mode -in @('Empty', 'Error')) {
+        $context = if ($mode -eq 'Error') { 'Error' } else { 'Normal' }
+        $keys = if ($mode -eq 'Error') { @('r', 's') } else { @('n', 'r', 's') }
+        $definitions = @(Get-TmuxActionDefinition -HasSessions $false -Context $context)
+        $hintParts = foreach ($key in $keys) {
+            $def = @($definitions | Where-Object { $_.Key -eq $key })[0]
+            if ($null -ne $def) { "$($def.Key) $($def.Label)" }
+        }
+        if ($hintParts) { $hint = $hintParts -join ' · ' }
+    }
+
     # ---- 刷新后尽量保留原选中 ----
     $selected = $null
     if ($PreviousSelected) {

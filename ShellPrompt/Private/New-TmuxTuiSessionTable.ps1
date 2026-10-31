@@ -110,6 +110,13 @@ function New-TmuxTuiSessionTable {
     #   N/R/S/X/Q 单键动作。置回 null 实测读回确实为 null, 行为已验证。
     $table.CollectionNavigator = $null
 
+    # ---- 2.2 整行选中(2026-10-31 UI 升级) ----
+    # 2.4.10 的 FullRowSelect 默认 $false: PTY 渲染取证(.agent_cache/uir/)实测,
+    #   此时只有**选中单元格**(第 0 列"#")给出 Focus 背景高亮, 选中行的其余列
+    #   全部普通底色 —— 选中状态不明显。置 $true 后整行都取 Focus 槽位,
+    #   行选中一目了然(属性可读写已由无头探针验证, readback=True)。
+    $table.FullRowSelect = $true
+
     # ColumnStyle 类型从列样式字典自身的泛型参数取第二项(第一项是 int 列序):
     # 不能用 Values.GetType().GetGenericArguments() —— ValueCollection 是
     # Dictionary<int, ColumnStyle> 的嵌套类型, 其 GetGenericArguments 带出
@@ -117,18 +124,41 @@ function New-TmuxTuiSessionTable {
     # MinWidth 属性, 即会得到"属性不存在"的失败)。
     $columnStyleType = $table.Style.ColumnStyles.GetType().GetGenericArguments()[1]
     $alignEnum = $columnStyleType.GetProperty('Alignment').PropertyType
-    # ColumnStyles 字典按**源列序**(0..N-1)写 Min/Max/右对齐
+    # ColumnStyles 字典按**源列序**(0..N-1)写 Min/Max/对齐
     for ($index = 0; $index -lt $visible.Count; $index++) {
         $plan = $visible[$index]
         $columnStyle = [System.Activator]::CreateInstance($columnStyleType)
         $columnStyle.MinWidth = $plan.MinWidth
         $columnStyle.MaxWidth = $plan.MaxWidth
-        if ($plan.RightAlign) {
-            $columnStyle.Alignment = [Enum]::Parse($alignEnum, 'End')
-        } else {
-            $columnStyle.Alignment = [Enum]::Parse($alignEnum, 'Start')
+        # 对齐: Start / End(右对齐) / Center(STATUS 列居中, 便于一眼扫状态)
+        $alignmentName = 'Start'
+        if ($plan.PSObject.Properties['Alignment'] -and $plan.Alignment) {
+            $alignmentName = [string]$plan.Alignment
         }
+        elseif ($plan.RightAlign) { $alignmentName = 'End' }
+        elseif ($plan.PSObject.Properties['CenterAlign'] -and $plan.CenterAlign) { $alignmentName = 'Center' }
+        $columnStyle.Alignment = [Enum]::Parse($alignEnum, $alignmentName)
         $table.Style.ColumnStyles[$index] = $columnStyle
+    }
+
+    # ---- 2.3 TG 的单元格宽度硬上限 = 100(不要改!) ----
+    # TG 2.4.10 的 TableView.MaxCellWidth **默认 100**: 任何列的单元格宽度都被
+    # 硬上限在 100 列 —— 真机 130/160 列取证: SESSION 列被截成 100, 整张表
+    # 只有 128 列宽。
+    # ★ **不要把 MaxCellWidth 调大**: 实测调成 102 / 132 后, TG 的 TableView 在
+    #   布局阶段**死循环**(PTY 里 40 秒只吐 `[1;1H[?25l`, 事件循环根本起不来)——
+    #   这是 TG 2.4.10 的上游限制, 不是本仓库能绕开的。
+    #   列宽计划侧(New-TmuxTuiColumnPlan)已按 100 这个上限封顶, 计划与渲染一致。
+
+    # ---- 2.4 关闭"末列自动拉伸"(2026-10-31 UI 升级) ----
+    # 2.4.10 的 TableStyle.ExpandLastColumn 默认 $true: 末列(WINDOWS, 9 宽)
+    # 会被拉伸成"吃掉全部余量的巨型空列"(真机 120 列取证里 SESSION 只剩两列时
+    # 末列直接铺满 33 列)。现在列宽之和**正好等于终端宽**(见 New-TmuxTuiColumnPlan
+    # 的几何公式), 不需要拉伸; 关掉它末列才保持 9 列的紧凑数值列。
+    try {
+        $table.Style.ExpandLastColumn = $false
+    } catch {
+        Write-Verbose "[New-TmuxTuiSessionTable] 设置 ExpandLastColumn 失败: $($_.Exception.Message)"
     }
 
     return [PSCustomObject]@{

@@ -54,19 +54,31 @@ Describe 'ALC 原生主题装配 (Set-TguiTheme)' {
             $getScheme = $t.Types.SchemeManager.GetMethod('GetScheme', [type[]]@([string]))
             $base = $getScheme.Invoke($null, @('Base'))
             $menu = $getScheme.Invoke($null, @('Menu'))
+            $dialog = $getScheme.Invoke($null, @('Dialog'))
             [PSCustomObject]@{
-                Applied  = $applied
-                BaseFg   = "$($base.Normal.Foreground.R),$($base.Normal.Foreground.G),$($base.Normal.Foreground.B)"
-                BaseBg   = "$($base.Normal.Background.R),$($base.Normal.Background.G),$($base.Normal.Background.B)"
-                MenuFg   = "$($menu.Normal.Foreground.R),$($menu.Normal.Foreground.G),$($menu.Normal.Foreground.B)"
-                Expected = $script:Config.UI.Theme.Slots.Normal
+                Applied     = $applied
+                BaseFg      = "$($base.Normal.Foreground.R),$($base.Normal.Foreground.G),$($base.Normal.Foreground.B)"
+                BaseBg      = "$($base.Normal.Background.R),$($base.Normal.Background.G),$($base.Normal.Background.B)"
+                MenuFg      = "$($menu.Normal.Foreground.R),$($menu.Normal.Foreground.G),$($menu.Normal.Foreground.B)"
+                DialogFg    = "$($dialog.Normal.Foreground.R),$($dialog.Normal.Foreground.G),$($dialog.Normal.Foreground.B)"
+                Expected    = $script:Config.UI.Theme.Slots.Normal
+                MenuExpect  = $script:Config.UI.Theme.SchemeOverrides['Menu'].Normal
+                MenuFocus   = "$($menu.Focus.Foreground.R),$($menu.Focus.Foreground.G),$($menu.Focus.Foreground.B)"
+                MenuFocusExpect = $script:Config.UI.Theme.SchemeOverrides['Menu'].Focus
+                DialogExpect = $script:Config.UI.Theme.SchemeOverrides['Dialog'].Normal
             }
         } $script:tg
 
         $result.Applied | Should -BeTrue
         $result.BaseFg | Should -Be $result.Expected.Fg
         $result.BaseBg | Should -Be $result.Expected.Bg
-        $result.MenuFg | Should -Be $result.Expected.Fg
+        # Menu 走差异化槽位(边缘带: Sky 冰青字), 不是正文色 —— 标题带/表头/底栏因此与正文分层
+        $result.MenuFg | Should -Be $result.MenuExpect.Fg
+        # 表头专用的 Focus 槽位: 与 Base.Focus(选中行)前景色不同, 表头/选中行才分得开
+        $result.MenuFocus | Should -Be $result.MenuFocusExpect.Fg
+        $result.MenuFocus | Should -Not -Be $result.Expected.Fg
+        # Dialog = 连接状态徽标(成功态绿字)
+        $result.DialogFg | Should -Be $result.DialogExpect.Fg
     }
 
     It '重复覆写不翻转槽位(TG 2.4.10 写同值会重建 Scheme 并打回默认)' {

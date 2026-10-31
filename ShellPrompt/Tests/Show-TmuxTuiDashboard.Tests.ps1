@@ -606,11 +606,60 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
             $source | Should -Match '\$global:TguiLayoutWidth\s*=\s*\$screenWidth'
         }
 
-        It '建窗尺寸优先取事件报数, 0/读取失败才回退 Post-Init Screen' {
+        It '建窗尺寸经 Get-TguiTerminalSize 解析(事件报数 > 终端自身 > TG Screen > 缺省)' {
             $source = Get-Content -Raw -Path (Join-Path -Path $moduleRoot -ChildPath 'Private/Show-TmuxTuiDashboard.ps1')
-            $source | Should -Match '(?s)if \(\$global:TguiScreenW -gt 0 -and \$global:TguiScreenH -gt 0\) \{[^}]*(\$screenWidth = \[int\]\$global:TguiScreenW)'
+            # 2026-10-31 UI 升级: 尺寸解析收敛到 Get-TguiTerminalSize 一个来源
+            # (旧实现只认"事件报数 / Post-Init 的 Application.Screen", 而 'ansi'
+            #  驱动在 Init 后、事件循环跑起来之前报 0x0 -> 120 列终端也按 40 列
+            #  兜底 -> STATUS/WINDOWS 两列被当窄屏隐藏, 会话状态在界面上看不见)。
+            $source | Should -Match 'Get-TguiTerminalSize'
+            $source | Should -Match '\$screenWidth\s*=\s*\$terminalSize\.Width'
+            $source | Should -Match '\$screenHeight\s*=\s*\$terminalSize\.Height'
             # 退出时报数归零: 下一次进入重新起步, 不携带上一调用会话的陈旧报数
             $source | Should -Match '(?s)finally \{.*?\$global:TguiScreenW\s*=\s*0'
+        }
+    }
+
+    Context '终端尺寸解析 (Get-TguiTerminalSize)' {
+
+        It '事件报数优先; 无报数时用终端自身尺寸; 都没有才回退缺省' {
+            # 用 Set-Variable -Scope Global 而不是 `$global:` 字面量(规避 PSAvoidGlobalVars)
+            $result = & $script:mod {
+                Set-Variable -Name 'TguiScreenW' -Value 0 -Scope Global
+                Set-Variable -Name 'TguiScreenH' -Value 0 -Scope Global
+                $noReport = Get-TguiTerminalSize -FallbackWidth 120 -FallbackHeight 35
+                Set-Variable -Name 'TguiScreenW' -Value 100 -Scope Global
+                Set-Variable -Name 'TguiScreenH' -Value 30 -Scope Global
+                $reported = Get-TguiTerminalSize -FallbackWidth 120 -FallbackHeight 35
+                Set-Variable -Name 'TguiScreenW' -Value 0 -Scope Global
+                Set-Variable -Name 'TguiScreenH' -Value 0 -Scope Global
+                [PSCustomObject]@{
+                    EventWidth  = $reported.Width
+                    EventHeight = $reported.Height
+                    EventSource = $reported.Source
+                    OtherWidth  = $noReport.Width
+                    OtherSource = $noReport.Source
+                }
+            }
+            # 事件报数(100x30)优先于其他来源
+            $result.EventWidth | Should -Be 100
+            $result.EventHeight | Should -Be 30
+            $result.EventSource | Should -BeExactly 'Event'
+            # 无事件报数时: 终端自身尺寸(Console)或 TG Screen, 都不是缺省值
+            $result.OtherSource | Should -Not -BeExactly 'Fallback'
+            $result.OtherWidth | Should -BeGreaterOrEqual 40
+        }
+
+        It '尺寸低于最小值时按仪表盘下限夹取(40x10)' {
+            $result = & $script:mod {
+                Set-Variable -Name 'TguiScreenW' -Value 10 -Scope Global
+                Set-Variable -Name 'TguiScreenH' -Value 2 -Scope Global
+                $size = Get-TguiTerminalSize -MinWidth 40 -MinHeight 10
+                Set-Variable -Name 'TguiScreenW' -Value 0 -Scope Global
+                Set-Variable -Name 'TguiScreenH' -Value 0 -Scope Global
+                "$($size.Width)x$($size.Height)"
+            }
+            $result | Should -BeExactly '40x10'
         }
     }
 

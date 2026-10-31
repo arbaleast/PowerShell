@@ -29,7 +29,7 @@ PowerShell/
     ├── Settings.ScriptAnalyzer.psd1   # PSScriptAnalyzer 规则配置
     ├── CHANGELOG.md
     ├── LICENSE                        # MIT 协议
-    ├── Tests/                         # Pester 测试套件 (36 个条目: 29 个 *.Tests.ps1 + 3 个诊断脚本 + 3 个门禁入口 + 1 个基线, 2026-10-31 核对)
+    ├── Tests/                         # Pester 测试套件 (38 个条目: 31 个 *.Tests.ps1 + 3 个诊断脚本 + 3 个门禁入口 + 1 个基线, 2026-10-31 核对)
     │   ├── ConvertTo-TmuxTuiViewModel.Tests.ps1
     │   ├── Diag-TguiRender.ps1                     # 诊断脚本: 真机渲染测量
     │   ├── Diag-TguiResize.ps1                     # 诊断脚本: 真机缩放测量
@@ -37,6 +37,7 @@ PowerShell/
     │   ├── Get-ConsoleUiBackend.Tests.ps1
     │   ├── Get-SpinnerStyleMapping.Tests.ps1
     │   ├── Get-TguiContext.Tests.ps1
+    │   ├── Get-TguiTextWidth.Tests.ps1
     │   ├── Get-TmuxActionDefinition.Tests.ps1
     │   ├── Get-TmuxSessionState.Tests.ps1
     │   ├── Get-TmuxSessions.Tests.ps1
@@ -77,6 +78,8 @@ PowerShell/
         ├── Get-SshArgs.ps1                    # SSH 参数生成器
         ├── Get-SshConfigHosts.ps1             # SSH config 主机解析
         ├── Get-TguiContext.ps1                # Terminal.Gui v2 独立 ALC 加载器(vendored DLL)
+        ├── Get-TguiTerminalSize.ps1           # 仪表盘布局用的终端尺寸解析(事件报数 > 终端自身 > TG Screen > 缺省)
+        ├── Get-TguiTextWidth.ps1              # 终端显示宽度测量(全角计 2, 零宽计 0; 底栏宽度预算用)
         ├── Get-TmuxActionDefinition.ps1       # 仪表盘动作定义(键位/文案/动作值唯一事实源)
         ├── Get-TmuxSessionState.ps1           # 会话可用性与状态判定(Available/Error/ExitCode)
         ├── Get-TmuxSessions.ps1               # 远程 tmux 探测与列表

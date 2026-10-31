@@ -85,4 +85,70 @@ Describe 'TGUI 快捷键列表 (New-TmuxTuiShortcutList)' {
             $sc.Title | Should -Not -Match '^\['
         }
     }
+
+    # ---------------- 响应式/上下文升级 (2026-10-31) ----------------
+
+    It 'Context=Error: 刷新/SSH 文案换成 重试/直连(键位与动作值不变)' {
+        Set-Variable -Name 'dispatched' -Value ([System.Collections.Generic.List[string]]::new()) -Scope Global
+        $list = & $script:mod {
+            New-TmuxTuiShortcutList -HasSessions $true -Dispatch { param($action) (Get-Variable -Name 'dispatched' -Scope Global).Value.Add($action) } -Context 'Error'
+        }
+
+        # r 项 Title = 重试(Normal 是 刷新); s 项 = 直连(Normal 是 SSH)
+        $retry = $list | Where-Object { [string]$_.Key -eq 'r' } | Select-Object -First 1
+        $retry.Title | Should -BeExactly '重试'
+        $ssh = $list | Where-Object { [string]$_.Key -eq 's' } | Select-Object -First 1
+        $ssh.Title | Should -BeExactly '直连'
+        # 动作值不随文案切换(键位语义不变)
+        $retry.Action.Invoke()
+        $log = (Get-Variable -Name 'dispatched' -Scope Global).Value
+        $log -contains 'Refresh' | Should -BeTrue
+    }
+
+    It 'WindowWidth 响应式: 按可用列宽取舍, 退出键(q)永远保留, 不显示被截断的半截项' {
+        # 2026-10-31 UI 升级: Terminal.Gui 的 StatusBar 不换行, 放不下就右端硬截断
+        # (真机 40x10 取证: "s SSH" 被截成 "s SS", x/q/Esc 完全不可见)。
+        # 现按宽度预算取舍: 优先级 Enter 附着 > n 新建 > q 退出 > r > s > x > Esc。
+        $wide = & $script:mod {
+            New-TmuxTuiShortcutList -HasSessions $true -Dispatch { param($action) [void]$action } -WindowWidth 120
+        }
+        @($wide | Where-Object { [string]$_.Key -eq 'Esc' }).Count | Should -Be 1
+        $wide.Count | Should -Be 7
+
+        # 120 列实测底栏占 69 列(公式: 1 + Σ(键名+标签) + 5×(项数-1))
+        $narrow = & $script:mod {
+            New-TmuxTuiShortcutList -HasSessions $true -Dispatch { param($action) [void]$action } -WindowWidth 60
+        }
+        # 60 列放得下 5 项(54 列), 放不下 6 项(64 列) -> 舍掉优先级最低的 X/ESC
+        @($narrow | Where-Object { [string]$_.Key -eq 'Esc' }).Count | Should -Be 0
+        $narrow.Count | Should -Be 5
+        @($narrow | Where-Object { [string]$_.Key -eq 'q' }).Count | Should -Be 1
+
+        # 40 列(最小可用宽度): 只剩 3 项, 但**退出键必须可见**
+        $tiny = & $script:mod {
+            New-TmuxTuiShortcutList -HasSessions $true -Dispatch { param($action) [void]$action } -WindowWidth 40
+        }
+        $tiny.Count | Should -Be 3
+        @($tiny | Where-Object { [string]$_.Key -eq 'q' }).Count | Should -Be 1
+        @($tiny | Where-Object { [string]$_.Key -eq 'Enter' }).Count | Should -Be 1
+
+        # 不传 WindowWidth(0) = 维持旧行为(全项, 兼容既有契约)
+        $legacy = & $script:mod {
+            New-TmuxTuiShortcutList -HasSessions $true -Dispatch { param($action) [void]$action }
+        }
+        @($legacy | Where-Object { [string]$_.Key -eq 'Esc' }).Count | Should -Be 1
+        $legacy.Count | Should -Be 7
+    }
+
+    It '取舍只影响"显示哪几项", 键位语义不变: 被舍掉的项按键依然生效' {
+        # 键位/动作值由 Get-TmuxActionDefinition 决定, 工厂只筛"显示集合";
+        # 应用级键表登记的是**全部**动作(未显示项不登记视图键, 但业务分发不变)。
+        $tiny = & $script:mod {
+            New-TmuxTuiShortcutList -HasSessions $true -Dispatch { param($action) [void]$action } -WindowWidth 40
+        }
+        # 40 列下 x/ESC 不显示, 但 q 仍在(退出能力可见)
+        @($tiny | Where-Object { [string]$_.Key -eq 'x' }).Count | Should -Be 0
+        # 显示项的动作值仍是完整契约值
+        ($tiny | ForEach-Object { $_.Title }) -join ',' | Should -Not -Match '不可用'
+    }
 }

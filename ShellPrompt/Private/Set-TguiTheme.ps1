@@ -235,6 +235,10 @@ function Set-TguiTheme {
           - 颜色属视觉增强: 配置 Enabled=$false 或全部槽位失败时返回 $false,
             调用方继续用 TG 内置配色(美感降级, 功能不破)。
 
+        方案差异化(2026-10-31 UI 层次升级): UI.Theme.SchemeOverrides
+        按**方案名**给出附加槽位, 在公共 Slots 之后覆写 —— 让不同方案
+        (如 'Menu' 承载的边缘色带)与正文分层, 未列出的槽位沿用 Slots。
+
     .PARAMETER Tgui
         Get-TguiContext 的返回值(调用方持有, 避免 ALC 重复拉起)。
 
@@ -291,6 +295,28 @@ function Set-TguiTheme {
                 }
             } catch {
                 Write-Verbose "Set-TguiTheme: 槽位 '$slotName' 写入失败: $($_.Exception.Message)"
+            }
+        }
+        # ---- 方案差异化槽位(按方案名的覆写, 未列出者沿用 Slots) ----
+        # UI 域是 [ordered] OrderedDictionary(§2.7): 判键用 .Contains, 不是 PSObject.Properties
+        $overrides = $null
+        if ($theme.Contains('SchemeOverrides')) {
+            $overrides = $theme['SchemeOverrides']
+        }
+        if ($null -ne $overrides -and $overrides.Contains("$name")) {
+            $overrideSlots = $overrides["$name"]
+            if ($null -ne $overrideSlots) {
+                foreach ($slotName in @($overrideSlots.Keys)) {
+                    $entry = $overrideSlots[$slotName]
+                    if ($null -eq $entry) { continue }
+                    try {
+                        if (Set-TguiSlot -Tgui $Tgui -Scheme $scheme -Slot $slotName -Entry $entry) {
+                            $applied++
+                        }
+                    } catch {
+                        Write-Verbose "Set-TguiTheme: 差异化槽位 '$name'/'$slotName' 写入失败: $($_.Exception.Message)"
+                    }
+                }
             }
         }
     }

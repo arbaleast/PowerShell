@@ -121,7 +121,6 @@ function Show-TmuxTuiDashboard {
     $stopMethod = $tg.Types.Application.GetMethods($staticFlags) |
         Where-Object { $_.Name -eq 'RequestStop' } | Select-Object -First 1
     $instanceProperty = $tg.Types.Application.GetProperty('Instance', $staticFlags)
-    $screenProperty = $tg.Types.Application.GetProperty('Screen', $staticFlags)
 
     $driverName = 'ansi'
     $errorHandler = [System.Func[[exception], [bool]]]{ param($ex)
@@ -184,6 +183,9 @@ function Show-TmuxTuiDashboard {
             # 载荷只走 global —— TG 事件循环回调会换 runtime 会话, 闭包局部变量不可见。
             $global:TguiPendingAction = $null
             $global:TguiResizeDetected = $false
+            # 快捷键栏上下文(2026-10-31): 错误态文案换"重试/直连", 与辅助行一致;
+            # 键位/动作值由 Get-TmuxActionDefinition 保证恒定。
+            $shortcutContext = if ($vm.Mode -eq 'Error') { 'Error' } else { 'Normal' }
             $dispatch = { param($a)
                 $global:TguiPendingAction = $a
                 if ($global:TguiWindowRef -and $global:TguiRequestStopMethod) {
@@ -212,30 +214,20 @@ function Show-TmuxTuiDashboard {
             }
 
             $appInstance = $instanceProperty.GetValue($null)
-            # ---- 记账值: **优先用上一轮 ScreenChanged 的报数**(2026-10-30 风暴修复) ----
-            # Post-Init 的 Screen 读取在某些宿主上是 0/陈旧值(真机风暴根因): 记账值
-            # 与事件报数必然错位 => 每个 ScreenChanged 都触发整窗重建 => 配合旧
-            # "每轮无条件取数"就是取数风暴。现在事件报数(>0 才有效)是第一手数据:
-            # 建窗尺寸优先取它; 记账值(TguiLayoutWidth/Height)恒等于**本轮建窗尺寸**,
-            # 事件逐轮对齐后 mismatch 消失 —— 真实缩放仍按"报数 != 建窗尺寸"触发单次重建。
-            $screenWidth = 120
-            $screenHeight = 35
-            if ($global:TguiScreenW -gt 0 -and $global:TguiScreenH -gt 0) {
-                $screenWidth = [int]$global:TguiScreenW
-                $screenHeight = [int]$global:TguiScreenH
-            } else {
-                $screen = $screenProperty.GetValue($null)
-                if ($null -ne $screen) {
-                    try {
-                        $screenWidth = [int]$screen.Width
-                        $screenHeight = [int]$screen.Height
-                    } catch {
-                        Write-Verbose "[Show-TmuxTuiDashboard] 读取屏幕尺寸失败(用默认值): $($_.Exception.Message)"
-                    }
-                }
-            }
-            if ($screenWidth -lt 40) { $screenWidth = 40 }
-            if ($screenHeight -lt 10) { $screenHeight = 10 }
+            # ---- 尺寸解析(2026-10-31 UI 升级): 事件报数 > 终端自身尺寸 > TG Screen > 缺省 ----
+            # ★ 旧实现只认"事件报数 / Post-Init 的 Application.Screen", 而 'ansi'
+            #   驱动在 Init 之后、事件循环跑起来之前报 0x0(它要等终端回应 CSI 18t,
+            #   那个应答是异步的)。实测: 120 列的 PTY 里 [Console]::WindowWidth=120,
+            #   Application.Screen=0x0 => 旧实现按兜底 40x10 夹取 => 列计划按 40 列
+            #   算 => STATUS/WINDOWS 两列被当成"窄屏"隐藏 => **会话状态在界面上
+            #   完全看不见**。Get-TguiTerminalSize 把来源收敛成一处并按可信度排序,
+            #   详见该文件头。
+            # 记账值(TguiLayoutWidth/Height)恒等于**本轮建窗尺寸**, 事件逐轮对齐后
+            # mismatch 消失 —— 真实缩放仍按"报数 != 建窗尺寸"触发单次重建。
+            $terminalSize = Get-TguiTerminalSize -Tgui $tg -FallbackWidth 120 -FallbackHeight 35 -MinWidth 40 -MinHeight 10
+            $screenWidth = $terminalSize.Width
+            $screenHeight = $terminalSize.Height
+            Write-Verbose "[Show-TmuxTuiDashboard] 布局尺寸来源=$($terminalSize.Source) ${screenWidth}x${screenHeight}"
 
             $global:TguiLayoutWidth = $screenWidth
             $global:TguiLayoutHeight = $screenHeight
@@ -245,7 +237,7 @@ function Show-TmuxTuiDashboard {
             $result = New-TmuxTuiDashboardWindow -ViewModel $vm -HostName $HostName `
                 -ConnectionState $connectionState -HasSessions ($vm.Mode -eq 'Session') `
                 -Dispatch $dispatch -WindowWidth $screenWidth -WindowHeight $screenHeight `
-                -SelectedIndex $selectedIndex
+                -SelectedIndex $selectedIndex -Context $shortcutContext
 
             $global:TguiRequestStopMethod = $stopMethod
             $global:TguiWindowRef = $result.Window
