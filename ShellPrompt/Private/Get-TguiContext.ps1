@@ -110,7 +110,19 @@ function Get-TguiContext {
     # 注意: 解析回调由 ALC 在"程序集解析阶段"异步触发, 函数的局部变量会随
     # 函数栈退出而消亡 —— 不 GetNewClosure() 的话 $dllDir 在回调里是 $null,
     # 依赖解析静默失败_GetExportedTypes 抛 assembly-missing(实测踩坑)。
-    $alc = [System.Runtime.Loader.AssemblyLoadContext]::new('ShellPrompt-Tgui', $true)
+    #
+    # ★ isCollectible = $false(2026-10-31 由 $true 改正, 勿改回):
+    #   本 ALC 的生命周期就是进程 —— 全仓没有任何 Unload 调用, context 缓存到
+    #   $script:TguiContext 供整个会话复用, "可回收"只会引入 GC 卸载竞态:
+    #   每个测试文件的 BeforeAll 都 Import-Module -Force(旧模块实例被替换),
+    #   旧 ALC 一旦被 GC 回收, .NET 之后在**新的** ALC 上解析 TG 依赖时会命中
+    #   "AssemblyLoadContext is unloading or was already unloaded"(实测:
+    #   Onigwrap / Microsoft.Extensions.DependencyInjection.Abstractions 的
+    #   LoadFromAssemblyPath 落回已卸载的旧 ALC), 表现为成套 TGUI 用例集体
+    #   失败。用独立脚本在纯净 HEAD 上同样可复现(与业务代码无关, 是
+    #   collectible ALC + GC 的既有 .NET 限制), 只有"不可回收"能根除。
+    #   代价: 每次模块重导入多驻留约 2 MB 托管 / 6 MB 工作集(实测), 进程退出即释放。
+    $alc = [System.Runtime.Loader.AssemblyLoadContext]::new('ShellPrompt-Tgui', $false)
     $alc.add_Resolving({
         param($context, $assemblyName)
         # 按"文件名 = 程序集名 + .dll"在同目录回载; 不存在返回 $null 走默认解析
