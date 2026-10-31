@@ -49,17 +49,18 @@ Connection / Activity / Tags / Infrastructure 四张卡片，远端状态**异�
 **tmux 会话仪表盘**：
 
 ```text
-ShellPrompt TMUX Manager · 主机 deb                              已连接
+ShellPrompt TMUX Manager · 主机 deb                        已连接
 会话: 3 · Attached: 1 · Detached: 2
-┌────┬──────────────────────────────┬──────────┬─────────┐
-│No  │SESSION                       │  STATUS  │  WINDOWS│
-├────┼──────────────────────────────┼──────────┼─────────┤
-│1   │work-main                     │ Attached │        4│
-│2   │feature-api                   │ Detached │        6│
-│3   │scratch                       │ Detached │        1│
-└────┴──────────────────────────────┴──────────┴─────────┘
+ ●  work-main                       Attached      4  │ ╭┤ Session ───────╮
+ ●  feature-api                     Detached      6  │ │ Session work-main│
+ ●  scratch                         Detached      1  │ │ Status  Attached │
+                                    │ │ Windows  4       │
+                                    │ │ No       1       │
+                                    │ ╰──────────────────╯
 Enter  附着 │ n  新建 │ r  刷新 │ s  SSH │ x  删除 │ q  退出 │ Esc  退出
 ```
+
+选中行整行紫底；右侧会话详情卡只显示真实字段（会话名 / 状态 / 窗口数 / 行号）。
 
 | 按键 | 操作 |
 |------|------|

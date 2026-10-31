@@ -183,6 +183,8 @@ function Show-TmuxTuiDashboard {
             # 载荷只走 global —— TG 事件循环回调会换 runtime 会话, 闭包局部变量不可见。
             $global:TguiPendingAction = $null
             $global:TguiResizeDetected = $false
+            $global:TguiSessionList = $null
+            $global:TguiSessionDetail = $null
             # 快捷键栏上下文(2026-10-31): 错误态文案换"重试/直连", 与辅助行一致;
             # 键位/动作值由 Get-TmuxActionDefinition 保证恒定。
             $shortcutContext = if ($vm.Mode -eq 'Error') { 'Error' } else { 'Normal' }
@@ -241,30 +243,26 @@ function Show-TmuxTuiDashboard {
 
             $global:TguiRequestStopMethod = $stopMethod
             $global:TguiWindowRef = $result.Window
+            # 会话列表/详情卡句柄挂 global: KeyDown 回调在 TG 事件循环里触发,
+            # 载荷只走 global(与既有 PendingAction 同一条通路)
+            $global:TguiSessionList = $result.SessionList
+            $global:TguiSessionDetail = $result.DetailPanel
 
-            # ---- 取消双保险: TableView.KeyDown 直判 Esc / Ctrl+C(2026-10-31 真机修复) ----
-            # 真机取证(Diag-TguiKeys, Windows Terminal + a692909): 其它 Shortcut 键
-            # 正常, 唯 Esc/Ctrl+C 无反应; 日志显示两键都**到达**焦点 TableView
-            # (VIEW KeyDown: Esc / C,CtrlMask), 但 2.4.10 应用级命令绑定在视图处理
-            # 之后才轮到, TableView 消费了 Esc 便永远到不了 Quit; Ctrl+C 在 TG 无
-            # Quit 绑定(p22 事实)。按主机选择器 FilterField 同一契约("取消必须
-            # 随时可达")在视图处理之前兜底: 直接置 Quit + RequestStop。
-            # RequestStop 幂等, 与 TG 内建 Esc->Quit 双路径重入无害。
-            $result.Table.add_KeyDown({
-                    try {
-                        # 退出键判定收进 Test-TguiQuitKey(KeyCode 带修饰后缀的真相见其文件头)
-                        if (Test-TguiQuitKey -Key $args[1]) {
-                            $global:TguiPendingAction = 'Quit'
-                            if ($global:TguiWindowRef -and $global:TguiRequestStopMethod) {
-                                $stopArgs = [object[]]::CreateInstance([System.Object], 1)
-                                $stopArgs[0] = $global:TguiWindowRef
-                                [void]$global:TguiRequestStopMethod.Invoke($null, $stopArgs)
-                            }
-                        }
-                    } catch {
-                        Write-Verbose "[Show-TmuxTuiDashboard] Table KeyDown 取消兜底失败: $($_.Exception.Message)"
-                    }
-                })
+            # ---- 初始焦点: 会话列表容器 ----
+            # ★ 必须**显式**给焦点: 换成自定义行列表后, 窗内可聚焦的子视图只剩
+            #   列表容器一个, 但 TG 的"自动选第一个"是隐式行为 —— 焦点一旦没落到
+            #   列表上, 方向键就收不到, 表现为"界面出来了但 ↑↓ 没反应"。
+            try {
+                [void]$result.SessionList.View.SetFocus()
+            }
+            catch {
+                Write-Verbose "[Show-TmuxTuiDashboard] 设置会话列表焦点失败: $($_.Exception.Message)"
+            }
+
+            # ★ 方向键与取消兜底已**移入窗口层**(New-TmuxTuiDashboardWindow 的
+            #   列表容器 KeyDown): 键位语义随窗口走, 直接驱动该窗口的调用方
+            #   (测试 / 其它编排器)同样收得到 ↑↓ 与 Esc —— 只挂编排层会让
+            #   "直接驱动窗口"的场景出现"界面出来了但 ↑↓ 没反应"。
 
             # ---- 缩放监听: ScreenChanged -> 标记 + RequestStop(重建整窗) ----
             # 探针实测: PowerShell 的 add_<Event> 语法**能**把脚本块转成
@@ -353,16 +351,13 @@ function Show-TmuxTuiDashboard {
                 Write-Warning "[Show-TmuxTuiDashboard] Terminal.Gui 渲染异常: $($runError.GetType().Name): $($runError.Message)"
             }
 
-            # ---- 读回选中行(TableView 无 SelectedRow, 用 Value.SelectedCell.Y) ----
+            # ---- 读回选中行(自定义行列表: 直接读 SelectedIndex) ----
             $selected = $null
             try {
-                $tableValue = $result.Table.Value
-                if ($null -ne $tableValue) {
-                    $rowIndex = [int]$tableValue.SelectedCell.Y
-                    $rows = @($vm.SessionRows)
-                    if ($rowIndex -ge 0 -and $rowIndex -lt $rows.Count) {
-                        $selected = $rows[$rowIndex].Name
-                    }
+                $rowIndex = [int]$result.SessionList.SelectedIndex
+                $rows = @($vm.SessionRows)
+                if ($rowIndex -ge 0 -and $rowIndex -lt $rows.Count) {
+                    $selected = $rows[$rowIndex].Name
                 }
             } catch {
                 Write-Verbose "[Show-TmuxTuiDashboard] 读取选中行失败: $($_.Exception.Message)"
@@ -405,6 +400,8 @@ function Show-TmuxTuiDashboard {
         $global:TguiWindowRef = $null
         $global:TguiPendingAction = $null
         $global:TguiAppInstance = $null
+        $global:TguiSessionList = $null
+        $global:TguiSessionDetail = $null
         $global:TguiSubscribedApp = $null
         # 事件报数归零: 下一次进入仪表盘重新按"Screen 读取 -> 事件对齐"起步,
         # 不携带上一次会话的陈旧报数(编排契约: 本函数无跨调用会话状态)。

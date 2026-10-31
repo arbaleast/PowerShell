@@ -102,11 +102,13 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
                     [PSCustomObject]@{
                         Width        = $w
                         Height       = $h
-                        TableTop     = $result.Table.Frame.Y
-                        TableHeight  = $result.Table.Frame.Height
+                        TableTop     = $result.SessionList.View.Frame.Y
+                        TableHeight  = $result.SessionList.View.Frame.Height
+                        TableX       = $result.SessionList.View.Frame.X
+                        TableWidth   = $result.SessionList.View.Frame.Width
+                        DetailWidth  = $(if ($null -ne $result.DetailPanel) { $result.DetailPanel.View.Frame.Width } else { 0 })
                         BarTop       = $result.StatusBar.Frame.Y
                         BarHeight    = $result.StatusBar.Frame.Height
-                        TableWidth   = $result.Table.Frame.Width
                     }
                 }
             }
@@ -119,38 +121,33 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
                 $f.BarHeight | Should -Be 1
                 # 表格的排他底边 == 快捷键栏顶行 ⇒ 既不重叠也不留空档
                 ($f.TableTop + $f.TableHeight) | Should -Be $f.BarTop
-                # 表格铺满整宽(无横向溢出)
-                $f.TableWidth | Should -Be $f.Width
+                # 2026-10-31: 主体区改成"列表 + 竖线 + 详情卡"分栏, 因此
+                # **不再铺满整宽**; 契约改为"三段加起来不越界, 且详情卡贴右边缘"。
+                ($f.TableWidth + 1 + $f.DetailWidth) | Should -BeLessOrEqual $f.Width
+                ($f.TableX + $f.TableWidth + 3 + $f.DetailWidth) | Should -Be $f.Width
             }
         }
 
-        It '窄窗口隐藏次要列(宽度 < 96 隐藏 STATUS, < 72 再隐藏 WINDOWS)' {
-            $columns = & $script:mod {
-                param($w)
-                $vm = ConvertTo-TmuxTuiViewModel -State (Get-TmuxSessionState -SessionData @{
-                        Available = $true
-                        Sessions  = @([PSCustomObject]@{ Name = 'work'; Status = 'detached'; Windows = 2 })
-                    })
-                $result = New-TmuxTuiDashboardWindow -ViewModel $vm -HostName 'deb' `
-                    -ConnectionState '已连接' -HasSessions $true -Dispatch { } `
-                    -WindowWidth $w -WindowHeight 30
-                $result.Source.Columns
-            } 140
-            # 注: .Source.Columns 是 Int32 计数(不是名字集合), 名字级断言由
-            # New-TmuxTuiSessionTable.Tests.ps1 的列计划契约覆盖。
-            $columns | Should -Be 4
-            $narrow = & $script:mod {
-                param($w)
-                $vm = ConvertTo-TmuxTuiViewModel -State (Get-TmuxSessionState -SessionData @{
-                        Available = $true
-                        Sessions  = @([PSCustomObject]@{ Name = 'work'; Status = 'detached'; Windows = 2 })
-                    })
-                $result = New-TmuxTuiDashboardWindow -ViewModel $vm -HostName 'deb' `
-                    -ConnectionState '已连接' -HasSessions $true -Dispatch { } `
-                    -WindowWidth $w -WindowHeight 30
-                $result.Source.Columns
-            } 80
-            $narrow | Should -Be 3
+        It '窄列表隐藏次要列(列表宽 < 40 隐藏窗口数, < 30 再隐藏状态)' {
+            # 2026-10-31: 列计划从 TableView 的 4 列(No/SESSION/STATUS/WINDOWS)
+            # 换成自定义行列表的 4 段(状态点/会话名/状态/窗口数); 响应式取舍
+            # 改成按**列表实际宽度**(不是终端宽度)决定保哪几段。
+            $geo = & $script:mod {
+                param($listWidth)
+                Get-TmuxTuiSessionRowGeometry -Width $listWidth
+            } 64
+            # 64 列: 三段全留
+            $geo.StatusWidth | Should -BeGreaterThan 0
+            $geo.WindowsWidth | Should -BeGreaterThan 0
+            # 36 列: 留状态, 舍窗口数
+            $geo36 = & $script:mod { param($w) Get-TmuxTuiSessionRowGeometry -Width $w } 36
+            $geo36.StatusWidth | Should -BeGreaterThan 0
+            $geo36.WindowsWidth | Should -Be 0
+            # 24 列: 只剩状态点 + 会话名
+            $geo24 = & $script:mod { param($w) Get-TmuxTuiSessionRowGeometry -Width $w } 24
+            $geo24.StatusWidth | Should -Be 0
+            $geo24.WindowsWidth | Should -Be 0
+            $geo24.NameWidth | Should -BeGreaterThan 0
         }
     }
 
@@ -276,16 +273,16 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
                     $result = New-TmuxTuiDashboardWindow -ViewModel $vm -HostName 'deb' `
                         -ConnectionState '已连接' -HasSessions $true -Dispatch { } `
                         -WindowWidth 120 -WindowHeight 35 -SelectedIndex 0
-                    $tableView = $result.Table
+                    $tableView = $result.SessionList
                     $app = $instanceP.GetValue($null)
                     $token = $beginM.Invoke($app, @($result.Window))
                     try {
                         $trail = [System.Collections.Generic.List[int]]::new()
-                        $trail.Add([int]$tableView.Value.SelectedCell.Y)
+                        $trail.Add([int]$tableView.SelectedIndex)
                         foreach ($k in @('CursorDown', 'CursorDown', 'CursorDown', 'CursorUp', 'CursorUp', 'CursorUp')) {
                             $keyObj = $tg.Types.Key.GetProperty($k).GetValue($null)
                             [void]$raiseM.Invoke($null, @($keyObj))
-                            $trail.Add([int]$tableView.Value.SelectedCell.Y)
+                            $trail.Add([int]$tableView.SelectedIndex)
                         }
                         $trail.ToArray()
                     } finally {
@@ -343,7 +340,7 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
                         [void]$endM.Invoke($app, @($token))
                     }
                     # 编排层读回(与 Show-TmuxTuiDashboard 同一契约)
-                    $rowIndex = [int]$result.Table.Value.SelectedCell.Y
+                    $rowIndex = [int]$result.SessionList.SelectedIndex
                     $name = if ($rowIndex -ge 0 -and $rowIndex -lt @($vm.SessionRows).Count) {
                         @($vm.SessionRows)[$rowIndex].Name
                     } else { $null }

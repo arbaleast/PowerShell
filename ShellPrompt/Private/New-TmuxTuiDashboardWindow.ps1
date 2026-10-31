@@ -75,6 +75,10 @@ function New-TmuxTuiDashboardWindow {
     .EXAMPLE
         $win = New-TmuxTuiDashboardWindow -ViewModel $vm -HostName 'deb' -Dispatch { param($a) }
     #>
+    # 全局变量用途: TG 事件循环回调会换 runtime 会话, 闭包局部变量不可见,
+    #   因此 KeyDown 处理器与既有 PendingAction 走同一条 global 载荷通路。
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidGlobalVars', '')]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'eventSource', Justification = 'TG 事件处理器固定签名 (sender, key); sender 本层用不到')]
     [CmdletBinding(SupportsShouldProcess = $true)]
     [OutputType([PSCustomObject])]
     param(
@@ -133,12 +137,6 @@ function New-TmuxTuiDashboardWindow {
     #   且**随终端缩放自动重算**(绝对高度做不到)。
     $dimFill = $dimType.GetMethods($factoryShared) |
         Where-Object { $_.Name -eq 'Fill' -and $_.GetParameters().Count -eq 0 } |
-        Select-Object -First 1
-    $dimFillMargin = $dimType.GetMethods($factoryShared) |
-        Where-Object {
-            $_.Name -eq 'Fill' -and $_.GetParameters().Count -eq 1 -and
-            $_.GetParameters()[0].ParameterType.Name -eq 'Dim'
-        } |
         Select-Object -First 1
 
     # ---- 几何计划(纯函数): 行分配与列计划一次算出, 杜绝重叠 ----
@@ -227,39 +225,136 @@ function New-TmuxTuiDashboardWindow {
     $lt5.Height = $dimAbsolute.Invoke($null, @(1))
     $lt5.TextAlignment = [Enum]::Parse($alignEnum, 'Center')
 
-    # ---- 中间会话表格 (行 TableRow, 高度自适应且不压快捷键栏) ----
-    $table = New-TmuxTuiSessionTable -ViewModel $ViewModel -ColumnPlan $layout.Columns
+    # ---- 中间主体区: 左=会话列表(自定义行) | 竖线 | 右=会话详情卡 ----
+    # 2026-10-31: 原实现用 TG TableView 渲染会话表 —— TableView 每次选中变化
+    # 都把**整张表**标脏(实测 1760 单元格), 是"上下键 100~200ms 延迟"的
+    # 同一个根因(与 SSH 主机列表一致)。现改为自定义行列表: 移动选中只重刷
+    # 旧/新两行; 并在右侧加会话详情卡, 建立"列表 <-> 详情"的信息层级。
+    $theme = Get-TuiDashboardTheme -Tgui $tg
 
-    $table.Table.X = $posAbsolute.Invoke($null, @(0))
-    $table.Table.Y = $posAbsolute.Invoke($null, @($layout.TableRow))
-    $table.Table.Width = $dimFill.Invoke($null, @())
-    # 高度 = 内容高 - Y偏移(3) - 1 = H-4 => 行 3..H-2; 快捷键栏贴 H-1, 零重叠零空档
-    $table.Table.Height = $dimFillMargin.Invoke($null, @($dimAbsolute.Invoke($null, @(1))))
-
-    # ---- 初始选中行(刷新后保留选中): TableView 无 SelectedRow, 用 Value.SelectedCell ----
-    $rowCount = 0
-    if ($ViewModel.SessionRows) { $rowCount = @($ViewModel.SessionRows).Count }
-    if ($SelectedIndex -ge 0 -and $SelectedIndex -lt $rowCount) {
-        try {
-            $selectionType = $tg.Types.TableSelection
-            $point = [System.Drawing.Point]::new(0, $SelectedIndex)
-            $selection = [System.Activator]::CreateInstance($selectionType, @($point))
-            $table.Table.Value = $selection
-        } catch {
-            # 预选失败不致命: 表格仍可正常显示, 只是初始光标在第一行
-            Write-Verbose "[New-TmuxTuiDashboardWindow] 预选行失败: $($_.Exception.Message)"
-        }
+    # 分栏几何: 窄屏(<72 列)收起详情卡, 列表吃满整宽
+    $showDetail = ($WindowWidth -ge 72)
+    if ($showDetail) {
+        $listWidth = [int][Math]::Floor($WindowWidth * 0.55)
+        if ($WindowWidth -ge 100) { $listWidth = 64 }
+        $listWidth = [Math]::Max(30, [Math]::Min($listWidth, $WindowWidth - 30))
+        $dividerX = $listWidth + 1
+        $detailX = $listWidth + 3
+        $detailWidth = $WindowWidth - $detailX
+        if ($detailWidth -lt 24) { $showDetail = $false }
+    }
+    if (-not $showDetail) {
+        $listWidth = $WindowWidth
+        $dividerX = -1
+        $detailX = -1
+        $detailWidth = 0
     }
 
-    # ---- 空态/错误态: 隐藏表格(不再画"空框 + 表头 + 无数据行") ----
+    $sessionList = New-TmuxTuiSessionRowList -Rows @($ViewModel.SessionRows) -Width $listWidth `
+        -Height $layout.TableHeight -SelectedIndex $SelectedIndex -Theme $theme -Tgui $tg
+    $sessionList.View.X = $posAbsolute.Invoke($null, @(0))
+    $sessionList.View.Y = $posAbsolute.Invoke($null, @($layout.TableRow))
+
+    # ---- 竖向分隔线(只做视觉分区, 不参与焦点/键盘) ----
+    $divider = $null
+    if ($dividerX -ge 0 -and $layout.TableHeight -gt 0) {
+        $divider = [System.Activator]::CreateInstance($labelType)
+        $divider.Text = (@([string][char]0x2502) * $layout.TableHeight) -join "`n"
+        $divider.X = $posAbsolute.Invoke($null, @($dividerX))
+        $divider.Y = $posAbsolute.Invoke($null, @($layout.TableRow))
+        $divider.Width = $dimAbsolute.Invoke($null, @(1))
+        $divider.Height = $dimAbsolute.Invoke($null, @($layout.TableHeight))
+        # 分隔线也显式给方案(暗灰细线), 避免"没有 Scheme 的视图"在暗底上隐形
+        [void]$divider.SetScheme($theme.Divider)
+    }
+
+    # ---- 右侧会话详情卡 ----
+    $detailPanel = $null
+    if ($showDetail) {
+        $detailPanel = New-TmuxTuiSessionDetailPanel -Width $detailWidth -Height $layout.TableHeight `
+            -Theme $theme -Tgui $tg
+        $detailPanel.View.X = $posAbsolute.Invoke($null, @($detailX))
+        $detailPanel.View.Y = $posAbsolute.Invoke($null, @($layout.TableRow))
+        # 初始落位: 选中会话的真实字段(没有选中就全部 '—')
+        $initialRow = $null
+        $sessionRows = @($ViewModel.SessionRows)
+        if ($SelectedIndex -ge 0 -and $SelectedIndex -lt $sessionRows.Count) { $initialRow = $sessionRows[$SelectedIndex] }
+        Set-TmuxTuiSessionDetail -Panel $detailPanel -Row $initialRow
+    }
+
+    # ---- 方向键 + 取消兜底: 挂在**列表容器**上(窗口自洽, 不依赖编排层) ----
+    # ★ 为什么必须放在窗口层而不是编排层(2026-10-31):
+    #   TableView 自带方向键处理(改选中就整块重绘 —— 延迟根因), 换成自定义
+    #   行列表后方向键必须由我们自己实现; 若只挂在编排层, **直接驱动这个窗口**
+    #   的调用方(测试 / 未来的别的编排器)就收不到方向键, 表现为"界面出来了
+    #   但 ↑↓ 没反应"。因此键位语义随窗口走, 编排层只读回选中结果。
+    #
+    #   载荷走 global: TG 事件循环回调会换 runtime 会话, 闭包局部变量不可见
+    #   (与既有 PendingAction 同一条通路)。
+    $global:TguiSessionList = $sessionList
+    $global:TguiSessionDetail = $detailPanel
+    $sessionList.View.add_KeyDown({
+            param($eventSource, $key)
+            try {
+                if ($null -eq $key) { return }
+
+                # ---- 取消双保险(2026-10-31 真机修复) ----
+                # 真机取证(Diag-TguiKeys): Esc/Ctrl+C 到达焦点视图, 但 2.4.10
+                # 应用级命令绑定在视图处理**之后**才轮到, 视图消费了 Esc 就永远
+                # 到不了 Quit; Ctrl+C 在 TG 无 Quit 绑定。按"取消必须随时可达"
+                # 契约在视图处理之前兜底: 直接置 Quit + RequestStop(幂等, 与
+                # TG 内建 Esc->Quit 双路径重入无害)。
+                if (Test-TguiQuitKey -Key $key) {
+                    $global:TguiPendingAction = 'Quit'
+                    if ($global:TguiWindowRef -and $global:TguiRequestStopMethod) {
+                        $stopArgs = [object[]]::CreateInstance([System.Object], 1)
+                        $stopArgs[0] = $global:TguiWindowRef
+                        [void]$global:TguiRequestStopMethod.Invoke($null, $stopArgs)
+                    }
+                    return
+                }
+
+                # ---- 方向键: 上下移动选中(只重刷旧/新两行) ----
+                # 语义与 TableView 一致: 到边界夹取、不循环。
+                # Enter / n / r / s / x / q 仍由底部快捷键栏的 Shortcut 接管
+                # (应用级键表), 因此这里**不消费** Enter。
+                $code = [string]$key.KeyCode
+                $delta = 0
+                if ($code -eq 'CursorUp') { $delta = -1 }
+                elseif ($code -eq 'CursorDown') { $delta = 1 }
+                if ($delta -eq 0) { return }
+
+                $list = $global:TguiSessionList
+                if ($null -eq $list) { return }
+                if (-not (Move-TmuxTuiSessionSelection -ListView $list -Delta $delta)) { return }
+
+                # 选中行变了 -> 右侧详情卡同步(纯本地字段, 无网络)
+                $panel = $global:TguiSessionDetail
+                if ($null -ne $panel) {
+                    $rows = @($list.Rows)
+                    $idx = [int]$list.SelectedIndex
+                    $row = $null
+                    if ($idx -ge 0 -and $idx -lt $rows.Count) { $row = $rows[$idx] }
+                    Set-TmuxTuiSessionDetail -Panel $panel -Row $row
+                }
+            }
+            catch {
+                Write-Verbose "[New-TmuxTuiDashboardWindow] 列表 KeyDown 处理失败: $($_.Exception.Message)"
+            }
+        })
+
+    # ---- 空态/错误态: 隐藏列表(不再画"空框 + 表头 + 无数据行") ----
     # 真机取证(120x35 空态/错误态快照): 旧实现仍画出一个空表格框,
-    # 看上去像渲染坏了而不是"没有会话"。现在表格隐藏, 主体区交给居中指引。
+    # 看上去像渲染坏了而不是"没有会话"。现在列表隐藏, 主体区交给居中指引。
     $showSessionTable = ($ViewModel.Mode -eq 'Session')
     if (-not $showSessionTable) {
         try {
-            $table.Table.Visible = $false
-        } catch {
-            Write-Verbose "[New-TmuxTuiDashboardWindow] 隐藏空态表格失败: $($_.Exception.Message)"
+            $sessionList.View.Visible = $false
+            if ($null -ne $divider) { $divider.Visible = $false }
+            if ($null -ne $detailPanel) { $detailPanel.View.Visible = $false }
+        }
+        catch {
+            Write-Verbose "[New-TmuxTuiDashboardWindow] 隐藏空态列表失败: $($_.Exception.Message)"
         }
     }
 
@@ -299,7 +394,12 @@ function New-TmuxTuiDashboardWindow {
         throw 'TGUI 组装失败: window 为 $null(异常路径)'
     }
     # 顺序 = 绘制顺序(后加的盖在上面): 标题带左/右两片宽度不重叠, 不会互相遮挡。
-    foreach ($view in @($lt1, $lt4, $lt2, $lt3, $lt5, $table.Table, $statusBar)) {
+    $bodyViews = [System.Collections.Generic.List[object]]::new()
+    foreach ($v in @($lt1, $lt4, $lt2, $lt3, $lt5, $sessionList.View)) { $bodyViews.Add($v) }
+    if ($null -ne $divider) { $bodyViews.Add($divider) }
+    if ($null -ne $detailPanel) { $bodyViews.Add($detailPanel.View) }
+    $bodyViews.Add($statusBar)
+    foreach ($view in $bodyViews) {
         [void]$window.Add($view)
     }
 
@@ -329,7 +429,7 @@ function New-TmuxTuiDashboardWindow {
     }
     $bodyScheme = Resolve-TguiScheme -Tgui $tg -Names @('Base', 'Menu', 'Dialog')
     $barScheme = Resolve-TguiScheme -Tgui $tg -Names @('Menu', 'Base', 'Dialog')
-    foreach ($view in @($window, $lt2, $lt3, $lt5, $table.Table)) {
+    foreach ($view in @($window, $lt2, $lt3, $lt5)) {
         if ($null -eq $bodyScheme) { continue }
         try {
             [void]$view.SetScheme($bodyScheme)
@@ -367,19 +467,6 @@ function New-TmuxTuiDashboardWindow {
             Write-Verbose "[New-TmuxTuiDashboardWindow] 状态徽标 SetScheme 失败: $($_.Exception.Message)"
         }
     }
-    # ---- 表头方案(2026-10-31 层次升级) ----
-    # 探针(probe-rowstyle.ps1)证实 2.4.10 有 TableStyle.HeaderScheme; 之前表头
-    # 默认随表格方案, Focus 槽位被"聚焦态列头"和"选中行"共用 —— PTY 取证里
-    # 表头与选中行完全同色(白字+亮黑底), 选中行分不清表头。现把表头差异
-    # 到 Menu 边缘带方案: 表头(Menu.Focus = Sky 字)与选中行(Base.Focus = 白字)
-    # 前景色不同, 可区分。
-    if ($null -ne $barScheme) {
-        try {
-            $table.Table.Style.HeaderScheme = $barScheme
-        } catch {
-            Write-Verbose "[New-TmuxTuiDashboardWindow] 表头 HeaderScheme 绑定失败: $($_.Exception.Message)"
-        }
-    }
     # ---- 状态标题行(空态/错误态)方案绑定 ----
     # 只在有内容时换色: 有会话时留空, 绑 Base 恒定(行为不变)。
     if ($lt3.Text -and $lt3.Text.Length -gt 0) {
@@ -400,8 +487,15 @@ function New-TmuxTuiDashboardWindow {
 
     return [PSCustomObject]@{
         Window      = $window
-        Table       = $table.Table
-        Source      = $table.Source
+        # 2026-10-31: 会话表由 TG TableView 换成**自定义行列表** —— TableView
+        #   每次选中变化都把整表标脏(1760 单元格), 是上下键延迟的根因。
+        #   旧的 .Table / .Source 成员**保留**(指向同一容器 View), 以免
+        #   外部/测试按旧形状取视图时拿到 $null。
+        SessionList = $sessionList
+        Table       = $sessionList.View
+        Source      = $null
+        DetailPanel = $detailPanel
+        Divider     = $divider
         StatusBar   = $statusBar
         Shortcuts   = $shortcuts
         CountLabels = @($lt1, $lt2, $lt3)

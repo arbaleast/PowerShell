@@ -1,11 +1,15 @@
-# Get-SshHostDashboardTheme.ps1 - SSH 主机仪表盘的**统一 Theme**(ALC 原生配色)
+# Get-SshHostDashboardTheme.ps1 - **共享**语义 Theme(ALC 原生配色)
 #
 # 背景 (2026-10-31 sss 仪表盘重构):
-#   新仪表盘顶部分类 / 左侧主机列表 / 右侧详情卡片 / 底部快捷键栏 需要按语义着色:
+#   两个仪表盘(SSH 主机仪表盘 / tmux 会话仪表盘)都需要按语义着色:
 #     主色紫 · 在线绿 · 离线红 · 未知灰 · 次要文本深灰 · 选中行整行紫底。
 #   旧实现把配色散落在各视图的 SetScheme 里(同名方案共用), 新界面需要"同一个
 #   View 上同时出现多种角色色"(状态点绿 + 名称白 + 标签紫 + 时间灰), 因此本文件
 #   统一构造一套**语义 Scheme** 供各视图直接 SetScheme。
+#
+#   ★ 本文件是**两个仪表盘共用**的一套主题(2026-10-31 tmux 侧并入):
+#     函数名保留 Get-SshHostDashboardTheme 是历史命名, 实际内容与用途已是通用
+#     语义主题; tmux 侧请用中性别名 Get-TuiDashboardTheme(同实现同缓存)。
 #
 # ★ 为什么用 ColorName16 而不是 RGB(2026-10-31 探针实测):
 #   TG 的 'ansi' 驱动只发 16 色 SGR, RGB 会被量化到最近的 16 色锚点:
@@ -152,8 +156,45 @@ function Get-SshHostDashboardTheme {
         EmptyHint      = New-Cn16Scheme -Foreground 'DarkGray' -Background 'Black'
         # 选中行内状态点的选中变体(保持语义色, 只换底色)
         Divider        = New-Cn16Scheme -Foreground 'DarkGray' -Background 'Black'
+        # tmux 会话状态(2026-10-31 tmux 侧并入): Attached = 有客户端连着 = 亮绿;
+        # Detached = 空闲 = 暗灰(是**已知**状态, 不是"未知", 故不复用 Unknown 语义)
+        Attached         = New-Cn16Scheme -Foreground 'BrightGreen' -Background 'Black'
+        Detached         = New-Cn16Scheme -Foreground 'DarkGray' -Background 'Black'
+        SelectedAttached = New-Cn16Scheme -Foreground 'BrightGreen' -Background 'Magenta'
+        SelectedDetached = New-Cn16Scheme -Foreground 'Gray' -Background 'Magenta'
     }
 
     $script:SshHostDashboardThemeCache = $theme
     return $theme
+}
+
+function Get-TuiDashboardTheme {
+    <#
+    .SYNOPSIS
+        **共享**语义 Theme 的中性别名(两个仪表盘都用它)。
+
+    .DESCRIPTION
+        Get-SshHostDashboardTheme 是历史命名(建于 SSH 主机仪表盘), 但这套 Scheme
+        已经是两个仪表盘(SSH 主机 / tmux 会话)共用的通用语义主题。本别名给
+        tmux 侧一个不含"Host"字样的调用名, 实现与缓存与原函数完全一致 ——
+        返回的是**同一个** Scheme 实例集(进程级缓存)。
+
+    .PARAMETER Tgui
+        Get-TguiContext 的上下文对象(提供 ALC 内类型句柄)。
+
+    .OUTPUTS
+        [PSCustomObject] 语义 Scheme 集合(见 Get-SshHostDashboardTheme 的字段表)。
+
+    .EXAMPLE
+        $theme = Get-TuiDashboardTheme -Tgui (Get-TguiContext)
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Tgui
+    )
+
+    return (Get-SshHostDashboardTheme -Tgui $Tgui)
 }

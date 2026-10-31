@@ -72,7 +72,7 @@ PowerShell/
     │   ├── Tmux-SshFailure.Tests.ps1
     │   ├── Update-Weather.Tests.ps1
     │   └── pssa-warning-baseline.txt               # PSSA Warning 指纹基线
-    └── Private/                       # 内部辅助函数(不暴露给用户, 共 64 个 .ps1, 2026-10-31 核对)
+    └── Private/                       # 内部辅助函数(不暴露给用户, 共 66 个 .ps1, 2026-10-31 核对)
         ├── Add-SshHostActivity.ps1            # [新] 记录一次 SSH 主机连接活动(本地 JSON, 原子写)
         ├── ConvertTo-SshArgumentLine.ps1      # SSH 命令行参数拼接
         ├── ConvertTo-SshEscapedString.ps1     # SSH 单引号转义
@@ -114,10 +114,12 @@ PowerShell/
         ├── New-SshHostListView.ps1            # [新] 主机列表自定义行(每行 6 Label) + 局部刷新原语
         ├── New-SshHostDetailPanel.ps1         # [新] 右侧详情卡片(FrameView × 4) + 就地更新原语
         ├── New-TmuxSession.ps1                # 创建新 tmux 会话
-        ├── New-TmuxTuiColumnPlan.ps1          # 仪表盘表格列裁剪计划
+        ├── New-TmuxTuiSessionRowList.ps1      # [新] tmux 会话自定义行列表(每行 5 Label) + 局部刷新原语
+        ├── New-TmuxTuiSessionDetailPanel.ps1   # [新] tmux 会话详情卡(FrameView) + 就地更新原语
+        ├── New-TmuxTuiSessionTable.ps1        # [旧轨, 保留] tmux 会话 TableView 构造(非默认路径)
+        ├── New-TmuxTuiColumnPlan.ps1          # [旧轨, 保留] 会话表列裁剪计划
         ├── New-TmuxTuiDashboardWindow.ps1     # 仪表盘窗口(表格 + 快捷键栏)构造
         ├── New-TmuxTuiLayoutPlan.ps1          # 仪表盘布局计划(零重叠零空档)
-        ├── New-TmuxTuiSessionTable.ps1        # 仪表盘会话表 (TableView) 构造
         ├── New-TmuxTuiShortcutList.ps1        # 仪表盘快捷键栏 (Shortcut) 构造
         ├── New-WelcomeBanner.ps1              # [P2] 欢迎 Banner 纯函数(主机名 + 随机语录)
         ├── Read-TmuxConsoleLine.ps1           # 控制台单行读取(带超时)

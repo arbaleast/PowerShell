@@ -71,13 +71,20 @@ function New-TmuxTuiLayoutPlan {
     )
 
     # 顶部固定 3 行(标题/统计/辅助) + 底部固定 1 行(快捷键栏) => 表格至少 1 行
+    # 会话区占 3..H-2 共 (H-4) 行 —— **表格的排他底边必须正好等于快捷键栏顶行
+    # (H-1)**, 否则主体区与底栏之间会空出 1 行(零重叠零空档是本仓库的硬约束)。
+    # ★ 2026-10-31 修正: 原式子 `$Height - $tableRow - $statusBarHeight - 1`
+    #   算出来是 H-5, 与本文件头的契约("= Height - 4")**不一致**, 少了一行。
+    #   旧实现用 TableView + Dim.Fill(margin) 撑高度, 绕过了这个字段, 所以偏差
+    #   一直没暴露; 换成自定义行列表(按 TableHeight 绝对定位)后立刻变成"主体区
+    #   与底栏之间空一行"。此处按契约改正。
     $titleRow = 0
     $statsRow = 1
     $hintRow = 2
     $tableRow = 3
     $statusBarHeight = 1
     $statusBarRow = $Height - 1
-    $tableHeight = $Height - $tableRow - $statusBarHeight - 1   # = Height - 4
+    $tableHeight = $Height - $tableRow - $statusBarHeight   # = Height - 4 => 行 3..H-2
     if ($tableHeight -lt 1) { $tableHeight = 1 }
 
     return [PSCustomObject]@{

@@ -39,7 +39,7 @@ Describe 'TGUI 仪表盘整窗组装 (New-TmuxTuiDashboardWindow)' {
         }
     }
 
-    It '正常态(Session): 表格 2 行 4 列可见, 底栏 7 项快捷键' {
+    It '正常态(Session): 会话列表 2 行, 列表 + 详情卡 + 底栏齐备' {
         $vm = Get-TestVm -Mode 'Session'
         $result = & $script:mod {
             param($v)
@@ -48,14 +48,21 @@ Describe 'TGUI 仪表盘整窗组装 (New-TmuxTuiDashboardWindow)' {
         } $vm
 
         $result.Window | Should -Not -BeNullOrEmpty
-        $result.Table | Should -Not -BeNullOrEmpty
-        $result.Source.Columns | Should -Be 4
-        $result.Source.Rows | Should -Be 2
+        # 2026-10-31: 会话表由 TG TableView 换成**自定义行列表**(延迟根因:
+        # TableView 每次选中变化都把整表标脏)。列几何改为
+        # 状态点 / 会话名 / 状态 / 窗口数 四段(不再是 No/SESSION/STATUS/WINDOWS)。
+        $result.SessionList | Should -Not -BeNullOrEmpty
+        @($result.SessionList.Rows).Count | Should -Be 2
+        $result.SessionList.Geometry.DotWidth | Should -Be 2
+        $result.SessionList.Geometry.NameWidth | Should -BeGreaterThan 0
+        $result.SessionList.Geometry.StatusWidth | Should -BeGreaterThan 0
+        $result.SessionList.Geometry.WindowsWidth | Should -BeGreaterThan 0
+        $result.DetailPanel | Should -Not -BeNullOrEmpty
         $result.Shortcuts.Count | Should -Be 7
         $result.StatusBar | Should -Not -BeNullOrEmpty
     }
 
-    It '空状态: 表格 0 行(不伪造), 空态 Label 提示用 N/R/S' {
+    It '空状态: 列表 0 行(不伪造), 列表隐藏, 空态 Label 提示用 N/R/S' {
         $vm = Get-TestVm -Mode 'Empty'
         $result = & $script:mod {
             param($v)
@@ -63,12 +70,13 @@ Describe 'TGUI 仪表盘整窗组装 (New-TmuxTuiDashboardWindow)' {
                 -ConnectionState '已连接' -HasSessions $false -Dispatch { param($a) [void]$a }
         } $vm
 
-        $result.Source.Rows | Should -Be 0
+        @($result.SessionList.Rows).Count | Should -Be 0
+        $result.SessionList.View.Visible | Should -BeFalse
         $result.CountLabels[2].Text | Should -Match '没有 tmux 会话'
         $result.Shortcuts.Count | Should -Be 6
     }
 
-    It '错误状态: 表格 0 行, 错误 Label 带 E_SSH_TIMEOUT' {
+    It '错误状态: 列表 0 行且隐藏, 错误 Label 带 E_SSH_TIMEOUT' {
         $vm = Get-TestVm -Mode 'Error'
         $result = & $script:mod {
             param($v)
@@ -76,7 +84,8 @@ Describe 'TGUI 仪表盘整窗组装 (New-TmuxTuiDashboardWindow)' {
                 -ConnectionState '已连接' -HasSessions $false -Dispatch { param($a) [void]$a }
         } $vm
 
-        $result.Source.Rows | Should -Be 0
+        @($result.SessionList.Rows).Count | Should -Be 0
+        $result.SessionList.View.Visible | Should -BeFalse
         $result.CountLabels[2].Text | Should -Match 'E_SSH_TIMEOUT'
     }
 
@@ -155,21 +164,50 @@ Describe 'TGUI 仪表盘主题配色 (2026-10-30 真机验收补修)' {
         "$($b.R),$($b.G),$($b.B)" | Should -Be $expected.Bg
     }
 
-    It '表头 HeaderScheme = Menu 边缘带(与选中行的 Focus 色区分)' {
-        $result = Get-DashboardWindow -Vm (Get-DashboardVm)
-
-        $header = $result.Table.Style.HeaderScheme
-        $header | Should -Not -BeNullOrEmpty
-        $hf = $header.Normal.Foreground
-        $hb = $header.Normal.Background
-        $menuExpected = & $script:mod { $script:Config.UI.Theme.SchemeOverrides['Menu'].Normal }
-        "$($hf.R),$($hf.G),$($hf.B)" | Should -Be $menuExpected.Fg
-        "$($hb.R),$($hb.G),$($hb.B)" | Should -Be $menuExpected.Bg
+    It '选中行与正文配色可分(紫底 vs 黑底), 不再依赖 TableView 表头' {
+        # 2026-10-31: TableView 移除后没有"表头"概念, 原来的
+        # "表头 Menu.Focus 与选中行 Base.Focus 前景色可分"这条契约改成
+        # "选中行紫底 与 正文黑底 可分" —— 视觉目标不变(层次可辨), 实现换了。
+        $result = & $script:mod {
+            param($v)
+            New-TmuxTuiDashboardWindow -ViewModel $v -HostName 'deb' `
+                -ConnectionState '已连接' -HasSessions $true -Dispatch { param($a) [void]$a } `
+                -SelectedIndex 0
+        } (Get-DashboardVm)
+        $list = $result.SessionList
+        $selAttr = $list.Slots[0].Bg.GetScheme().Normal
+        $plainAttr = $list.Slots[1].Bg.GetScheme().Normal
+        # 选中行: 前景 != 背景(否则白字紫底会看不见) —— 逐通道比 fg 与 bg
+        ($selAttr.Foreground.R -ne $selAttr.Background.R -or
+         $selAttr.Foreground.G -ne $selAttr.Background.G -or
+         $selAttr.Foreground.B -ne $selAttr.Background.B) | Should -BeTrue
+        # 选中行与未选中行的**背景色不同**
+        "$($selAttr.Background.R),$($selAttr.Background.G),$($selAttr.Background.B)" |
+            Should -Not -Be "$($plainAttr.Background.R),$($plainAttr.Background.G),$($plainAttr.Background.B)"
     }
 
-    It '表格 FullRowSelect = $true(选中行整行高亮)' {
-        $result = Get-DashboardWindow -Vm (Get-DashboardVm)
-        $result.Table.FullRowSelect | Should -BeTrue
+    It '选中行整行紫底(自定义行列表: 背景条用 Selected 方案, 与正文方案不同)' {
+        # 2026-10-31: TableView 的 FullRowSelect 随 TableView 一起移除 ——
+        #   选中行整行高亮改由"背景条 Label"承担(整行宽的空格 Label + 紫底方案)。
+        $result = & $script:mod {
+            param($v)
+            New-TmuxTuiDashboardWindow -ViewModel $v -HostName 'deb' `
+                -ConnectionState '已连接' -HasSessions $true -Dispatch { param($a) [void]$a } `
+                -SelectedIndex 0
+        } (Get-DashboardVm)
+        $list = $result.SessionList
+        # 首行是选中行(SelectedIndex=0), 它的背景应是 Selected 方案
+        $slot = $list.Slots[0]
+        $slot.Selected | Should -BeTrue
+        $selBg = $slot.Bg.GetScheme().Normal.Background
+        $txtBg = $list.Theme.Text.Normal.Background
+        # 紫底(Magenta)与正文黑底必须不同 —— 这就是"整行高亮"的实体证据
+        "$($selBg.R),$($selBg.G),$($selBg.B)" | Should -Not -Be "$($txtBg.R),$($txtBg.G),$($txtBg.B)"
+        # 未选中行仍是正文黑底
+        $plain = $list.Slots[1]
+        $plain.Selected | Should -BeFalse
+        $plainBg = $plain.Bg.GetScheme().Normal.Background
+        "$($plainBg.R),$($plainBg.G),$($plainBg.B)" | Should -Be "$($txtBg.R),$($txtBg.G),$($txtBg.B)"
     }
 
     It '错误态辅助行绑定 Error 方案(红字警示), 空态绑定 Menu 边缘带' {

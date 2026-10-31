@@ -494,7 +494,9 @@ function Set-SshHostListScroll {
         $selected = ($rowIndex -ge 0 -and $rowIndex -eq $ListView.SelectedIndex)
         # ★ 只重填**内容真的变了**的槽位: Set-SshHostListSlot 会改 Label 的
         #   Text/Scheme, 两者都会把该 Label 标脏 —— 逐槽比对后跳过没变的,
-        #   滚动一行的脏区就从"整屏"缩回"进出的那两行"。
+        #   省掉"内容没变的重画"(同一 Top 重新滚动 / 窗口重建后内容相同)。
+        #   ⚠️ 边界: 真正滚动一行时, 每个可见槽位显示的是**不同的主机**,
+        #     内容确实变了, 必须整屏重画 —— 跳过逻辑**不会**把滚动脏区缩到两行。
         $slot = $ListView.Slots[$i]
         if ($slot.RowIndex -eq $rowIndex -and $slot.Selected -eq $selected) { continue }
         Set-SshHostListSlot -ListView $ListView -SlotIndex $i -RowIndex $rowIndex -Selected $selected
