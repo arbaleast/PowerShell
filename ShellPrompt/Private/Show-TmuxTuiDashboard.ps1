@@ -260,11 +260,8 @@ function Show-TmuxTuiDashboard {
             # RequestStop 幂等, 与 TG 内建 Esc->Quit 双路径重入无害。
             $result.Table.add_KeyDown({
                     try {
-                        $kArg = $args[1]
-                        if ($null -eq $kArg) { return }
-                        $keyCode = [string]$kArg.KeyCode
-                        if ($keyCode -eq 'Esc' -or
-                            ($keyCode -eq 'C' -and [bool]$kArg.IsCtrl)) {
+                        # 退出键判定收进 Test-TguiQuitKey(KeyCode 带修饰后缀的真相见其文件头)
+                        if (Test-TguiQuitKey -Key $args[1]) {
                             $global:TguiPendingAction = 'Quit'
                             if ($global:TguiWindowRef -and $global:TguiRequestStopMethod) {
                                 $stopArgs = [object[]]::CreateInstance([System.Object], 1)

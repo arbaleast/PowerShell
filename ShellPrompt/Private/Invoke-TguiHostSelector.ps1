@@ -233,9 +233,8 @@ function Invoke-TguiHostSelector {
                     try {
                         $keyArg = $args[1]
                         if ($null -eq $keyArg) { return }
-                        $keyCode = [string]$keyArg.KeyCode
-                        if ($keyCode -eq 'Esc' -or
-                            ($keyCode -eq 'C' -and [bool]$keyArg.IsCtrl)) {
+                        # 退出键判定收进 Test-TguiQuitKey(KeyCode 带修饰后缀的真相见其文件头)
+                        if (Test-TguiQuitKey -Key $keyArg) {
                             $global:TguiHostSelPendingAction = 'Quit'
                             if ($global:TguiHostSelWindowRef -and $global:TguiHostSelStopMethod) {
                                 $stopArgs = [object[]]::CreateInstance([System.Object], 1)
@@ -256,9 +255,7 @@ function Invoke-TguiHostSelector {
                     try {
                         $keyArg = $args[1]
                         if ($null -eq $keyArg) { return }
-                        $keyCode = [string]$keyArg.KeyCode
-                        if ($keyCode -eq 'Esc' -or
-                            ($keyCode -eq 'C' -and [bool]$keyArg.IsCtrl)) {
+                        if (Test-TguiQuitKey -Key $keyArg) {
                             $global:TguiHostSelPendingAction = 'Quit'
                             if ($global:TguiHostSelWindowRef -and $global:TguiHostSelStopMethod) {
                                 $stopArgs = [object[]]::CreateInstance([System.Object], 1)
