@@ -1,62 +1,69 @@
 # 🛠️ 开发者指南
 
-以下约束引自 [`AGENTS.md`](../../AGENTS.md) 及其路由的 [`docs/agents/`](../agents/) 子规约，所有贡献者必须遵守。本页是**可读摘录**；条目发生分歧时，以 `docs/agents/` 下的权威版本为准。
+本页是参与 ShellPrompt 开发的入口：环境准备、提交前必须跑的门禁、文档同步义务。**代码规范与领域红线的权威版本**在 [`docs/agents/`](../agents/)，本页只做导航和摘要，不重复维护规则原文。
 
-## 命名与作用域
+## 环境准备
 
-> - **ALWAYS** use approved PowerShell verbs (`Get-Verb`). (e.g., `Get-TmuxSessions`, `Get-SshConfigHosts`). **NEVER** use unapproved verbs like `test1` or `ssh123`.
-> - **NEVER** use global variables (`$global:`) without explicit architectural justification. **ALWAYS** prefer `$script:` or local scope.
+| 组件 | 要求 |
+|------|------|
+| PowerShell | **7.6+**（模块清单强制；`Tests/Invoke-Tests.ps1` 也会做版本守卫） |
+| Pester | **5+**（测试使用 v5/v6 语法） |
+| PSScriptAnalyzer | 任意较新版本 |
 
-## 函数分解与单一职责
+```powershell
+Install-Module Pester -MinimumVersion 5.0 -Scope CurrentUser -Force -AllowClobber
+Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -AllowClobber
+```
 
-> - **PREFER** small, focused functions over monolithic ones. When a function exceeds ~80 lines or handles multiple concerns, split it:
->   - `Invoke-SshCommand` → `Get-SshArgs` (arg building) + `Invoke-SshCaptureOutput` (capture I/O) + backbone (dispatch logic)
->   - `Start-TmuxSession` → `Show-TmuxTuiDashboard` → `Invoke-TmuxAttach` / `New-TmuxSession` / `Invoke-TmuxSessionDeletion`
-> - **Shared utilities**: Extract reusable logic into `Private/` utility functions (e.g., `ConvertTo-SshEscapedString`, `Test-SshHostName`, `Save-OriginalTerminalState`).
-> - **Terminal state pattern**: Use `Save-OriginalTerminalState` + `Reset-TerminalMode` in `try {} finally {}` for any SSH command that changes terminal encoding/TERM.
+更完整的本机环境说明见 [`docs/agents/environment.md`](../agents/environment.md)。CI 只跑在 `windows-latest`：模块与测试按 Windows 编写（`ssh.exe` / `LOCALAPPDATA` / `TEMP` / `USERPROFILE`），在 Linux 上跑套件时个别 Windows 专属用例失败属于预期。
 
-## 输出注解
+## 提交前门禁
 
-> - **ALWAYS** add `[OutputType()]` annotation to every function. Use exact types: `[void]`, `[string]`, `[bool]`, `[object]`, `[PSCustomObject]`, `[hashtable]`, `[string[]]`.
-> - **ALWAYS** add `[CmdletBinding()]` to every advanced function.
+```powershell
+# 单元 / 集成测试（出现 Fail 或以非零码结束）
+pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Tests.ps1
 
-## 错误处理约定
+# 静态分析（Error 阻断；Warning 走增量基线）
+pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Lint.ps1
 
-> | 场景 | 方式 | 示例 |
-> |------|------|------|
-> | 参数校验 | `[ValidateScript()]` + `throw` | 非法主机名字符 |
-> | 运行时致命错误 | `throw` (终止性) | 配置缺失、依赖不可用 |
-> | 可恢复失败 | `Write-Warning` (非终止性) | SSH 超时、tmux 不可用 |
-> | 外部命令缺失 | `Get-Command` 检查 → `Write-Warning` | tmux、ssh 未安装 |
-> | **例外**: UI 渲染 | `Write-Host` 允许 | `Show-UserScoopLogo` |
+# Profile 启动冒烟（干净 pwsh 进程加载仓库 profile）
+pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-ProfileSmoke.ps1
+```
 
-## 配置
+- 三个入口都可以在 CI 之外单独运行；测试不联网、不连真实 ssh/tmux 主机。
+- 测试运行 / 静态分析 / 调试输出统一写到 `.agent_cache/`，不要在仓库根产生临时文件。
+- PSScriptAnalyzer 的 Warning 基线在 [`pssa-warning-baseline.txt`](../../ShellPrompt/Tests/pssa-warning-baseline.txt)；确需接受新增 Warning 时在 PR 中说明理由并更新基线（`Invoke-Lint.ps1 -UpdateBaseline`）。
+- 完整不变量与门禁说明见 [`docs/agents/testing.md`](../agents/testing.md)。
 
-> - **NEVER** hard-code user preferences (e.g., Bad: `$Theme="starship"` | Good: `$config.Theme`).
-> - Follow Configuration Priority: `User configuration -> Default configuration`.
-> - User-specific settings MUST NOT be stored inside repository files.
+## 代码约定摘要
 
-## 外部依赖
+| 主题 | 要求 |
+|------|------|
+| 命令命名 | 使用 PowerShell 认可的动词（`Get-Verb`） |
+| 函数 | 每个函数加 `[CmdletBinding()]` 和 `[OutputType()]`；职责单一，过长时拆分 |
+| 作用域 | 优先 `$script:` / 局部作用域；避免 `$global:`（`Show-TmuxTuiDashboard` 与 TGUI 事件循环的跨线程状态除外，见源码注释） |
+| 错误处理 | 参数校验用 `[ValidateScript()]` + `throw`；可恢复失败用 `Write-Warning`；外部命令先 `Get-Command` 检测 |
+| 配置 | 不硬编码用户偏好；用户配置优先于默认配置 |
+| 内部函数 | `Private/` 中的函数不导出，也不要在文档里当作公开命令介绍 |
 
-> Before calling external commands, you **MUST**:
-> 1. Check if the command exists (`Get-Command`).
-> 2. Provide clear error messages if missing.
-> 3. **NEVER** silently fail.
+领域细节见 [`docs/agents/development.md`](../agents/development.md)、[`docs/agents/domain-ssh-tmux.md`](../agents/domain-ssh-tmux.md) 与 [`docs/agents/architecture.md`](../agents/architecture.md)。
 
-## SSH 与 tmux 红线
+> **PSSA 已知约束**：[`Settings.ScriptAnalyzer.psd1`](../../ShellPrompt/Settings.ScriptAnalyzer.psd1) 中 `PSUseCorrectCasing` 的 `CheckCommands` 被关闭。原因是该规则读取参数元数据时会实例化 PwshSpectreConsole 的动态 `ValidateSet` 生成器，而 PSSA 调用时没有 Runspace，会导致整个文件的扫描结果作废。关键字 / 操作符 / 别名的大小写检查仍然生效。
 
-> - **SSH**: Changes MUST respect the **Windows-first** implementation constraint (见 [`agents/architecture.md`](../agents/architecture.md)): `ssh.exe` / `where.exe` / `$env:LOCALAPPDATA` 等 Windows 专有假设目前**不可用**于 Linux / WSL。
-> - **tmux**: Changes MUST respect existing sessions, session naming, and reconnect behaviors. **CRITICAL: NEVER delete or destroy existing tmux sessions without explicit user confirmation.**
+## 人工测试
 
-## 测试
+涉及 **profile 加载 / SSH / tmux / prompt 渲染** 的改动，必须在 PR 描述中标记 `[人工测试必做]`，并按 [`docs/agents/testing.md`](../agents/testing.md) 的最小真机验证集执行（SSH 主机选择器与 tmux 仪表盘各走一轮，测试用会话验证删除路径与终端还原）。
 
-> - **Testing**: Before submitting changes, verify module loading (`Import-Module ./ShellPrompt`). Run tests via `Invoke-Pester` (Assume Pester v5 syntax). Run PSScriptAnalyzer via `Invoke-ScriptAnalyzer -Path ./ShellPrompt -Recurse -Settings ./ShellPrompt/Settings.ScriptAnalyzer.psd1` (`-Path` is mandatory). Any changes involving profile loading, SSH, or tmux MUST be flagged for manual testing.
+## 文档同步
 
-> **PSSA 已知约束**：[`Settings.ScriptAnalyzer.psd1`](../../ShellPrompt/Settings.ScriptAnalyzer.psd1) 中 `PSUseCorrectCasing` 的 `CheckCommands` 被置为 `$false`。原因是 PSScriptAnalyzer 1.25.0 的该规则在读取命令参数元数据时，会实例化 [`PwshSpectreConsole`](../../Modules/PwshSpectreConsole/2.6.3/PwshSpectreConsole.psm1) 的动态 `ValidateSet` 值生成器，而该生成器需要 Runspace，PSSA 在无 Runspace 的线程中调用即抛 `There is no Runspace available to run scripts in this thread`，导致**整个被扫描文件的扫描结果作废**（不只是该文件）。关闭后关键字 / 操作符 / 别名的大小写检查仍然生效，仅命令名与参数名的大小写检查被关闭。
+- 用户可见行为变更（公开命令签名、配置键、默认值、菜单交互、模块加载顺序）需要同步更新 `README.md` 和/或 `docs/readme/` 下对应分片。
+- `ShellPrompt/CHANGELOG.md` 已冻结为存根，不再新增条目；用户可见变更写入 PR 描述。
+- 文档与代码行为冲突时，以源码为准，并同步修正文档。
 
 ## 提交规范
 
-> ALWAYS use Conventional Commits: `type(scope): message`
-> - **Types**: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
-> - *Example*: `feat(tmux): add session rename support`
+使用 Conventional Commits：`type(scope): message`
 
+- **Types**：`feat`、`fix`、`docs`、`refactor`、`test`、`chore`
+- 示例：`feat(tmux): add session rename support`
+- 完整规范见 [`docs/agents/commit-convention.md`](../agents/commit-convention.md)。

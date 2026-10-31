@@ -1,6 +1,10 @@
 # 🏗️ 架构
 
+本页面向想了解 ShellPrompt 目录结构、模块加载顺序与渲染分工的读者。**仓库内部的强制约束与不变量**以 [`docs/agents/architecture.md`](../agents/architecture.md) 为准，本页不重复维护规则原文。
+
 ## 目录结构
+
+> 下面的树只列出主要文件；以仓库中的实际目录为准。`Tests/` 下的测试与门禁脚本会随开发增删，数量以目录为准。
 
 ```
 PowerShell/
@@ -20,7 +24,7 @@ PowerShell/
 │   │   ├── commit-convention.md       # 提交信息规范
 │   │   ├── environment.md             # 本机 pwsh 安装位置与兜底查询
 │   │   └── wttr.md                    # 菜单标题区天气约束
-│   ├── readme/                        # 用户手册分片（从 README 拆出, 一章一文件）
+│   ├── readme/                        # 用户手册（按主题拆分）
 │   │   ├── architecture.md / commands.md / configuration.md
 │   │   ├── features.md / tui-dashboard.md / development.md
 └── ShellPrompt/                       # 模块根目录
@@ -31,6 +35,7 @@ PowerShell/
     ├── LICENSE                        # MIT 协议
     ├── Tests/                         # Pester 测试套件 (38 个条目: 31 个 *.Tests.ps1 + 3 个诊断脚本 + 3 个门禁入口 + 1 个基线, 2026-10-31 核对)
     │   ├── ConvertTo-TmuxTuiViewModel.Tests.ps1
+    │   ├── Diag-TguiKeys.ps1                       # 诊断脚本: 键盘事件测量
     │   ├── Diag-TguiRender.ps1                     # 诊断脚本: 真机渲染测量
     │   ├── Diag-TguiResize.ps1                     # 诊断脚本: 真机缩放测量
     │   ├── Enter-TmuxAlternateScreen.Tests.ps1
@@ -62,11 +67,12 @@ PowerShell/
     │   ├── Show-TmuxTuiDashboard.Tests.ps1
     │   ├── Ssh-HostName-Validation.Tests.ps1
     │   ├── Start-TmuxSession.TuiDispatch.Tests.ps1
+    │   ├── Test-TguiQuitKey.Tests.ps1
     │   ├── Tmux-SessionState.Tests.ps1
     │   ├── Tmux-SshFailure.Tests.ps1
     │   ├── Update-Weather.Tests.ps1
     │   └── pssa-warning-baseline.txt               # PSSA Warning 指纹基线
-    └── Private/                       # 内部辅助函数(不暴露给用户, 共 49 个 .ps1, 2026-10-30 核对)
+    └── Private/                       # 内部辅助函数(不暴露给用户, 共 52 个 .ps1, 2026-10-31 核对)
         ├── ConvertTo-SshArgumentLine.ps1      # SSH 命令行参数拼接
         ├── ConvertTo-SshEscapedString.ps1     # SSH 单引号转义
         ├── ConvertTo-TmuxTuiViewModel.ps1     # 仪表盘视图模型(状态区 + 表格数据)
@@ -116,6 +122,7 @@ PowerShell/
         ├── Submit-TmuxBackgroundTask.ps1      # 后台取数任务提交
         ├── Submit-WttrPrefetch.ps1            # 天气预取任务提交
         ├── Test-SshHostName.ps1               # 主机名校验
+        ├── Test-TguiQuitKey.ps1               # 退出键判定(KeyCode 修饰后缀归一)
         ├── Test-TmuxTuiInteractive.ps1        # 交互式终端判定
         └── Write-TmuxWelcomeBanner.ps1        # tmux 会话管理器欢迎 banner
 ```
@@ -200,17 +207,11 @@ PowerShell 启动
 
 spinner 与 ScriptBlock 进度动画在 v2.0 起改为 **单轨 Spectre.Console 架构**。模块清单声明 `PowerShellVersion = '7.6'`，`PwshSpectreConsole` 是**硬依赖**（缺失即 `ShellPrompt.psm1` 抛终止错误，不做静默降级）。
 
-> **重要区分**: 进度动画是**单轨 Spectre**, 交互式 UI 是**单轨 Terminal.Gui v2**(vendored `Modules/Terminal.Gui/2.4.10/`, 见 [tmux 管理器 TUI 仪表盘](tui-dashboard.md))。Spectre.Console **不负责交互式 UI 渲染**, 只负责 spinner、进度动画与删除会话的二次确认(`Read-SpectreConfirm`); 历史上挂在菜单上的按键提示行已于 2026-10-19 撤回(`Write-GridViewHint` 已于 2026-10-29 删除), 交互式 UI 的键位说明现由各 TGUI 自带的提示行/快捷键栏承担。
+> **重要区分**: 进度动画是**单轨 Spectre**, 交互式 UI 是**单轨 Terminal.Gui v2**(vendored `Modules/Terminal.Gui/2.4.10/`, 见 [TUI 仪表盘](tui-dashboard.md))。Spectre.Console **不负责交互式 UI 渲染**, 只负责 spinner、进度动画与删除会话的二次确认(`Read-SpectreConfirm`)。
 
-| 路径 | 渲染后端 | 触发条件 | 存在原因 |
-|------|----------|----------|----------|
-| **同步封装** | `Invoke-SpectreCommandWithStatus` | 唯一路径 | Spectre 完整动画生命周期 |
+`Invoke-WithProgress` 是唯一的进度封装：调用 `Invoke-SpectreCommandWithStatus` 渲染动画，ScriptBlock 抛出的异常原样重抛；不提供 `-TimeoutSeconds` 或轮询参数。**已知约束**：底层 `Start-AnsiConsoleStatus` 无硬超时，需要超时保护时在调用外层用 `Stopwatch` 自己包；SSH 连接阶段由 `Get-SshArgs -ConnectTimeout`（默认 5s）兜底，远端命令本身无超时。
 
-**2026-10-29 精简**：原先并列的「轮询封装」（`Invoke-WithProgressPolling`，静默轮询 + 硬超时 + 结构化返回）已整体删除。依据：三个生产调用点（`Start-TmuxSession.ps1` 的"加载主机列表" / "检测远程 tmux" / "获取远程 tmux 会话"）全部只传 `-Message` + `-ScriptBlock`，从未进入过轮询分支，轮询分支唯一的消费者是它自己的单元测试。Spectre.Console 的 `Start-AnsiConsoleStatus` 本身没有 timeout 概念，轮询分支宣称的"硬超时"从未在生产链路上生效过。随之删除的 `-PollScript` / `-IntervalMs` / `-TimeoutSeconds` / `-SuppressConsole` / `-SuccessMessage` / `-FailureMessage` 六个参数也不再存在。
-
-同批删除的还有 `Private/Show-ProgressSpinner.ps1`（自绘 spinner，`Get-SpinnerFrame` / `Get-SpinnerSequence` / `ConvertTo-SpectrePlainText` 均无生产调用方）；其中仍被 `Invoke-WithProgress` 使用的 `Get-SpinnerStyleMapping` 已独立成 [`Private/Get-SpinnerStyleMapping.ps1`](../../ShellPrompt/Private/Get-SpinnerStyleMapping.ps1)。
-
-**Spectre markup 转义**：唯一走 `Write-SpectreHost` 的自绘渲染路径已随 `Show-ProgressSpinner` 删除。现存两处 Spectre 输出（`Invoke-SpectreCommandWithStatus` 的标题、`Read-SpectreConfirm` 的提示）都不含裸 `[`，或在调用侧自行转义（见 `Invoke-TmuxSessionDeletion.ps1` 的 `$sessionName.Replace('[', '[[')`）。
+**Spectre markup 转义**：现存的 Spectre 输出都不含裸 `[`，或在调用侧自行转义（见 `Invoke-TmuxSessionDeletion.ps1` 的 `$sessionName.Replace('[', '[[')`）。
 
 **风格映射表** (调用方 `-Style` → Spectre.Spinner.Known)：
 
@@ -223,7 +224,4 @@ spinner 与 ScriptBlock 进度动画在 v2.0 起改为 **单轨 Spectre.Console 
 | `Arrows` | `Arrow` | 1:1 |
 | 其它 / 未传 | `Dots6` | 安全回退 |
 
-> **`Blocks` 映射修正（2026-10-29）**：原映射到 `Block1`，但 Spectre.Console 的 `Spinner.Known` 成员名里既没有 `Block1` 也没有 `Blocks`，而 `Invoke-SpectreCommandWithStatus -Spinner` 带 `[ValidateSet([SpectreConsoleSpinner])]`，传入不存在的成员名会在**参数绑定阶段**直接抛 `Value 'Block1' is invalid`。已改为视觉等价的 `Material`；回归测试见 [`Tests/Get-SpinnerStyleMapping.Tests.ps1`](../../ShellPrompt/Tests/Get-SpinnerStyleMapping.Tests.ps1)。
-
-**已知约束**：`Invoke-SpectreCommandWithStatus` 底层 `Start-AnsiConsoleStatus` 无硬超时，本封装也不再提供 `-TimeoutSeconds`。调用方需要超时保护时，请在调用外层用 `Stopwatch` 自己包；SSH 连接阶段由 `Get-SshArgs -ConnectTimeout`（默认 5s）兜底，远端命令本身无超时。
-
+> **`Blocks` 为什么映射到 `Material`**：Spectre.Console 的 `Spinner.Known` 里没有 `Block` / `Blocks` 成员名，而 `Invoke-SpectreCommandWithStatus -Spinner` 带 `[ValidateSet([SpectreConsoleSpinner])]`，传入不存在的成员名会在**参数绑定阶段**直接抛错；`Material` 是视觉等价的竖条动画。回归测试见 [`Tests/Get-SpinnerStyleMapping.Tests.ps1`](../../ShellPrompt/Tests/Get-SpinnerStyleMapping.Tests.ps1)。

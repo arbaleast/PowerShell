@@ -6,19 +6,14 @@
 
 ## 一、当前状态
 
-`sss` 的仪表盘现在只有**一条轨**（2026-10-30 用户裁定移除 PSTui 回退轨）：
+`sss`（tmux 管理器）和 SSH 主机选择器共用同一套 Terminal.Gui v2 交互界面，**只有一条渲染轨**，没有可切换的第二套实现或渲染开关。
 
-| 轨 | 渲染实现 | 状态 |
-|---|---|---|
-| **Terminal.Gui 轨**（唯一） | **独立的 Terminal.Gui v2 应用**（`Show-TmuxTuiDashboard`） | 现行实现，真机验收通过（2026-10-30 `5d5daac`） |
+- **Terminal.Gui v2 负责 UI**：布局、绘制、表格、选择、键盘、缩放和备用屏全部由 Terminal.Gui 管理。
+- **PowerShell 业务层负责数据与连接**：SSH config 读取、远端 tmux 探测、附着/新建/删除、SSH 直连等仍由模块内的业务函数完成，Terminal.Gui 不重写任何 SSH / tmux 逻辑。
+- **SSH 主机选择器**：由 `Show-HostSelector` 分发到 `Invoke-TguiHostSelector`，与仪表盘共用“组装层 + 编排层”的拆分，布局为标题行 / 搜索框 / 主机表 / 提示行。
+- 交互式界面依赖的 Terminal.Gui 程序集随仓库提供（`Modules/Terminal.Gui/<ver>/`），无需用户单独安装。
 
-> 仪表盘**只有这一条轨**：仓库中不存在第二条仪表盘渲染路径，也没有与之配套的渲染开关配置。**PSTui 依赖本身已同日（2026-10-30）随 `Modules/PSTui` 删除**——SSH 主机选择器也已迁至这一条 vendored Terminal.Gui v2 轨（见下）。
-
-- Terminal.Gui 轨是**独立应用**，不是"套了 Terminal.Gui 装饰的表格弹窗"：Terminal.Gui 自己负责布局、绘制、表格、选择、键盘、缩放与状态栏；仓库既有的 PowerShell 业务层（`Invoke-TmuxSessionFetch` / `Get-TmuxSessionState` / `Invoke-TmuxAttach` / `New-TmuxSession` / `Invoke-TmuxSessionDeletion` / `Invoke-SshCommand`）继续负责 SSH 与 tmux，**Terminal.Gui 不重写任何 SSH/tmux 逻辑**。
-- SSH 主机选择器（[`Show-HostSelector`](../../ShellPrompt/Private/Show-HostSelector.ps1)）已同日迁至同一 vendored Terminal.Gui v2 轨，与仪表盘共用"组装层 + 编排层"拆分（`New-TguiHostSelectorWindow` / `Invoke-TguiHostSelector`）；原 PSTui 链路与 `Invoke-GridViewPrompt` 随 `Modules/PSTui` 删除。
-- 原 GridView 轨的其余 `Out-ConsoleGridView` 能力不迁入：会话删除改走仪表盘当前选中行，不再弹嵌套列表；tmux 会话列表菜单已不存在。
-
-下文第二章描述 Terminal.Gui 轨的运行契约，第三章给出 vendored 依赖（Terminal.Gui）的归属结论。
+下文第二章描述仪表盘与主机选择器的运行契约，第三章说明 vendored 依赖的归属与升级方式。**面向使用者的操作说明**见 [功能特点](features.md)。
 
 ---
 
@@ -28,12 +23,12 @@
 
 Terminal.Gui 从仓库内置的 vendored 程序集加载：
 
-- 载入源：`Modules/Terminal.Gui/<最高版本目录>/Terminal.Gui.dll`（版本钉 **2.4.10.0**；2026-10-30 自 `Modules/PSTui/1.0.5/` 迁出，全仓库单副本）。
-- 载入方式：**独立可回收 `AssemblyLoadContext`**（[`Get-TguiContext`](../../ShellPrompt/Private/Get-TguiContext.ps1)），带路径解析回调连带加载同目录依赖（`System.IO.Abstractions` / `Wcwidth` / `ColorHelper`）。
-- 该上下文是**幂等**的：首次调用加载并缓存，后续复用；依赖或程序集缺失时抛可定位的终止错误，不静默降级。
-- Terminal.Gui 的 **vendored 归属**（是否拆成独立依赖目录、版本如何管）见 [第三章](#三vendored-依赖归属terminal-gui-放哪)。
+- 载入源：`Modules/Terminal.Gui/<最高版本目录>/Terminal.Gui.dll`（版本钉 **2.4.10.0**，全仓库单副本）。
+- 载入方式：**独立且不可回收的 `AssemblyLoadContext`**（[`Get-TguiContext`](../../ShellPrompt/Private/Get-TguiContext.ps1)），带路径解析回调连带加载同目录依赖（`System.IO.Abstractions` / `Wcwidth` / `ColorHelper`）。该上下文生命周期与进程一致：首次调用加载并缓存到 `$script:TguiContext`，后续复用，全仓库没有 `Unload` 调用。**不要改回可回收 ALC**——旧上下文被 GC 回收后，依赖解析可能命中已卸载的 ALC 并抛 `AssemblyLoadContext is unloading or was already unloaded`。
+- 依赖或程序集缺失时抛可定位的终止错误，不静默降级。
+- Terminal.Gui 的 **vendored 归属**（是否拆成独立依赖目录、版本如何管）见 [第三章](#三vendored-依赖归属)。
 
-> 本文涉及的 Terminal.Gui API 行为均来自对 vendored **2.4.10.0** 的反射探针实测（探针报告：`.agent_cache/tgui-probe/REPORT.md`），**不是按文档示例假定**。
+> 本文涉及的 Terminal.Gui API 行为均来自对 vendored **2.4.10.0** 的反射探针实测，**不是按文档示例假定**。探针脚本属于一次性诊断产物，不随仓库分发。
 
 ### 2.2 屏幕布局
 
@@ -124,7 +119,7 @@ Terminal.Gui 轨里，**Terminal.Gui 是终端的唯一所有者**：
 - Terminal.Gui 自己管理备用屏（`ESC[?1049h` / `ESC[?1049l`）。
 - 仓库自有的 `Enter-TmuxAlternateScreen` / `Exit-TmuxAlternateScreen` 在该轨下通过 `$script:TmuxTerminalOwner = 'Tgui'` **整体静音**，因此**只有一层备用屏**，不会出现双层嵌套。
 - `Application.Shutdown()` 负责还原光标 / 鼠标 / 粘贴 / 备用屏；**正常退出、Ctrl+C 与异常路径**都会走到。
-- 驱动名固定为 **`'ansi'`**：`DriverRegistry` 只注册 `'windows'` / `'dotnet'` / `'ansi'` 三个驱动，而 `'dotnet'` 驱动的输入层**无视 `AppModel` 无条件发备用屏序列**，`'ansi'` 驱动才让 `AppModel` 生效——固定 `'ansi'` 才能保证"TG 独占终端"在 Windows Terminal 与 Linux 上行为一致。
+- 驱动名固定为 **`'ansi'`**：`DriverRegistry` 只注册 `'windows'` / `'dotnet'` / `'ansi'` 三个驱动，而 `'dotnet'` 驱动的输入层**无视 `AppModel` 无条件发备用屏序列**，`'ansi'` 驱动才让 `AppModel` 生效——固定 `'ansi'` 才能保证“TG 独占终端”在 Windows Terminal 与其它支持 ANSI 的终端上行为一致。
 - 附着 / 新建 / 直连 SSH 这三个全屏业务子动作在 TG 事件循环**退出并 Shutdown 之后**才执行，执行完主循环重新 `Init`，天然恢复到仪表盘。
 
 ### 2.6 键盘与缩放
@@ -155,7 +150,7 @@ Terminal.Gui 2.4.10 上踩过并固化的三条规则：
 
 `UI` 域当前只剩 **`UI.Theme`**（TGUI 配色槽位，见 [`Private/Initialize-Config.ps1`](../../ShellPrompt/Private/Initialize-Config.ps1)）。
 
-> 原 `UI.GridViewFocus` / `UI.GridViewFullScreen` / `UI.DashboardTuiEnabled` / `UI.DashboardFullScreen` 均已随 PSTui 轨与自研回退轨移除（2026-10-30）；旧键残留在 `config.ps1` 里无渲染开关效果（静默忽略），无害。
+> 旧版 UI 回退开关（`UI.GridViewFocus` / `UI.GridViewFullScreen` / `UI.DashboardTuiEnabled` / `UI.DashboardFullScreen`）已被移除；这些键残留在 `config.ps1` 里没有效果（静默忽略），无害。
 
 > `UI` 域是 `[ordered] OrderedDictionary`，条目**不是 PowerShell 属性**：判键存在要用 `.Contains('X')`，取值用 `['X']`——用 `.PSObject.Properties['X']` 判存在恒为 `$null`，开关会永远不生效。
 
@@ -165,11 +160,11 @@ Terminal.Gui 2.4.10 上踩过并固化的三条规则：
 
 ### 2.9 配色契约（ALC 原生主题）
 
-**Terminal.Gui 轨必须自带一套主题装配**，不沿用默认加载上下文 `Add-Type` 轨的旧 `Set-TgColorScheme`（该函数已随 PSTui 于 2026-10-30 删除，现役唯一配色路径就是 ALC 原生 `Set-TguiTheme`）：
+**Terminal.Gui 轨必须自带一套主题装配**：仪表盘和主机选择器都从独立 ALC 加载 Terminal.Gui，唯一配色路径是 ALC 原生的 [`Set-TguiTheme`](../../ShellPrompt/Private/Set-TguiTheme.ps1)。
 
 | 事项 | 事实 |
 |------|------|
-| 载入方式不同 | 旧默认加载上下文轨（`Add-Type`）已随 PSTui 删除；仪表盘与主机选择器走**独立 ALC**（§2.1）。同名类型跨程序集是**两套类型身份**，互相赋值抛 `Cannot convert ... Scheme to ... Scheme` |
+| 载入方式不同 | 仪表盘与主机选择器走**独立 ALC**（§2.1），与默认加载上下文里的同名 Terminal.Gui 类型是**两套类型身份**，互相赋值抛 `Cannot convert ... Scheme to ... Scheme` |
 | 内置 `Base` 方案不可见 | 实测 `SchemeManager.GetScheme('Base').Normal` = 前景 `(255,255,255)` / 背景 `(255,255,255)` —— **白对白，文字隐形**；`'ansi'` 驱动不做终端颜色探测，故该状态恒定 |
 | 视图默认方案名不统一 | `Window → 'Base'`、`StatusBar → 'Menu'`、`Label` / `TableView → ''`（回退 `'Base'`） |
 
@@ -239,44 +234,32 @@ $runArgs[1] = $errorHandler
 
 | 事项 | 实测值 / 事实 |
 |------|------|
-| Terminal.Gui 版本 | **2.4.10.0**，vendored 于 `Modules/Terminal.Gui/2.4.10/`（**已入版本库**，全仓库单副本；2026-10-30 自 `Modules/PSTui/1.0.5/` 迁出） |
-| PSTui | **已删除**（2026-10-30）—— SSH 主机选择器亦已迁至本轨 Terminal.Gui v2（见 §一） |
+| Terminal.Gui 版本 | **2.4.10.0**，vendored 于 `Modules/Terminal.Gui/2.4.10/`（**已入版本库**，全仓库单副本） |
 | 模块导入耗时 | ≈ **207 ms**（冷导入，`-NoProfile`） |
 | 导入后是否已加载 TG | **否** —— 惰性加载，模块导入**不**给 Shell 启动增加负担 |
 | `Get-TguiContext` 首次 / 二次 | **28.9 ms** / **1.2 ms**（ALC 与 TG 反射句柄有缓存） |
 | 仪表盘窗口组装 | 首次 ≈ **840 ms**（TG 静态初始化 + JIT，一次性），稳态 ≈ **30–45 ms** |
-| CI 触发路径 | `ShellPrompt/**`、`Modules/**`、`Microsoft.PowerShell_profile.ps1`、workflow 本身 —— vendored 依赖（`Modules/Terminal.Gui/2.4.10/` 的 DLL 等）变更同样会改变仪表盘行为，故 `Modules/**` 必须触发 CI。⚠️ 该路径补齐已本地提交（`e415424`），**尚待有 `workflow` scope 的凭据推上**——OAuth 凭据缺该 scope 时 GitHub 会整体拒绝含 workflow 变更的推送 |
 
 ---
 
-## 三、vendored 依赖归属（Terminal.Gui 放哪）
+## 三、vendored 依赖归属
 
-> **2026-10-30 更新**：PSTui 已整体删除，Terminal.Gui 随之迁到**独立目录** `Modules/Terminal.Gui/<ver>/`（当年评估记录里的方案 B）。下表为**现状**；§3.2 的三方案评估作为历史决策记录保留（方案 A 的"与 PSTui 同目录"前提已失效）。
+Terminal.Gui 采用**独立版本目录 + 单一副本**：`Modules/Terminal.Gui/<ver>/`。演进过程与备选方案见 git 历史，此处只记录现行结论与维护方式。
 
 ### 3.1 现状（事实）
 
 | 事实 | 值 |
 |------|---|
 | Terminal.Gui 版本 | **2.4.10.0**（`AssemblyVersion` = `AssemblyFileVersion`），目标框架 `.NETCoreApp,v10.0` |
-| vendored 位置 | `Modules/Terminal.Gui/2.4.10/` —— **单一副本**，独立版本目录入版本库（2026-10-30 纯 rename 自 `Modules/PSTui/1.0.5/` 迁出，无内容变更） |
-| 同目录托管依赖 | `ColorHelper` / `JetBrains.Annotations` / `Markdig` / `Microsoft.Extensions.DependencyInjection.Abstractions` / `Microsoft.Extensions.Logging.Abstractions` / `Onigwrap` / `System.IO.Abstractions` 系列 / `Testably.Abstractions.FileSystem.Interface` / `TextMateSharp(.Grammars)` / `Wcwidth`（共 13 个依赖 DLL，随目录一并迁入） |
-| 消费方 | `sss` 仪表盘与 SSH 主机选择器 —— **独立可回收 ALC**（`ShellPrompt-Tgui`），依赖按"同目录同名文件"回载 |
-| 同进程内的 TG 类型身份 | **一套**（`ShellPrompt-Tgui` ALC）；原"默认上下文第二套"已随 PSTui 删除，不存在 |
+| vendored 位置 | `Modules/Terminal.Gui/2.4.10/` —— **单一副本**，独立版本目录入版本库 |
+| 同目录托管依赖 | `ColorHelper` / `JetBrains.Annotations` / `Markdig` / `Microsoft.Extensions.DependencyInjection.Abstractions` / `Microsoft.Extensions.Logging.Abstractions` / `Onigwrap` / `System.IO.Abstractions` 系列 / `Testably.Abstractions.FileSystem.Interface` / `TextMateSharp(.Grammars)` / `Wcwidth`（共 13 个依赖 DLL，与 TG 同目录） |
+| 消费方 | `sss` 仪表盘与 SSH 主机选择器 —— **独立不可回收 ALC**（`ShellPrompt-Tgui`），依赖按“同目录同名文件”回载 |
+| 同进程内的 TG 类型身份 | **一套**（`ShellPrompt-Tgui` ALC） |
 
-### 3.2 结论：**独立目录、单副本**（2026-10-30 起）
+### 3.2 结论与理由
 
-当年（PSTui 仍在时代）评估过三种布局，评估记录保留如下；"维持现状（方案 A）"的 **PSTui 前提已随 PSTui 删除失效**，采用的是其中的方案 B：
-
-| 方案 | 后果 | 判定 |
-|------|------|------|
-| A. 维持现状（TG 与 PSTui 同目录，单副本） | 两条消费路径加载**同一个文件**，版本必然一致；无重复体积 | ✅ 当年采用；2026-10-30 PSTui 删除后**失效** |
-| B. TG 移到 `Modules/Terminal.Gui/<ver>/`，PSTui 目录留副本 | 两份 TG 二进制进版本库（+9 MB），版本漂移不可见；"哪份才是真的"对后来者是坑 | ❌ 当年不采用；**PSTui 删除后即为现状**（PSTui 目录不复存在，无"第二份"问题） |
-| C. TG 移到独立目录，默认上下文预加载后给 PSTui 用 | PSTui 的 GridView 改为依赖"别处预加载的程序集"——**新的失败模式**（预加载失败即主机选择器失效）；仪表盘 ALC 仍要自己再载一份 | ❌ 不采用（该失败模式随 ALC 化主机选择器一并消失） |
-
-现行格局的判定依据：
-
-1. **TG 是全仓唯一的交互式 UI 依赖**，独立版本目录 + 独立 ALC 的组合天然满足"单副本、版本钉死、类型身份一致"。
-2. ALC 从独立目录按同目录规则解析依赖；"主机选择器能否弹出"由 [`Get-ConsoleUiBackend`](../../ShellPrompt/Private/Get-ConsoleUiBackend.ps1) 的 vendored 目录探测显式兜底，不再是隐式的程序集预加载。
+1. **TG 是全仓唯一的交互式 UI 依赖**，独立版本目录 + 独立 ALC 的组合满足“单副本、版本钉死、类型身份一致”。
+2. ALC 从独立目录按同目录规则解析依赖；“主机选择器能否弹出”由 [`Get-ConsoleUiBackend`](../../ShellPrompt/Private/Get-ConsoleUiBackend.ps1) 的 vendored 目录探测显式兜底。
 3. 版本耦合的风险由**显式失败**兜住：加载器对核心类型面逐项探针，vendored 版本一变就抛 `TGUI 载入失败: Terminal.Gui 中缺少核心类型 …`，并指回 [`Get-TguiContext.ps1`](../../ShellPrompt/Private/Get-TguiContext.ps1) 头部的 API 面记录（§2.1）——不是静默半屏。
 
 > 因此**不做回迁**：不改 vendored 目录结构，也不改程序集加载方式。
@@ -305,33 +288,11 @@ $runArgs[1] = $errorHandler
 
 ---
 
-## 五、已知限制 / 修复台账
+## 五、已知限制与验证状态
 
-### 真机缺陷修复台账（2026-10-30，全部已复验或含真机证据）
+### 维护记录
 
-| # | 真机现象 | 根因（取证方式） | 修复（commit） |
-|---|----------|------------------|----------------|
-| 1 | 仪表盘只剩边框、内容全无 | ① TG 内置 `Base` 方案白对白（IL 取色取证）；② 编排层误用泛型 `Run<T>` ⇒ 内部新建空窗上屏（IL/行为判据） | ALC 原生主题 `Set-TguiTheme` + 非泛型 `Run(IRunnable, Func)`（`45adc55` / `7bf3e8e`） |
-| 2 | 首次交互后拖拽缩放失灵 | `Shutdown` 清空事件订阅而 `Application.Instance` 跨 Init 周期不变（IL + 订阅计数） | Shutdown 后清"本轮已订阅"标记（`102035e`） |
-| 3 | "获取远程 tmux 会话" 反复出现、仪表盘从不上屏 | 主循环每轮无条件取数 + 尺寸记账(Post-Init 读取)与 `ScreenChanged` 报数错位 ⇒ 重建风暴（代码审查 + 契约护栏） | 取数受 `$state` 守护 + 记账以事件报数为准 + 同轮事件单次放行（`dbd15ca`） |
-| 4 | 底栏快捷键每项渲染两遍 | `Shortcut` 屏幕渲染序 = 键名 → HelpText → Title（IL + 子视图取证），旧工厂 Title/HelpText 双放标签 | `Title=纯标签, HelpText=''`（`80794d1`） |
-
-### 视觉层次与交互修复台账（2026-10-31，全部含 PTY 取证）
-
-取证方式：Linux 容器内用 `script(1)` 建 PTY 抓取**真实渲染流**（`ansi2scr.pl` 还原屏幕快照、`sgrmap.pl` 逐格还原前景/背景色），覆盖 40×10 / 60×15 / 72×20 / 100×30 / 120×35 / 160×45 六档与 `sessions` / `empty` / `error` / `cjk` / `longname` / `many` 六个场景。
-
-| # | 现象（取证） | 根因 | 修复 |
-|---|--------------|------|------|
-| 1 | **120 列终端上只显示 `#` 与 `SESSION` 两列**，`STATUS` / `WINDOWS` 根本不渲染 | TG 的 `'ansi'` 驱动在 `Init` 后、事件循环跑起来之前 `Application.Screen` 报 **0×0**（它要等终端异步回应 `CSI 18t`），编排层因此按 40×10 兜底 → 列计划按 40 列算 → 两个次要列被当成"窄屏"隐藏 | 尺寸解析收敛到 `Get-TguiTerminalSize`（事件报数 > **终端自身尺寸** > TG Screen > 缺省），见 §2.6 |
-| 2 | **表头与选中行渲染完全同色**（都是白字 + 亮黑底），选中行分不清表头 | TG 的 `Focus` 槽位被"聚焦态列头"和"有焦点时的选中行"**共用** | 表头改走 `Menu.Focus`（冰青字 + `Surface1` 底），选中行走 `Base.Focus`（亮白字），前景色不同 |
-| 3 | 标题 / 统计 / 正文 / 底栏**四者同色**，页面没有层次 | 全部视图同绑 `Base` | 标题带绑 `Menu`、状态徽标绑 `Dialog`/`Error`、表头绑 `Menu.Focus`、底栏键名走 `Base.HotNormal`（见 §2.9） |
-| 4 | **底栏在窄终端被右端硬截断**：40 列只剩 `Enter 附着 │ n 新建 │ r 刷新 │ s SS`，`X`/`Q`/`Esc` 完全不可见 | TG 的 `StatusBar` 不换行；旧实现按"项数"而非"可用列宽"取舍 | 底栏改为**按列宽预算取舍**（每项 `键名宽+标签宽+5`，含末项分隔段），优先级 `Enter > n > q > r > s > x > Esc`——**"退出"排在"刷新"之前**，见 §2.4 |
-| 5 | 40 列下标题行被截断，**连接状态看不见** | 标题 / 主机 / 状态挤在同一个 Label 里 | 标题带拆成**左右两片不重叠**的 Label，状态徽标右对齐且宽度由状态文案反推 |
-| 6 | 空态 / 错误态仍画出一个**空表格框**（表头 + 边框 + 0 行），像渲染坏了 | 空态与错误态沿用同一张表 | 表格 `Visible = $false`，主体区改为**居中**的可执行指引 |
-| 7 | 连接状态是**亮黄色**（不是绿） | TG 的 `'ansi'` 驱动只发 **16 色** ANSI 码，主题 RGB 被量化到最近锚点：Mocha 绿 `(166,227,161)` → **亮黄 `93`** | 亮绿锚点 RGB `(22,198,12)` → `92`（见 §2.9 的量化表） |
-| 8 | 空态提示写"刷新"，底栏写"SSH"，两处说法不一致 | 两处各自拼文案 | 两处都从 `Get-TmuxActionDefinition` 取，空态/错误态按上下文拼装 |
-| 9 | 会话名列宽是封顶值（40/60/80），其余空间留在框里；末列还会被 TG 拉伸成巨型空列 | 封顶宽度模型 + `ExpandLastColumn` 默认 `$true` | 列宽改为**吃满余量**（`Σ列宽 + 可见列数 + 1 = 终端宽`）并关闭 `ExpandLastColumn` |
-| 10 | 终端宽于 128 列时表格只有 128 宽、右侧空一大块 | TG 2.4.10 的 `TableView.MaxCellWidth` 默认 **100**，任何列的单元格宽度被硬顶在 100 列 | 列宽计划侧按 100 封顶（计划 = 渲染）；⚠️ 调大 `MaxCellWidth` 会让 TG 布局**死循环**（实测 102/132 均复现），只能计划侧封顶 |
+历史缺陷的修复过程与根因取证不在此逐条记录（需要时查 git 历史）。现行必须遵守的规则已写在契约小节中：快捷键渲染序见 §2.4，尺寸来源与缩放见 §2.6，配色与 16 色量化见 §2.9，非泛型 `Run` 见 §2.10，Init 周期与事件订阅见 §2.11。
 
 ### 真机验收记录（2026-10-30，Windows Terminal + pwsh 7.6.3，arbaleast@G7）
 
@@ -366,16 +327,11 @@ $runArgs[1] = $errorHandler
 
 登记结果时注明日期与窗口宿主（Windows Terminal / conhost）。
 
-### SSH 主机选择器真机验收清单（TGUI 新轨 `Invoke-TguiHostSelector`，2026-10-30 迁移，**全部标"未验证"**）
+### SSH 主机选择器真机验收清单（维护者，交互行为待真机验证）
 
-> 2026-10-30 PSTui 移除后，主机选择器改由 ALC 原生 Terminal.Gui v2 承接
-> （组装层 + 事件循环，与仪表盘共享终端生命周期）。无头三门禁（Pester
-> 338/338 / PSSA / Profile 冒烟）已通过 **无头可测** 的部分：整窗组装、
-> 过滤回填、预选、非交互护栏（重定向环境直接返回 `$null` 不阻塞）、
-> 分发器业务装配。以下交互行为依赖真实 TTY，**均未经真机验证**，
-> 不得凭无头探针宣称通过。
+> 主机选择器与仪表盘共享同一套 Terminal.Gui v2 终端生命周期（组装层 + 事件循环）。无头门禁只能覆盖整窗组装、过滤回填、预选、非交互护栏（重定向环境直接返回 `$null` 不阻塞）与分发器业务装配；以下交互行为依赖真实 TTY，**不得凭无头探针宣称通过**。
 
-准备：`Clear-Host` 后对一台含 3+-主机的 ssh config 运行 `Start-TmuxSession`
+准备：`Clear-Host` 后对一台含 3+ 主机的 ssh config 运行 `sss`
 （进入主机选择器），窗口宿主 = Windows Terminal + pwsh 7.6+。
 
 | # | 验收点 | 通过标准 |
@@ -391,7 +347,6 @@ $runArgs[1] = $errorHandler
 | 8 | **终端还原** | Esc 与 Ctrl+C 退出后：备用屏退层（无 1049 残留）、光标正常、Shell 历史完整、无双提示行 |
 | 9 | **返回值契约** | Esc → 下游不建会话不连 SSH（Start-TmuxSession 直接退出路径）；Enter → 连接参数与迁移前一致（目标主机 .Value 透传） |
 
-Linux SSH 终端 + pwsh 7.6+ 侧另跑一轮 #0/#1/#3/#4（`'ansi'` 驱动路径）。
 登记结果时注明日期 + 窗口宿主 + 宿主 OS。
 
 ---

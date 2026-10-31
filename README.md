@@ -1,132 +1,278 @@
 # ShellPrompt
 
-快速、干净、可扩展的 PowerShell 终端增强体验。
+面向 **PowerShell 7.6+** 的终端增强工具：把 SSH 主机选择、tmux 会话管理、公钥部署收进终端里的全屏交互界面，同时改善 PowerShell 的启动问候、提示符与开发工具链初始化。
 
-[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](ShellPrompt/LICENSE)
-[![PowerShell](https://img.shields.io/badge/PowerShell-7.6+-blue.svg)](https://github.com/PowerShell/PowerShell)
-[![Starship](https://img.shields.io/badge/Starship-Prompt-8356ff.svg)](https://starship.rs)
-[![Tmux](https://img.shields.io/badge/Tmux-Sessions-1BB91F.svg)](https://github.com/tmux/tmux)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](ShellPrompt/LICENSE)
+[![PowerShell 7.6+](https://img.shields.io/badge/PowerShell-7.6%2B-blue.svg)](https://github.com/PowerShell/PowerShell)
+![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0078D4.svg)
 
+> 本仓库按 **Windows** 设计并在 Windows 上验证（Windows 10/11 + Windows Terminal）。Linux / WSL 尚未适配，远程开发主链路不可用，详见[平台支持](#平台支持)。
 
-> **本文已瘦身（2026-10-29）**：只留概览、安装与故障排除；细节按主题拆到 [`docs/readme/`](docs/readme/)，一章一文件，改内容时改分片、别写回本文。
+## 项目介绍
 
-## 📚 文档地图
+远程开发的日常操作往往要在多条命令之间来回切换：查 `~/.ssh/config`、选主机、连上去、列 tmux 会话、附着或新建、推送公钥……ShellPrompt 把这些步骤收进终端里的交互界面：
 
-| 原章节 | 去处 | 内容 |
-|---|---|---|
-| ✨ 功能特点 | [`docs/readme/features.md`](docs/readme/features.md) | 远程开发 / 终端增强 / UI 组件 / 工具链 / 天气（菜单标题区 + 提示符） |
-| 🎨 配置 | [`docs/readme/configuration.md`](docs/readme/configuration.md) | 配置文件位置、优先级、配置项（Paths/Colors/SSH 域，含消费状态；Weather/UI 域交叉链接）、用户示例 |
-| ⚡ 命令一览 | [`docs/readme/commands.md`](docs/readme/commands.md) | 公开命令、内部封装、别名、开发模式重载 |
-| 🏗️ 架构 | [`docs/readme/architecture.md`](docs/readme/architecture.md) | 目录结构、加载流程、关注点分离、Spinner/Progress 单轨 Spectre 调度 |
-| 🖥️ 交互式 UI | [`docs/readme/tui-dashboard.md`](docs/readme/tui-dashboard.md) | Terminal.Gui v2 单轨交互式 UI（vendored `Modules/Terminal.Gui/2.4.10/`）—— `sss` 仪表盘与 SSH 主机选择器的契约与键位 |
-| 🛠️ 开发者指南 | [`docs/readme/development.md`](docs/readme/development.md) | 命名/作用域/函数拆分/输出注解/错误处理 |
+- 运行 `sss`，从 SSH config 的主机列表中直接选择目标；
+- 在 tmux 仪表盘里用方向键和单键完成附着、新建、刷新、删除和 SSH 直连；
+- 用 `ssh-copy-id` 别名把本机公钥一键追加到新主机；
+- 打开 PowerShell 时自动渲染欢迎 Banner，并初始化 Starship、fnm、PSReadLine。
 
-## ✨ 功能速览
+它适合经常通过 SSH 连接多台开发机、用 tmux 维持远程会话的 Windows PowerShell 用户。
 
-- **远程开发** — `Start-TmuxSession` 菜单式管理 tmux 会话、`Copy-SshPublicKey` 一键推公钥、SSH config 主机 Tab 补全
-- **终端体验** — ANSI 欢迎 Banner + 随机语录、PSReadLine 历史补全增强、profile 分阶段加载计时
-- **交互式 UI** — 全部由独立 vendored 的 Terminal.Gui v2（`Modules/Terminal.Gui/2.4.10/`）渲染：`sss` 仪表盘（会话表 + 快捷键栏）与 SSH 主机选择器（全屏 TGUI：标题行 + 搜索框打字即过滤 + 主机表 + 提示行）；Spectre.Console 单轨动画（`Invoke-WithProgress`：进度动画 + 异常重拋）、5 套 spinner 样式名
-- **工具链** — Starship prompt、fnm 自动切 Node 版本
-- **天气** — SSH 主机选择器 TGUI 标题行的 wttr.in 天气短串（10 分钟缓存 + 5 秒超时兜底，失败静默跳过）
+终端界面组件（Terminal.Gui v2）和进度动画组件（PwshSpectreConsole）**随仓库提供**，不需要单独安装。
 
-细节见 [功能特点](docs/readme/features.md)。
-## 🚀 安装
+## 功能展示
 
-### 前置依赖
+以下为界面结构的文本示意（不是截图），实际配色、列宽会随终端尺寸变化。
 
-| 依赖 | 说明 |
-|------|------|
-| PowerShell 7.6+ | **唯一支持版本**。`ShellPrompt.psd1` 声明 `PowerShellVersion = '7.6'`；Windows PowerShell 5.1 已不再支持。抬高门槛的原因是 vendored 的 Terminal.Gui v2（[`Modules/Terminal.Gui/2.4.10/`](Modules/Terminal.Gui/2.4.10/)）是 .NET 10 二进制, 要求 PS 7.6+ |
-| `Terminal.Gui` | 交互式 UI（`sss` 仪表盘 + SSH 主机选择器）的渲染实现, 仓库 vendored 于 `Modules/Terminal.Gui/2.4.10/`（单一副本）, 运行时经**独立 ALC** 惰性加载。vendored 目录缺失 / 非交互宿主时, 交互式 UI 调用会抛出可定位的终止错误（模块本身仍可正常加载） |
-| starship | 可选 — 现代化 Prompt，通过 `Get-Command starship` 检测 |
-| fnm | 可选 — Node.js 版本管理。**当前按 `fnm.exe` 检测**（Windows 实现）；Linux/WSL 上 `fnm` 名称探测尚未适配，Node 注入会静默跳过 |
-| ssh | 可选 — 远程连接时按需使用 |
-| tmux | 可选 — 远程会话管理时按需使用 |
+**SSH 主机选择器**（运行 `sss`）：
 
-> **注意**：本模块**未发布到 PSGallery**，请使用本地路径导入。
-
-### 安装步骤
-
-1. **克隆仓库**
-
-   ```powershell
-   git clone https://github.com/arbaleast/PowerShell.git "$HOME\Documents\PowerShell"
-   ```
-
-2. **激活 Profile（在 `$PROFILE` 中 dot-source 仓库内的 profile）**
-
-   ⚠️ **不要把 `Microsoft.PowerShell_profile.ps1` 复制到 `$PROFILE` 位置**。该文件以**自身所在目录**为仓库根（`Split-Path -Parent $MyInvocation.MyCommand.Path`），再从根目录定位 `ShellPrompt/` 模块与 `Modules/` 依赖；复制出去会导致找不到模块。正确做法是在 `$PROFILE` 里引用仓库中的原文件：
-
-   ```powershell
-   # 确保 $PROFILE 所在目录存在
-   New-Item -ItemType Directory -Force -Path (Split-Path $PROFILE) | Out-Null
-
-   # 在 $PROFILE 末尾追加一行 dot-source（路径按你的实际克隆位置修改）
-   Add-Content $PROFILE '. "$HOME\Documents\PowerShell\Microsoft.PowerShell_profile.ps1"'
-   ```
-
-   之后每个新 pwsh 会话都会加载仓库内的 profile，`git pull` 更新仓库即可生效，无需重新复制文件。
-
-3. **首次启动**
-
-   启动新的 PowerShell 窗口：欢迎 Banner、别名（`ll` / `which` / `sss` / `ssh-copy-id`）立即可用；`ShellPrompt` 模块本身**懒加载**，首次调用 `sss`（`Start-TmuxSession`）或 `ssh-copy-id`（`Copy-SshPublicKey`）时才触发 `Import-Module`。
-
-### 手动调试
-
-如需手动验证模块加载：
-
-```powershell
-Import-Module ./ShellPrompt/ShellPrompt.psd1
+```text
+SSH 主机选择器 (3) - Chiuhuahsien: 烟雾 26°C
+搜索: _
+┌──────────────────────┬──────────┐
+│HOST                  │STATE     │
+├──────────────────────┼──────────┤
+│debian                │★ 最近    │
+│dev-box               │          │
+│build-arm             │          │
+└──────────────────────┴──────────┘
+↑↓ 选择 · Enter 确认 · Esc 取消 · Tab 切焦点
 ```
 
-### 平台注意事项
+输入文字即实时过滤主机；当前会话上次使用的主机会置顶并标记 `★ 最近`；标题行可显示 wttr.in 天气。
 
-| 平台 | 注意事项 |
-|------|----------|
-| **Windows** | 建议使用 `code $PROFILE` 配对编辑器路径；本文安装步骤按 Windows 路径书写 |
-| **Linux / WSL** | 注意 `ssh-agent` 转发配置；SSH ControlMaster socket 路径与 Windows 存在差异。安装流程与 Windows 相同（克隆 + 在 `$PROFILE` 中 dot-source），但两处实现当前为 **Windows 取向**：fnm 环境缓存写 `$env:LOCALAPPDATA`（Linux 未设置时该变量为空），fnm 按 `fnm.exe` 检测。本仓库文档修订时**未在 Linux / WSL 上实测验证**，遇到差异欢迎反馈 issue |
+**tmux 会话仪表盘**：
 
+```text
+ShellPrompt TMUX Manager · 主机 deb                              已连接
+会话: 3 · Attached: 1 · Detached: 2
+┌────┬──────────────────────────────┬──────────┬─────────┐
+│No  │SESSION                       │  STATUS  │  WINDOWS│
+├────┼──────────────────────────────┼──────────┼─────────┤
+│1   │work-main                     │ Attached │        4│
+│2   │feature-api                   │ Detached │        6│
+│3   │scratch                       │ Detached │        1│
+└────┴──────────────────────────────┴──────────┴─────────┘
+Enter  附着 │ n  新建 │ r  刷新 │ s  SSH │ x  删除 │ q  退出 │ Esc  退出
+```
 
-## 🎨 配置
+| 按键 | 操作 |
+|------|------|
+| `↑` / `↓` | 选择会话 |
+| `Enter` | 附着 / 恢复选中会话 |
+| `n` | 新建 tmux 会话 |
+| `r` | 刷新会话列表（连接失败时重试） |
+| `s` | 直接 SSH 登录（失败时直连排查） |
+| `x` | 删除选中会话（需要二次确认，默认 `n`） |
+| `q` / `Esc` | 退出管理器 |
+
+终端较窄时，`STATUS` / `WINDOWS` 列和底栏按钮会自动取舍；无会话和连接失败是两种明确区分的状态，不会用空表格冒充。
+
+## 核心功能
+
+| 功能 | 你能做什么 |
+|------|------------|
+| **SSH 主机管理** | 自动读取 `~/.ssh/config`，用 `sss` 交互选择主机；在当前会话内记住上次使用的主机并置顶（重启后可用配置预置 `SSH.LastHost`）；主机名会在连接前做白名单校验 |
+| **tmux 会话管理** | 在一个仪表盘里查看远端会话、附着/恢复、新建、刷新、删除，或直接 SSH 登录；删除必须经过交互确认 |
+| **交互式 TUI** | 全屏终端界面（Terminal.Gui v2），支持方向键、单键快捷键、搜索过滤和窗口缩放，无需额外安装 UI 依赖 |
+| **终端体验增强** | 启动欢迎 Banner + 随机语录、PSReadLine 历史补全增强、Starship 提示符、fnm 自动切换 Node 版本 |
+| **公钥部署** | `Copy-SshPublicKey` / `ssh-copy-id` 自动按 `ed25519 > ecdsa > rsa > dsa` 顺序查找公钥并推送到远端 `authorized_keys` |
+| **天气** | 主机选择器标题行显示 wttr.in 天气；`Update-Weather` 可手动绕过缓存刷新一次 |
+| **配置管理** | 通过 `$HOME/.ShellPrompt/config.ps1` 覆盖颜色、路径、天气、SSH 记忆和 TUI 主题 |
+
+## 系统要求与依赖
+
+### 运行环境
+
+- **Windows**（验证环境为 Windows 10/11 + Windows Terminal）
+- **PowerShell 7.6+**（Windows PowerShell 5.1 不受支持，模块清单会直接拒绝加载）
+- 远程开发另需：本机 **OpenSSH 客户端**（`ssh.exe`），以及远端主机上的 **tmux**
+
+### 依赖一览
+
+| 类别 | 组件 | 说明 |
+|------|------|------|
+| 必需 | PowerShell 7.6+ | 模块清单声明的最低版本；内置 UI 组件基于 .NET 10，需要 7.6+ |
+| 必需（仓库内置） | PwshSpectreConsole 2.6.3 | 硬依赖，位于 `Modules/PwshSpectreConsole/2.6.3/`，导入模块时自动加载；目录缺失会导致模块导入失败 |
+| 必需（仓库内置） | Terminal.Gui 2.4.10 | 交互式界面的渲染实现，位于 `Modules/Terminal.Gui/2.4.10/`；首次进入 `sss` 时加载。缺失时交互式命令会报明确错误，模块本身仍可导入 |
+| 可选 | Starship | 提示符接管；通过 `Get-Command starship` 检测，未安装时保留 PowerShell 默认提示符 |
+| 可选 | fnm | Node.js 版本管理；**仅按 `fnm.exe` 检测**，Linux / WSL 上会自动跳过 |
+| 按需 | OpenSSH 客户端（`ssh.exe`） | SSH / tmux 管理、`ssh-copy-id` 需要；未安装时可通过 Windows「可选功能」添加，详见安装步骤 |
+| 按需（远端） | tmux | 仪表盘管理的是**远端主机**上的 tmux 会话 |
+| 可选 | curl | 天气查询优先使用系统 `curl.exe`，缺失时回退到 PowerShell 内置的 `Invoke-RestMethod` |
+| 可选 | PSReadLine | PowerShell 7 自带；存在时启用历史补全和更顺手的按键绑定 |
+
+> 表中两个「仓库内置」组件随仓库一起分发，**不需要** `Install-Module` 或另行下载。ShellPrompt **未发布到 PowerShell Gallery**，请按下方步骤从仓库导入。
+
+### 平台支持
+
+| 平台 | 状态 | 说明 |
+|------|------|------|
+| Windows 10/11 + Windows Terminal | ✅ 支持 | CI 在 `windows-latest` 上运行；tmux 仪表盘在 Windows Terminal + PowerShell 7.6.3 做过真机验收 |
+| Windows + conhost | ⚠️ 未单独验证 | 建议使用 Windows Terminal |
+| Linux | ❌ 远程开发主链路不可用 | 欢迎 Banner 和模块导入可以工作，Starship / 天气（`Invoke-RestMethod` 回退）未做完整验证；SSH / tmux / fnm / `ssh-copy-id` 依赖 `ssh.exe`、`~/.ssh\config`、`$env:USERPROFILE`、`$env:LOCALAPPDATA` 等 Windows 专有假设 |
+| WSL | ❌ 未适配 | 情况同 Linux；即使通过 Windows interop 调用了 `ssh.exe`，使用的也是 Windows 侧配置与密钥，未做验证 |
+| Windows PowerShell 5.1 | ❌ 不支持 | 模块清单要求 PowerShell 7.6+ |
+
+## 安装
+
+### 1. 准备 PowerShell 7.6+
+
+```powershell
+winget install --id Microsoft.PowerShell --source winget
+```
+
+安装后重新打开终端，确认版本：
+
+```powershell
+$PSVersionTable.PSVersion   # 应为 7.6 或更高
+```
+
+需要远程开发时，再确认 OpenSSH 客户端可用：
+
+```powershell
+Get-Command ssh.exe
+```
+
+Windows 10/11 可通过「设置 → 应用 → 可选功能」添加「OpenSSH 客户端」。远端主机需要自行安装 tmux（例如 Debian / Ubuntu 上执行 `sudo apt install tmux`）。
+
+### 2. 克隆仓库
+
+```powershell
+git clone https://github.com/arbaleast/PowerShell.git "$HOME\PowerShell"
+```
+
+也可以克隆到任意目录，后续步骤中的路径按实际位置替换即可。
+
+### 3. 让 `$PROFILE` 加载仓库内的 profile
+
+仓库根目录的 `Microsoft.PowerShell_profile.ps1` 以**自身所在目录**为仓库根来定位 `ShellPrompt/` 模块与 `Modules/` 依赖，因此不要把它复制到 `$PROFILE` 位置，而是在 `$PROFILE` 里引用它：
+
+```powershell
+# 确保 $PROFILE 所在目录存在
+New-Item -ItemType Directory -Force -Path (Split-Path $PROFILE) | Out-Null
+
+# 在 $PROFILE 末尾追加一行 dot-source（路径按实际克隆位置修改）
+Add-Content $PROFILE '. "$HOME\PowerShell\Microsoft.PowerShell_profile.ps1"'
+```
+
+之后每次启动 PowerShell 都会加载仓库内的 profile；更新仓库时执行 `git pull` 即可，无需重新复制文件。
+
+### 4. 验证安装
+
+新开一个 PowerShell 窗口，应看到欢迎 Banner 与随机语录，然后：
+
+```powershell
+Get-Alias sss          # sss -> Start-TmuxSession
+Get-Command sss        # 确认命令存在
+```
+
+首次运行 `sss`（或 `ssh-copy-id`）时才会完成 ShellPrompt 模块初始化，因此第一次调用可能比后续调用稍慢。
+
+### 手动导入（调试用）
+
+只想加载模块、不修改 `$PROFILE` 时：
+
+```powershell
+Import-Module "$HOME\PowerShell\ShellPrompt\ShellPrompt.psd1"
+Get-Command -Module ShellPrompt
+```
+
+> 手动导入只暴露模块的 5 个公开命令，不会注册 `ll` / `which` / `sss` / `ssh-copy-id` 这些 profile 别名。
+
+## 快速开始
+
+在已配置好 `$PROFILE` 的交互式 PowerShell 中：
+
+```powershell
+# 1. 打开 SSH 主机选择器，选择主机后进入 tmux 仪表盘
+sss
+
+# 2. 跳过选择器，直接管理指定主机（主机名来自 ~/.ssh/config）
+sss deb
+
+# 3. 把本机默认公钥推送到远程主机
+ssh-copy-id user@example.com
+
+# 4. 手动刷新一次天气（绕过 10 分钟缓存）
+Update-Weather
+
+# 5. 修改模块源码或 ~/.ShellPrompt/config.ps1 后重载配置
+Invoke-Reload
+```
+
+说明：
+
+- 第 2 步中的 `deb` 是位置参数，等价于 `Start-TmuxSession deb`；示例统一使用位置参数，首次调用时最稳妥。
+- `Update-Weather` 和 `Invoke-Reload` 需要 ShellPrompt 模块已加载；如果新会话里提示命令不存在，先运行一次 `sss`（或手动 `Import-Module`）。
+- `ssh-copy-id` 是 `Copy-SshPublicKey` 的别名；公钥默认按 `ed25519 > ecdsa > rsa > dsa` 顺序查找。
+
+## 配置
+
+用户配置文件：
 
 ```powershell
 $HOME/.ShellPrompt/config.ps1
 ```
 
-**用户配置 → 默认配置**，同名键覆盖模块内置默认值（见 [`Initialize-Config.ps1`](ShellPrompt/Private/Initialize-Config.ps1)）。完整配置项、域划分与示例见 [配置](docs/readme/configuration.md)。
+文件默认不存在，需要时自行创建。用户配置覆盖模块内置默认值（**用户配置 → 默认配置**），完整配置项与示例见 [配置说明](docs/readme/configuration.md)。
 
-> **2026-10-29 变更**：移除了长期无消费方的配置项 —— `Paths.LogPath`、`SSH.ConnectTimeout`、`SSH.ForceTTy`、整个 `Keys` 域、`Colors.LightGray` / `White` / `BgDarker` / `Bold` / `Dim`。在 `config.ps1` 里继续配置它们会被**静默忽略**（不报错）。
+```powershell
+# ~/.ShellPrompt/config.ps1
+# 注意：PowerShell 双引号字符串不解析 \e，用反引号转义 `e
+$Config.Colors.FreshGreen = "`e[38;2;0;255;0m"   # 覆盖主色调
+$Config.Weather.Enabled   = $false                # 关闭主机选择器标题行天气
+$Config.SSH.LastHost      = 'my-server'           # 预置置顶主机
+```
 
-## ⚡ 命令
+修改后运行 `Invoke-Reload` 生效。
 
-公开 5 个：`Show-UserScoopLogo`、`Start-TmuxSession`、`Update-Weather`、`Copy-SshPublicKey`、`Invoke-Reload`。别名、内部封装与 `Invoke-Reload` 开发模式重载见 [命令一览](docs/readme/commands.md)。
+> 配置文件会被启动流程和模块各加载一次，因此只应做 `$Config.*` 赋值，不要在文件里调用模块内部函数或设置别名。
 
-## 🏗️ 架构与交互菜单
+## 文档导航
 
-目录结构与启动加载流程见 [架构](docs/readme/architecture.md)；交互式 UI（`sss` 仪表盘 + SSH 主机选择器）的契约、配色与键位见 [tmux 管理器 TUI 仪表盘](docs/readme/tui-dashboard.md)。
+| 你想了解 | 阅读 |
+|----------|------|
+| 安装与上手 | 本 README 的「安装」「快速开始」 |
+| 有哪些功能、界面怎么操作 | [功能特点](docs/readme/features.md) |
+| 公开命令、参数、别名 | [命令一览](docs/readme/commands.md) |
+| 配置文件位置与全部配置项 | [配置说明](docs/readme/configuration.md) |
+| TUI 仪表盘的结构、键位与终端行为 | [TUI 仪表盘](docs/readme/tui-dashboard.md) |
+| 模块目录结构、加载流程、渲染分工 | [架构说明](docs/readme/architecture.md) |
+| 参与开发、跑测试与静态分析 | [开发者指南](docs/readme/development.md)、[`AGENTS.md`](AGENTS.md) |
 
-## 🛠️ 开发者
-
-命名与作用域、函数拆分、输出注解、错误处理约定见 [开发者指南](docs/readme/development.md)；SSH/tmux 红线、测试义务、提交规范的**权威版本**在其路由的 [`docs/agents/`](docs/agents/) 子规约。
-
-**测试与 CI**：跑测试统一用仓库入口 `pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Tests.ps1`（默认在 Fail 时以非零退出码结束；交互会话内用 `&` 调用时加 `-NoExit`）。`.github/workflows/test.yml` 会在 `ShellPrompt/**`、profile 或 workflow 变更时自动跑同一套件与 PSScriptAnalyzer（仅 Error 失败），详见 [测试与文档](docs/agents/testing.md)。
-
-## 🔧 故障排除
+## 故障排除
 
 | 症状 | 可能原因 | 解决方案 |
 |------|----------|----------|
-| 启动后 `sss` 报找不到 `ShellPrompt` 模块 | 把 profile **复制**到了 `$PROFILE`，导致仓库根定位失效 | 恢复 `$PROFILE` 为一行 dot-source 仓库内的原文件（见「安装步骤 2」），不要复制 |
-| Profile 启动报 `Get-RandomQuote` / `New-WelcomeBanner` / `Resolve-ColorTable` 未识别 | `Microsoft.PowerShell_profile.ps1` Phase 1 依赖未就绪 | Phase 1 按 `$script:StartupLoadOrder` 显式有序加载 5 个启动期文件；若仍出现，请查看 Phase 1 自检输出的 `缺失命令` / `缺失文件` 列表（格式为 `文件 -> 命令名`），据此把缺失的文件补进清单 |
-| 显示 "ShellPrompt 模块未正确导入" | 模块未在启动流程中加载 | 手动执行 `Import-Module ./ShellPrompt/ShellPrompt.psd1` 验证 |
-| `Start-TmuxSession` 提示 "SSH 配置中未找到任何主机" | `~/.ssh/config` 文件缺失或为空 | 编辑 `~/.ssh/config` 添加主机配置 |
-| 远程主机无 tmux | 远程未安装 tmux | 黄色警告后**保留菜单**（UI-first，不自动降级）：可选手动 `Ssh 直连` / `Refresh` 重试 / `Exit` 退出 |
-| 主机名包含非法字符 | 输入含 shell 特殊字符 | 主机名仅允许字母数字、`.`、`-`、`_` |
-| `Copy-SshPublicKey` 提示 "未找到任何默认公钥" | 本地未生成 SSH 密钥对 | 执行 `ssh-keygen -t ed25519` 生成密钥 |
-| Starship / Fnm 静默失败 | 外部命令未安装或不在 PATH 中 | 使用 `Get-Command starship` 和 `Get-Command fnm` 验证安装 |
-| PSReadLine 不可用 | 未安装 PSReadLine 模块 | 执行 `Install-Module PSReadLine -Force` |
-| 网络错误 | SSH 连接超时或网络不可达 | 标记为 `NetworkError` 跳过缓存，重试或检查网络连通性 |
-| tmux 删除会话 | 误操作 | 删除会话**必须**通过交互式菜单显式选择目标会话 |
+| `sss` 提示找不到 `ShellPrompt` 模块 | profile 被**复制**到 `$PROFILE`，仓库根定位失效 | 删除复制过去的内容，改为在 `$PROFILE` 中 dot-source 仓库内的原文件 |
+| `sss` 提示 "SSH 配置中未找到任何主机" | `~/.ssh/config` 不存在或没有 `Host` 条目 | 在 `~/.ssh/config` 中添加主机配置 |
+| `sss` 提示 "当前不是交互式终端" | 在管道、重定向或 CI 中调用了交互式命令 | 在真实终端中运行 |
+| `无法执行 ssh: ...` | 未安装 OpenSSH 客户端，或 `ssh.exe` 不在 PATH | 安装 Windows 的 OpenSSH 客户端，或把 `ssh.exe` 加入 PATH |
+| 远端主机提示没有 tmux | 远端未安装 tmux | 在远端安装 tmux，或用 `s` 直连 SSH 后手动处理 |
+| 主机名包含非法字符 | 输入含空格、斜杠等特殊字符 | 主机名仅允许字母、数字、`.`、`-`、`_` |
+| `Copy-SshPublicKey` 提示找不到默认公钥 | 本机未生成 SSH 密钥对 | 执行 `ssh-keygen -t ed25519` 生成密钥 |
+| `Update-Weather` / `Invoke-Reload` 提示不是命令 | ShellPrompt 模块尚未加载 | 先运行一次 `sss`，或手动 `Import-Module` |
+| 天气一直不显示 | 网络不可达、wttr.in 限流，或 `Weather.Enabled = $false` | 检查网络与配置；可用 `Update-Weather` 手动测试 |
+| Starship / fnm 没有生效 | 工具未安装或不在 PATH | 用 `Get-Command starship` / `Get-Command fnm` 检查；fnm 仅在 Windows 生效 |
+| PSReadLine 不可用 | PSReadLine 未安装 | 执行 `Install-Module PSReadLine -Force` |
+| 删除 tmux 会话 | — | 删除必须在仪表盘里显式选中会话，并经过默认答案为 `n` 的二次确认 |
 
-## 📜 协议
+## 开发与贡献
+
+- 架构与加载流程：[架构说明](docs/readme/architecture.md)
+- 命名、作用域、错误处理、测试与提交规范：[开发者指南](docs/readme/development.md)（权威版本在 [`docs/agents/`](docs/agents/)）
+- 测试与静态分析统一入口：
+
+  ```powershell
+  pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Tests.ps1
+  pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Lint.ps1
+  pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-ProfileSmoke.ps1
+  ```
+
+CI（`.github/workflows/test.yml`）在 `windows-latest` 上运行上述三道门禁。
+
+## License
 
 本项目基于 MIT 协议开源，详见 [`LICENSE`](ShellPrompt/LICENSE)。
