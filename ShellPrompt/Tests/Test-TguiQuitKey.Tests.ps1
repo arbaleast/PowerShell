@@ -24,39 +24,39 @@ Describe 'Test-TguiQuitKey (TGUI 退出键纯判定)' {
         $script:mod = Get-Module ShellPrompt
 
         # 形态桩: 与真实 Key 的反射访问面一致(KeyCode 文本 / IsCtrl 布尔)
-        function New-ShapeKey {
+        $script:newShapeKey = {
             param([string]$KeyCodeText, [bool]$IsCtrl = $false)
             [PSCustomObject]@{ KeyCode = $KeyCodeText; IsCtrl = $IsCtrl }
         }
     }
 
     It 'Esc 文本形态应判定为退出键' {
-        $isQuit = & $script:mod { param($kQuitKey) Test-TguiQuitKey -Key $kQuitKey } (New-ShapeKey 'Esc')
+        $isQuit = & $script:mod { param($kQuitKey) Test-TguiQuitKey -Key $kQuitKey } (& $script:newShapeKey 'Esc')
         $isQuit | Should -BeTrue
     }
 
     It '真机 Ctrl+C 形态 "C, CtrlMask" 应判定为退出键(91b4280 首版回归锁)' {
-        $isQuit = & $script:mod { param($kQuitKey) Test-TguiQuitKey -Key $kQuitKey } (New-ShapeKey 'C, CtrlMask' $true)
+        $isQuit = & $script:mod { param($kQuitKey) Test-TguiQuitKey -Key $kQuitKey } (& $script:newShapeKey 'C, CtrlMask' $true)
         $isQuit | Should -BeTrue
     }
 
     It 'IsCtrl 属性为真、KeyCode 无后缀的 C(另一驱动形态)也应判定为退出键' {
-        $isQuit = & $script:mod { param($kQuitKey) Test-TguiQuitKey -Key $kQuitKey } (New-ShapeKey 'C' $true)
+        $isQuit = & $script:mod { param($kQuitKey) Test-TguiQuitKey -Key $kQuitKey } (& $script:newShapeKey 'C' $true)
         $isQuit | Should -BeTrue
     }
 
     It '无修饰 C 不应判定为退出键' {
-        $isQuit = & $script:mod { param($kQuitKey) Test-TguiQuitKey -Key $kQuitKey } (New-ShapeKey 'C')
+        $isQuit = & $script:mod { param($kQuitKey) Test-TguiQuitKey -Key $kQuitKey } (& $script:newShapeKey 'C')
         $isQuit | Should -BeFalse
     }
 
     It '普通字母(Q)不应判定为退出键' {
-        $isQuit = & $script:mod { param($kQuitKey) Test-TguiQuitKey -Key $kQuitKey } (New-ShapeKey 'Q')
+        $isQuit = & $script:mod { param($kQuitKey) Test-TguiQuitKey -Key $kQuitKey } (& $script:newShapeKey 'Q')
         $isQuit | Should -BeFalse
     }
 
     It 'Ctrl 修饰的其它字母(如 Z)不应判定为退出键(只放行 C)' {
-        $isQuit = & $script:mod { param($kQuitKey) Test-TguiQuitKey -Key $kQuitKey } (New-ShapeKey 'Z, CtrlMask' $true)
+        $isQuit = & $script:mod { param($kQuitKey) Test-TguiQuitKey -Key $kQuitKey } (& $script:newShapeKey 'Z, CtrlMask' $true)
         $isQuit | Should -BeFalse
     }
 
