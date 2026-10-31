@@ -131,32 +131,33 @@ Describe 'Show-HostSelector (分发器业务装配)' {
         $threw | Should -Be $true
     }
 
-    It '交互循环返回 $null(用户取消)时分发器透传 $null' {
+    It '仪表盘返回 $null(用户取消)时分发器透传 $null' {
         & $script:mod {
             Mock -CommandName Assert-ConsoleUiReady -ModuleName ShellPrompt -MockWith { }
             Mock -CommandName Get-WttrTitleSuffix -ModuleName ShellPrompt -MockWith { '' }
-            Mock -CommandName Invoke-TguiHostSelector -ModuleName ShellPrompt -MockWith { $null }
+            Mock -CommandName Show-SshHostDashboard -ModuleName ShellPrompt -MockWith { $null }
             Show-HostSelector -Hosts @('debian', 'ubuntu') -ExitLabel '退出'
         } | Should -BeNullOrEmpty
-        Should -Invoke -CommandName Invoke-TguiHostSelector -ModuleName ShellPrompt -Exactly 1
+        Should -Invoke -CommandName Show-SshHostDashboard -ModuleName ShellPrompt -Exactly 1
     }
 
-    It '交互循环返回选中行时分发器透传该行(.Value = 主机名)' {
+    It '仪表盘返回选中行时分发器透传该行(.Value = 主机名)' {
         $selected = & $script:mod {
             Mock -CommandName Assert-ConsoleUiReady -ModuleName ShellPrompt -MockWith { }
             Mock -CommandName Get-WttrTitleSuffix -ModuleName ShellPrompt -MockWith { '' }
-            Mock -CommandName Invoke-TguiHostSelector -ModuleName ShellPrompt -MockWith {
+            Mock -CommandName Show-SshHostDashboard -ModuleName ShellPrompt -MockWith {
                 # 形参捕获避免"声明即弃用"; 调用形参形状同时被本断言锁定
-                $script:selectorSeenRows = $Rows
-                $script:selectorSeenTitle = $Title
-                [PSCustomObject]@{ Host = 'debian'; State = '★ 最近'; Disabled = $false; Value = 'debian' }
+                $script:selectorSeenHosts = $Hosts
+                $script:selectorSeenLastHost = $LastHost
+                [PSCustomObject]@{ Host = 'debian'; State = ''; Disabled = $false; Value = 'debian' }
             }
             Show-HostSelector -Hosts @('debian', 'ubuntu') -LastHost 'debian' -ExitLabel '退出'
         }
         $selected | Should -Not -BeNullOrEmpty
         $selected.Value | Should -Be 'debian'
-        & $script:mod { $script:selectorSeenRows.Count } | Should -Be 2
-        & $script:mod { $script:selectorSeenRows[0].Host } | Should -Be 'debian'
+        & $script:mod { $script:selectorSeenHosts.Count } | Should -Be 2
+        & $script:mod { $script:selectorSeenHosts[0] } | Should -Be 'debian'
+        & $script:mod { $script:selectorSeenLastHost } | Should -Be 'debian'
     }
 
     It 'LastHost 为空时应从配置回退 $script:Config.SSH.LastHost' {
@@ -166,33 +167,29 @@ Describe 'Show-HostSelector (分发器业务装配)' {
                 $script:Config.SSH.LastHost = 'ubuntu'
                 Mock -CommandName Assert-ConsoleUiReady -ModuleName ShellPrompt -MockWith { }
                 Mock -CommandName Get-WttrTitleSuffix -ModuleName ShellPrompt -MockWith { '' }
-                Mock -CommandName Invoke-TguiHostSelector -ModuleName ShellPrompt -MockWith {
-                    $script:selectorSeenRows = $Rows
-                    $script:selectorSeenFallbackTitle = $Title
+                Mock -CommandName Show-SshHostDashboard -ModuleName ShellPrompt -MockWith {
+                    $script:selectorSeenFallbackLastHost = $LastHost
                     $null
                 }
                 $null = Show-HostSelector -Hosts @('debian', 'ubuntu')
-                [PSCustomObject]@{ TopHost = $script:selectorSeenRows[0].Host; Title = $script:selectorSeenFallbackTitle }
+                [PSCustomObject]@{ LastHost = $script:selectorSeenFallbackLastHost }
             } finally {
                 $script:Config.SSH.LastHost = $original
             }
         }
-        $selected.TopHost | Should -Be 'ubuntu'
-        $selected.Title | Should -BeLike 'SSH 主机选择器 (2)*'
+        $selected.LastHost | Should -Be 'ubuntu'
     }
 
-    It 'Title 应包含主机数(过滤前行集合全量透传)' {
+    It '主机名数组应全量透传给仪表盘(不做前置过滤)' {
         & $script:mod {
             Mock -CommandName Assert-ConsoleUiReady -ModuleName ShellPrompt -MockWith { }
             Mock -CommandName Get-WttrTitleSuffix -ModuleName ShellPrompt -MockWith { '' }
-            Mock -CommandName Invoke-TguiHostSelector -ModuleName ShellPrompt -MockWith {
-                $script:selectorSeenTitleRows = $Rows
-                $script:selectorSeenTitle = $Title
+            Mock -CommandName Show-SshHostDashboard -ModuleName ShellPrompt -MockWith {
+                $script:selectorSeenTitleHosts = $Hosts
                 $null
             }
             $null = Show-HostSelector -Hosts @('a', 'b', 'c')
-            $script:selectorSeenTitle | Should -BeLike '* (3)'
-            $script:selectorSeenTitleRows.Count | Should -Be 3
+            $script:selectorSeenTitleHosts.Count | Should -Be 3
         }
     }
 }

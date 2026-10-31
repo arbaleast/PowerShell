@@ -102,6 +102,15 @@ function Start-TmuxSession {
 
     $script:Config.SSH.LastHost = $HostName
 
+    # ---- 记录一次连接活动 ----
+    # 仪表盘 Activity 卡片(最后活跃 / 最近连接 / 7 日直方图)的**真实**数据来源。
+    # 写失败绝不阻断主流程(活动记录只是展示用的辅助信息)。
+    try {
+        $null = Add-SshHostActivity -HostName $HostName
+    } catch {
+        Write-Verbose "[Start-TmuxSession] 记录主机连接活动失败(已忽略): $($_.Exception.Message)"
+    }
+
     # ---- 天气温预取: 与随后的 SSH 探测在后台并行, 首屏不等网络 ----
     # 预取失败静默降级(标题区不显示天气), 不影响主流程。
     $null = Submit-WttrPrefetch
