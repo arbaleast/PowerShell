@@ -72,7 +72,7 @@ PowerShell/
     │   ├── Tmux-SshFailure.Tests.ps1
     │   ├── Update-Weather.Tests.ps1
     │   └── pssa-warning-baseline.txt               # PSSA Warning 指纹基线
-    └── Private/                       # 内部辅助函数(不暴露给用户, 共 66 个 .ps1, 2026-10-31 核对)
+    └── Private/                       # 内部辅助函数(不暴露给用户, 共 67 个 .ps1, 2026-10-31 核对)
         ├── Add-SshHostActivity.ps1            # [新] 记录一次 SSH 主机连接活动(本地 JSON, 原子写)
         ├── ConvertTo-SshArgumentLine.ps1      # SSH 命令行参数拼接
         ├── ConvertTo-SshEscapedString.ps1     # SSH 单引号转义
@@ -128,6 +128,7 @@ PowerShell/
         ├── Resolve-ColorTable.ps1             # 统一颜色表解析(调用方覆盖 → 缓存 → 配置层默认值)
         ├── Resolve-TguiThemeName.ps1          # UI.Theme 名称规范化(未知名回退默认)
         ├── Save-OriginalTerminalState.ps1     # 终端状态保存
+        ├── Set-TguiFrameRate.ps1              # TG 主循环帧率上限(默认 25fps => 40ms 帧周期地板; 抬到 100fps)
         ├── Set-TguiTheme.ps1                  # Terminal.Gui 主题设置 (ALC 原生, 唯一配色路径)
         ├── Show-HostSelector.ps1              # 主机选择菜单(分发器: 断言 + 天气后缀 + 归一返回值)
         ├── Show-SshHostDashboard.ps1          # [新] SSH 主机仪表盘分发器(档案 + 活动历史 → 编排层)

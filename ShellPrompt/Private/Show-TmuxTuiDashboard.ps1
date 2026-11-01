@@ -210,6 +210,18 @@ function Show-TmuxTuiDashboard {
                 # 标记"终端已被 TG 接管": 从这一刻起, 任何异常都必须由
                 # 外层 finally 负责 Shutdown(否则备用屏/光标留在备用状态)。
                 $tgInitialized = $true
+                # ★ 主循环帧率上限(2026-11-01 实测): TG 默认 25 fps ⇒ 相邻两帧
+                #   之间有 **40ms 的硬地板**, 而按键必须等下一帧才出画面 ——
+                #   这就是"缩小重绘面积之后仍然 100~200ms"的原因(延迟不在
+                #   "画多少", 而在"多久画一次")。抬到 100 fps(10ms 一帧)。
+                #   详见 Set-TguiFrameRate.ps1 的文件头。
+                try {
+                    $frameRate = Set-TguiFrameRate -Tgui $tg -MinimumIps 100
+                    Write-Verbose "[Show-TmuxTuiDashboard] 主循环帧率 $($frameRate.Previous) -> $($frameRate.Current) fps"
+                }
+                catch {
+                    Write-Verbose "[Show-TmuxTuiDashboard] 设置主循环帧率失败: $($_.Exception.Message)"
+                }
             } catch {
                 Write-Warning "[Show-TmuxTuiDashboard] Terminal.Gui Init 失败: $($_.Exception.Message)"
                 return 'Exit'
