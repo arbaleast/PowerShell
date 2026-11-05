@@ -118,6 +118,10 @@ function New-TmuxTuiSessionDetailPanel {
         Labels = $labels
         # 已应用方案登记(SetScheme 不是幂等 no-op, 等值跳过能缩小脏区)
         AppliedSchemes = @{}
+        # 原值登记: 详情卡有 4 个字段, 上下移动时大部分字段的**原值**与上一行
+        # 完全相同。截断要逐字符测宽, 先比原值再裁剪可以把按键路径上的
+        # 裁剪开销降到 0(与 SSH 详情面板的 RawValues 守卫同构)。
+        RawValues = @{}
         # 值列宽登记在此, 更新时按**同一个值**裁剪 —— 两处各算一遍会漂移:
         # 裁剪比值 Label 自身宽时 TG 只能硬切, 长会话名末尾被生硬截断(无省略号)。
         ValueWidth = $valueWidth
@@ -160,6 +164,13 @@ function Set-TmuxTuiSessionDetail {
         param([string]$Key, [string]$Text)
         $lbl = $Panel.Labels[$Key]
         if ($null -eq $lbl) { return }
+        # ★ 原值未变 -> 连截断都不用算(2026-11 性能审计修复):
+        #   裁剪走 Get-SshHostListClip -> Get-TguiTextWidth 逐字符测宽,
+        #   是按键路径上最贵的一步; 上下移动时 4 个字段里通常只有 1~2 个
+        #   真的变了。改成"先比原值, 变了才裁剪", 与 SSH 详情面板的
+        #   RawValues 守卫(New-SshHostDetailPanel.ps1)同构。
+        if ($Panel.RawValues.ContainsKey($Key) -and $Panel.RawValues[$Key] -ceq $Text) { return }
+        $Panel.RawValues[$Key] = $Text
         $clipped = Get-SshHostListClip -Text $Text -Width $valueWidth
         if ([string]$lbl.Text -ceq $clipped) { return }
         $lbl.Text = $clipped

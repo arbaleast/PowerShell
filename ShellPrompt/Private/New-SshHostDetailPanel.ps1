@@ -533,7 +533,11 @@ function Set-SshHostDetailRemote {
         elseif ([string]$Detail.Status -eq 'Offline') {
             if ([string]$Detail.ErrorCode) { $statusText = '{0} · {1}' -f $statusText, [string]$Detail.ErrorCode }
         }
-        $statusLabel.Text = Get-SshHostListClip -Text $statusText -Width $valueWidth
+        # ★ 用 Set-SshHostDetailLabelText(带 -ceq 等值守卫), 不要直接赋值:
+        #   TG 的 Label.Text 赋值会无条件把视图标脏, 而远端状态在两次按键之间
+        #   常常不变 —— 直接赋值等于"每次按方向键都白重画一次详情面板"。
+        #   (2026-11 性能审计; 本面板其余字段都已走这个守卫, 只有这里漏了。)
+        Set-SshHostDetailLabelText -Label $statusLabel -Text (Get-SshHostListClip -Text $statusText -Width $valueWidth)
         $scheme = switch ([string]$Detail.Status) {
             'Online' { $theme.Online }
             'Offline' { $theme.Offline }
