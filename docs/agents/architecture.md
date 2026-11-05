@@ -74,6 +74,47 @@ profile 加载分为 3 个阶段, 各阶段目标与耗时归因:
 
 **fnm env 缓存**: 阶段 2 `Invoke-DeferredInit` 调 `Initialize-FnmEnvironment`. 首次或 fnm.exe / node 版本列表变化时跑一次 `fnm env` 子进程并写 `$env:LOCALAPPDATA\ShellPrompt\fnm-env.json`; 后续启动直接读缓存 + 重算 PATH. **PATH 永不缓存** (避免静默覆盖用户临时 PATH 修改). 保底路径: 解析 aliases 目录失败时回退到同步执行 `fnm env` 子进程.
 
+## 模块加载契约 (2026-11 可靠性治理)
+
+`ShellPrompt/ShellPrompt.psm1` 是模块的唯一入口, 加载链路如下:
+
+```
+ShellPrompt.psd1 (RootModule)
+  └─ ShellPrompt.psm1
+       ├─ 0a. 注入 <repo>/Modules 到 $env:PSModulePath
+       ├─ 0b. 读 CoreScripts.psd1 (核心脚本清单)
+       ├─ 1.  清单逐项存在性校验       ── 缺失 ⇒ 导入失败(报错含绝对路径)
+       ├─ 2.  dot-source Private/Initialize-Config.ps1 (最先, 单独处理)
+       ├─ 3.  Import-Module PwshSpectreConsole (硬依赖)
+       ├─ 4.  dot-source Private/*.ps1  (排除 Initialize-Config)
+       ├─ 5.  dot-source Public/*.ps1
+       └─ 6.  Register-ArgumentCompleter (Start-TmuxSession -HostName)
+```
+
+**核心脚本 vs 可选组件**:
+
+- **核心脚本** = `Private/` 与 `Public/` 下的**全部** `.ps1`。本模块**不存在**"装了也能用、缺了也能用"的可选功能分支, 因此不做人为分类: 任一核心脚本缺失 / 语法错误 / 加载期抛异常, 都**必须立即终止模块导入**。
+- **可选组件**(不属于模块加载链路, 失败不阻断导入):
+  - `Modules/Terminal.Gui/<ver>/` —— 交互式 UI 主轨, **惰性加载**(ALC 在 `Private/Get-TguiContext.ps1` 的函数体内创建), 只在真正要弹窗时探测; 不可用时由 `Assert-ConsoleUiReady` 抛可定位终止错误, **不静默降级**。
+  - `~/.ShellPrompt/config.ps1` —— 用户自定义配置, 加载失败只 `Write-Warning` 并继续(用默认值)。
+  - starship / fnm / PSReadLine —— profile 阶段 2 的外部可选依赖。
+
+**加载顺序是确定的**: Private 全量 -> Public 全量, 每段内按文件名 **Ordinal** 升序(`[System.StringComparer]::Ordinal`, 与区域文化、文件系统枚举顺序都无关)。顺序确定性的依据: Private/Public 内**没有任何脚本在顶层调用其它脚本里的函数**(已用 AST 全量核对: 顶层语句只有 `$script:` 变量初始化与数据字面量), 因此字典序不产生前向引用。唯一有顶层副作用的 `Private/Initialize-Config.ps1` 被单独优先加载(它建立 `$script:Config` / `$script:ColorCache` 基座, 用户配置必须在缓存预热之前加载)。
+
+**核心脚本清单** [`ShellPrompt/CoreScripts.psd1`](../../ShellPrompt/CoreScripts.psd1) 是"哪些文件必须存在"的**参照集**: 目录驱动的加载看不到"少了文件"(少一个 Private 脚本时加载循环照常跑完, 错误要等用户第一次调用公开命令才暴露)。清单里的每一项都必须在磁盘上存在, 缺失即导入失败并报出该文件的绝对路径。清单与目录的一致性由 `ShellPrompt/Tests/ModuleLoad.Tests.ps1` 断言兜底 —— **新增/删除/重命名 Private 或 Public 下的 `.ps1` 时必须同步更新清单**。
+
+**失败即终止, 不留半初始化状态**: 加载失败时错误信息包含**失败脚本绝对路径** + 原始异常(类型/消息/内部异常/堆栈), 原始异常同时挂为 `InnerException`。模块加载期**不写 `$global:` 变量、不订阅引擎事件、不启动后台 Job**(已全量核对: `$global:Tgui*` 全部写在 TUI 运行期的函数体内, `Start-ThreadJob` 只在 `Private/Submit-TmuxBackgroundTask.ps1` 的函数体内), 因此加载失败不会在会话里留下非托管资源; `$script:` 状态随模块一起丢弃; `Register-ArgumentCompleter` 注册的补全器在模块作用域, `Remove-Module` 时由 PowerShell 自动注销(实测), **不需要**额外的 `OnRemove` 清理逻辑。
+
+## Profile 启动链路的失败语义 (2026-11 可靠性治理)
+
+- **阶段 1 的 5 个文件与模块核心脚本同源** —— 阶段 1 失败 ⇒ 模块导入必然失败。因此阶段 1 不完整时, profile **不注册**依赖模块的公开命令面(`sss` / `Start-TmuxSession` / `ssh-copy-id` / `Copy-SshPublicKey` / `Ensure-ShellPrompt`), 并用 `Write-Error` 明确报出原因, 杜绝"命令存在但一调用就报错"的假可用状态。与模块无关的别名(`ll` / `which`)始终注册。
+- **阶段 1 自检发现"调用了但没加载"的命令** —— 维护者提示, 仍按既有约定只 `Write-Warning` 不阻断启动, 但必须报出缺失项与补齐方式。
+- **欢迎语只在标准输出未被重定向时打印** —— banner 走 `Write-Host`, 在被重定向的标准输出里会污染调用方的管道结果。闸门只看 `[Console]::IsOutputRedirected` 一个信号, 且**判定失败时放行**(照常打印):
+  - 只判"输出是否重定向", 因为只有 stdout 被重定向才会污染管道结果;
+  - **不用** `[Console]::IsInputRedirected` —— 它在 scoop pwsh / Windows Terminal 上有已知的误报(交互终端也返回 true), 用它做闸门会在真实终端上误吞欢迎语(同类说明见 `Private/Get-ConsoleUiBackend.ps1`);
+  - 判定失败即按"交互式"处理, 保证正常启动行为与改动前完全一致。
+- **`Ensure-ShellPrompt` 失败抛终止错误**(不是 `Write-Error`), 且导入后再核对一次导出面(5 个公开命令)—— "导入没抛错"不等于"模块可用", 半初始化模块必须被识别。
+
 ## 配色体系
 
 本节是所有配色键 / Scheme 槽位 / 渲染层取色关系的速查表, 交互式 UI 单轨 Terminal.Gui v2 时代 (2026-10-30 起) 的唯一权威描述。任何颜色改动先查这里再动手。

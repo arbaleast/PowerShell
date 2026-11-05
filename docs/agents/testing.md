@@ -28,6 +28,15 @@ CI 强制以下四条不变量，任何一条不满足都会让 CI 变红：
     `Get-ConsoleUiBackend.Tests.ps1` 断言 `Backend` 恒为 `'TerminalGui'`(AnsiFallback / PSTui GridView 轨均已移除)。
   - **行为测试**: `Update-Weather` / `Copy-SshPublicKey` / `Invoke-TmuxSessionDeletion` 等含 I/O 副作用的函数,
     仅断言"不抛"与"关键调用次数", 不强求输出文本(避免改文案就碎套)。
+  - **故障注入测试**: `ShellPrompt/Tests/ModuleLoad.Tests.ps1` —— 模块加载链路的失败/恢复路径。
+    沙箱副本建在 `.agent_cache/module-load-tests/` 下, **绝不修改仓库真实模块文件**;
+    每个场景在**独立 pwsh 子进程**里跑(宿主进程已加载模块, 会污染"依赖缺失"与
+    "导入失败无残留"的断言), 子进程的 `$env:PSModulePath` 被重定向到沙箱目录。
+    覆盖 9 条关键路径: 核心脚本缺失 / 语法错误 / 加载期抛异常、必需依赖缺失 /
+    依赖加载抛异常、正常加载、重复导入与 `-Force` 重载、`Remove-Module` 后重载、
+    导入失败后修复再导入, 以及导入失败后的会话残留(导出函数 / 别名 / 事件订阅 /
+    Job / 依赖模块)。断言不止 `Should -Throw`, 还必须校验异常消息里含**目标脚本
+    文件名 / 依赖名与具体原因**。
 
 ## 静态分析
 
@@ -59,7 +68,10 @@ CI 强制以下四条不变量，任何一条不满足都会让 CI 变红：
     Error 或新增 Warning ⇒ job 失败；报告落 `.agent_cache/pssa.txt`。
   - `profile`: 装 PowerShell 7.6+ → 跑 `ShellPrompt/Tests/Invoke-ProfileSmoke.ps1`。
     用干净 pwsh 进程加载仓库根的 profile，断言启动链路无 `[ShellPrompt]` 错误/警告、自检通过、
-    `$global:_MARKS` 存在且非空、`Ensure-ShellPrompt` 后模块可导入；失败即 job 失败。
+    `$global:_MARKS` 存在且非空、`Ensure-ShellPrompt` 后模块可导入**且导出命令 5/5 完整、
+    profile 公开命令面(`sss` / `ssh-copy-id` / `Ensure-ShellPrompt`)已注册**；失败即 job 失败。
+    退出码: 0 = 全部通过; 1 = profile 加载/自检失败; 2 = 出现 `[ShellPrompt]` 警告/错误;
+    3 = `_MARKS` 缺失或为空; 4 = 模块导入失败; 5 = 导出面 / 公开命令面不完整。
     starship / fnm / PSReadLine 属于**可选依赖**，runner 上没装不算失败。
 - **运行环境**: `windows-latest`。原因: 当前模块硬编码了 `ssh.exe` / `LOCALAPPDATA` / `TEMP` / `USERPROFILE`，
   套件也是在 Windows 上写的；迁到 `ubuntu-latest` 需要先补跨平台地基。
@@ -94,6 +106,11 @@ CI 强制以下四条不变量，任何一条不满足都会让 CI 变红：
 ## 何时回跑基线
 
 - 新增 / 删除 Private 函数(拆分、合并、抽出)。
+- **新增 / 删除 / 重命名 `Private/` 或 `Public/` 下的 `.ps1` 文件** ——
+  必须同步更新 `ShellPrompt/CoreScripts.psd1` 核心脚本清单,
+  否则模块导入会因"清单里的文件在磁盘上不存在"而失败(这是**故意的**:
+  清单是"哪些文件必须存在"的参照集)。清单与目录的一致性由
+  `ShellPrompt/Tests/ModuleLoad.Tests.ps1` 断言, CI 会直接报出差异。
 - 改动 `ShellPrompt.psd1` 的 `FunctionsToExport` 或 `CmdletsToExport`。
 - 改动 `Microsoft.PowerShell_profile.ps1` Phase 1 dot-source 链。
 - 改动 starship 接管路径(Starship 安装 / `$ENV:STARSHIP_CONFIG` / `$ENV:STARSHIP_DISTRO` 等)。
