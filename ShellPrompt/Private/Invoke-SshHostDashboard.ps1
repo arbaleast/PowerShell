@@ -445,6 +445,13 @@ function Invoke-SshHostDashboard {
             Stop-SshHostDashboardProbe -Probe $state.DetailProbe
             $state.DetailProbe = $null
         }
+        # 被放弃的历史探测同样要收掉(退出时已经没有心跳来收割了)
+        if ($null -ne $state.StaleProbes) {
+            foreach ($stale in @($state.StaleProbes)) {
+                Stop-SshHostDashboardProbe -Probe $stale
+            }
+            $state.StaleProbes.Clear()
+        }
         $global:TguiDashState = $null
         $global:TguiDashStopMethod = $null
         $global:TguiDashAppInstance = $null
@@ -559,6 +566,10 @@ function New-SshHostDashboardState {
         StatusByHost    = @{}
         DetailByHost    = @{}
         DetailProbe     = $null
+        # 被"放弃"的探测(见 Update-SshHostDashboardProbe 第 1 步): 不再需要它的
+        # 结果(RequestId 护栏会丢弃), 但作业本身还在跑 —— 放到这里等它跑完再收,
+        # 避免在 UI 线程上 Stop-Job 把 TUI 冻住。
+        StaleProbes     = [System.Collections.Generic.List[object]]::new()
         ActiveRequestId = ''
         RequestSeq      = 0
         Window          = $null
@@ -1396,9 +1407,39 @@ function Update-SshHostDashboardProbe {
         [object]$State
     )
 
-    # ---- 1. 取消不再需要的详情请求 ----
+    # ---- 0. 收割已结束的"被放弃"探测(只 Remove 已结束的作业, **绝不阻塞**) ----
+    #   这些作业是"主机切换时被放弃"的历史探测: 结果已无意义(RequestId 护栏会
+    #   丢弃), 但作业本身还占着 runspace。这里只在它**已经结束**时 Remove ——
+    #   Remove 一个已结束的作业是瞬时的, 不会像 Stop-Job 那样等它真的停下。
+    if ($State.StaleProbes -and $State.StaleProbes.Count -gt 0) {
+        for ($i = $State.StaleProbes.Count - 1; $i -ge 0; $i--) {
+            $stale = $State.StaleProbes[$i]
+            $staleJob = $null
+            if ($null -ne $stale -and $null -ne $stale.PSObject.Properties['Task']) { $staleJob = $stale.Task }
+            if ($null -eq $staleJob) { $State.StaleProbes.RemoveAt($i); continue }
+            if (-not (Test-SshHostDashboardTaskDone -Task $staleJob)) { continue }
+            try { Remove-Job -Job $staleJob -Force -ErrorAction SilentlyContinue } catch { Write-Verbose [Update-SshHostDashboardProbe] 清理被放弃的探测作业失败:  }
+            $State.StaleProbes.RemoveAt($i)
+        }
+    }
+
+    # ---- 1. 放弃不再需要的详情请求(**不阻塞**) ----
+    # ★ 为什么改成"放弃"而不是 Stop-Job(2026-11 性能审计修复, P0):
+    #   探测作业可能正卡在 .NET WaitForExit 上(远端连不上时最长
+    #   ConnectTimeout+10s), 而 **Stop-Job 与 Remove-Job -Force 都会等作业真的
+    #   停下来** —— 实测把 UI 线程冻住 2.5s / 7.5s(作业还要跑 3s / 8s)。
+    #   本函数跑在 **UI 线程的主循环**里(120ms 心跳), 同步等 = TUI 冻结,
+    #   用户表现为"切主机时界面卡死几秒"。
+    #   而这个探测的结果**本来就不要了**(主机已切换, RequestId 护栏会丢弃),
+    #   所以正确做法是"放手让它跑完, 结束后再收" —— 见上面第 0 步的收割。
     if ($null -ne $State.DetailProbe -and [string]$State.DetailProbe.HostName -ne [string]$State.SelectedHost) {
-        Stop-SshHostDashboardProbe -Probe $State.DetailProbe
+        if ($null -ne $State.StaleProbes) {
+            $State.StaleProbes.Add($State.DetailProbe)
+        }
+        else {
+            # 没有 StaleProbes 槽位(旧状态对象)时退回显式停止
+            Stop-SshHostDashboardProbe -Probe $State.DetailProbe
+        }
         $State.DetailProbe = $null
     }
 
@@ -1630,3 +1671,4 @@ function Set-SshHostDashboardProbeResult {
 
     Update-SshHostDashboardInfoLine -State $State
 }
+
