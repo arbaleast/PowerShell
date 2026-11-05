@@ -33,10 +33,12 @@
       2. 加载过程中没有 [ShellPrompt] 前缀的警告/错误                    -> 退出码 2
       3. $global:_MARKS 存在且非空(需要 SHELLPROMPT_PROFILE_TRACE=1)     -> 退出码 3
       4. Ensure-ShellPrompt 之后 ShellPrompt 模块导入成功                -> 退出码 4
+      5. 导出命令 5/5 完整, 且 profile 公开命令面(sss / ssh-copy-id /
+         Ensure-ShellPrompt)已注册                                      -> 退出码 5
 
     退出码:
       0 = 全部通过; 1 = profile 加载/自检失败; 2 = [ShellPrompt] 警告;
-      3 = _MARKS 缺失或为空; 4 = 模块导入失败。
+      3 = _MARKS 缺失或为空; 4 = 模块导入失败; 5 = 导出面/命令面不完整。
 
     用法 (pwsh 7.6+):
       pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-ProfileSmoke.ps1
@@ -62,6 +64,7 @@ $codeProfile = 1
 $codeWarning = 2
 $codeMarks = 3
 $codeModule = 4
+$codeSurface = 5
 
 # ---------------------------------------------------------------------------
 # 辅助函数
@@ -439,6 +442,36 @@ $module = Get-Module -Name 'ShellPrompt' -ErrorAction SilentlyContinue
 $moduleVersion = ''
 if ($null -ne $module) { $moduleVersion = [string]$module.Version }
 
+# --- 5b) 导出面完整性 ---
+# 关键: "Get-Module 非空"**不等于**"模块可用"。半初始化模块(模块在, 但导出
+# 命令缺了)正是本轮要根除的"假可用状态", 因此必须逐个核对导出命令。
+$expectedExports = @(
+    'Show-UserScoopLogo'
+    'Start-TmuxSession'
+    'Copy-SshPublicKey'
+    'Invoke-Reload'
+    'Update-Weather'
+)
+$exportedCommands = @(Get-Command -Module 'ShellPrompt' -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty Name)
+$missingExports = [System.Collections.Generic.List[string]]::new()
+foreach ($name in $expectedExports) {
+    if ($exportedCommands -notcontains $name) { $missingExports.Add([string]$name) }
+}
+
+# --- 5c) profile 注册的公开命令面 ---
+# sss / ssh-copy-id / Ensure-ShellPrompt 由 profile 注册。启动链不完整时 profile
+# 会**中止**注册(而不是留下调用即报错的空壳), 因此这里断言"要么完整注册, 要么
+# 启动链已明确失败", 不允许出现"注册了一半"的中间态。
+$surfaceMissing = [System.Collections.Generic.List[string]]::new()
+foreach ($name in @('sss', 'ssh-copy-id', 'Ensure-ShellPrompt')) {
+    if (-not (Get-Command -Name $name -ErrorAction SilentlyContinue)) {
+        $surfaceMissing.Add([string]$name)
+    }
+}
+$startupFailedCount = 0
+if ($null -ne $failedRaw) { $startupFailedCount = $failedFiles.Count }
+
 # --- 6) 本子进程自己的判定(退出码与父进程保持同一套优先级) ---
 $shellPromptHit = $false
 foreach ($item in $warning) {
@@ -453,18 +486,26 @@ if ((-not $profileLoaded) -or ($missingCommands.Count -gt 0) -or ($failedFiles.C
     $childExit = 3
 } elseif ($null -eq $module) {
     $childExit = 4
+} elseif ($missingExports.Count -gt 0) {
+    $childExit = 5
+} elseif ($surfaceMissing.Count -gt 0 -and $startupFailedCount -eq 0) {
+    $childExit = 5
 }
 
 $result = [ordered]@{
-    ProfileLoaded   = [bool]$profileLoaded
-    ActualRoot      = [string]$actualRoot
-    MissingCommands = $missingCommands.ToArray()
-    FailedFiles     = $failedFiles.ToArray()
-    MarkCount       = [int]$markCount
-    Warning         = $warning.ToArray()
-    ModuleImported  = ($null -ne $module)
-    ModuleVersion   = $moduleVersion
-    ImportRecord    = $importRecord.ToArray()
+    ProfileLoaded    = [bool]$profileLoaded
+    ActualRoot       = [string]$actualRoot
+    MissingCommands  = $missingCommands.ToArray()
+    FailedFiles      = $failedFiles.ToArray()
+    MarkCount        = [int]$markCount
+    Warning          = $warning.ToArray()
+    ModuleImported   = ($null -ne $module)
+    ModuleVersion    = $moduleVersion
+    ImportRecord     = $importRecord.ToArray()
+    ExportedCommands = $exportedCommands
+    MissingExports   = $missingExports.ToArray()
+    SurfaceMissing   = $surfaceMissing.ToArray()
+    StartupFailedCount = [int]$startupFailedCount
 }
 
 $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resultPath -Encoding UTF8 -Force
@@ -576,11 +617,43 @@ exit $childExit
         }
         Write-SmokeCheck -Name 'ShellPrompt 模块导入' -Passed $moduleOk -Detail $moduleDetail
 
-        # 退出码优先级: 1(加载/自检) > 2(警告) > 3(_MARKS) > 4(模块)
+        # --- 检查 5: 导出面完整 + profile 公开命令面已注册 ---
+        # "模块在"不等于"模块可用": 半初始化模块(缺导出命令)必须被拦下。
+        $missingExportList = [System.Collections.Generic.List[string]]::new()
+        if ($null -ne $result.MissingExports) {
+            foreach ($item in $result.MissingExports) { $missingExportList.Add([string]$item) }
+        }
+        $surfaceMissingList = [System.Collections.Generic.List[string]]::new()
+        if ($null -ne $result.SurfaceMissing) {
+            foreach ($item in $result.SurfaceMissing) { $surfaceMissingList.Add([string]$item) }
+        }
+        $startupFailed = 0
+        if ($null -ne $result.StartupFailedCount) { $startupFailed = [int]$result.StartupFailedCount }
+
+        $exportOk = ($missingExportList.Count -eq 0)
+        $exportDetail = '导出命令 5/5 完整'
+        if (-not $exportOk) {
+            $exportDetail = ('缺少导出命令: {0}' -f ($missingExportList -join ', '))
+            $failureReason.Add(('ShellPrompt 导出面不完整: {0}' -f $exportDetail))
+        }
+        Write-SmokeCheck -Name 'ShellPrompt 导出命令完整' -Passed $exportOk -Detail $exportDetail
+
+        # 公开命令面: 启动链完整时必须已注册; 启动链已失败时 profile 有意不注册
+        # (此时上面"profile 加载 / 启动期自检"已经判失败), 不重复报。
+        $surfaceOk = ($surfaceMissingList.Count -eq 0) -or ($startupFailed -gt 0)
+        $surfaceDetail = 'sss / ssh-copy-id / Ensure-ShellPrompt 均已注册'
+        if (-not $surfaceOk) {
+            $surfaceDetail = ('未注册: {0}' -f ($surfaceMissingList -join ', '))
+            $failureReason.Add(('profile 公开命令面未注册: {0}' -f $surfaceDetail))
+        }
+        Write-SmokeCheck -Name 'profile 公开命令面已注册' -Passed $surfaceOk -Detail $surfaceDetail
+
+        # 退出码优先级: 1(加载/自检) > 2(警告) > 3(_MARKS) > 4(模块) > 5(命令面)
         if (-not $selfCheckOk) { $exitCode = $codeProfile }
         elseif (-not $warningOk) { $exitCode = $codeWarning }
         elseif (-not $marksOk) { $exitCode = $codeMarks }
         elseif (-not $moduleOk) { $exitCode = $codeModule }
+        elseif ((-not $exportOk) -or (-not $surfaceOk)) { $exitCode = $codeSurface }
 
         # 子进程自己也判了一遍, 父进程透传它的退出码(两者口径一致)
         if ($exitCode -eq $codeOk -and $child.ExitCode -ne $codeOk) {
