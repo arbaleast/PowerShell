@@ -48,6 +48,32 @@ function Submit-WttrPrefetch {
         return $null
     }
 
+    # ★ 生命周期护栏(2026-11 生命周期审计修复):
+    #   上一份预取**还在飞**时不要覆盖句柄 —— 覆盖会让那个 ThreadJob 变成
+    #   孤儿: 既不会被 Receive-WttrPrefetch 收割, 也不会被 Remove, 一直占着
+    #   一个 runspace 到进程退出。同一个 URL 的预取没必要重开, 直接复用。
+    $previous = $script:_WttrPrefetchTask
+    if ($null -ne $previous) {
+        $previousJob = $previous.Task
+        $previousState = ''
+        if ($null -ne $previousJob) { $previousState = [string]$previousJob.State }
+        if ($previousState -eq 'Running') {
+            return $previous
+        }
+        # 已结束: 先收割(成功则写进缓存), 再把作业清掉。
+        # 注意 Receive-WttrPrefetch 只在 Completed 分支里清句柄 ——
+        # 失败/超时的作业必须在这里显式 Remove, 否则同样是孤儿。
+        $null = Receive-WttrPrefetch
+        $leftover = $script:_WttrPrefetchTask
+        if ($null -ne $leftover) {
+            $leftoverJob = $leftover.Task
+            if ($null -ne $leftoverJob) {
+                try { Remove-Job -Job $leftoverJob -Force -ErrorAction SilentlyContinue } catch { Write-Verbose [Submit-WttrPrefetch] 清理旧预取作业失败:  }
+            }
+            $script:_WttrPrefetchTask = $null
+        }
+    }
+
     try {
         $script:_WttrPrefetchTask = Submit-TmuxBackgroundTask -ScriptBlock {
                 param($argument)
@@ -112,3 +138,4 @@ function Receive-WttrPrefetch {
     $script:_WttrCache.CacheKey = "CustomUrl|$($script:_WttrTitleUrl)"
     return $true
 }
+
