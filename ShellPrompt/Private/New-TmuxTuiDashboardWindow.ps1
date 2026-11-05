@@ -328,6 +328,12 @@ function New-TmuxTuiDashboardWindow {
                 if ($null -eq $list) { return }
                 if (-not (Move-TmuxTuiSessionSelection -ListView $list -Delta $delta)) { return }
 
+                # 选中行必须可见(2026-11 审计修复): 选中行移出可视区时必须滚动,
+                # 否则 Update-TmuxTuiSessionSelection 会跳过越界槽位 —— 屏幕上
+                # 没有任何一行处于选中态, 而右侧详情卡却已切到新会话(界面自相矛盾)。
+                # 与 SSH 主机仪表盘的 Sync-SshHostDashboardScroll 同构。
+                [void](Sync-TmuxTuiSessionScroll -ListView $list)
+
                 # 选中行变了 -> 右侧详情卡同步(纯本地字段, 无网络)
                 $panel = $global:TguiSessionDetail
                 if ($null -ne $panel) {

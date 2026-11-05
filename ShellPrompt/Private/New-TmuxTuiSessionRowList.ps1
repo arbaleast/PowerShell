@@ -483,3 +483,59 @@ function Move-TmuxTuiSessionSelection {
     [void](Update-TmuxTuiSessionSelection -ListView $ListView -OldIndex $oldIndex -NewIndex $newIndex)
     return $true
 }
+
+function Sync-TmuxTuiSessionScroll {
+    <#
+    .SYNOPSIS
+        保证选中行在可视窗口内(需要时滚动并重填槽位)。
+
+    .DESCRIPTION
+        ★ 为什么必须做(实测缺陷, 2026-11 性能与稳定性审计):
+          Update-TmuxTuiSessionSelection 只刷新"旧行/新行"两个槽位, 且
+          **跳过越界槽位**(slotIdx < 0 或 >= Slots.Count)。当选中行移出
+          可视区(行数 > 可视高度, 这在真实 tmux 环境很常见)时:
+            - 旧行(还在可视区)被取消高亮;
+            - 新行(已在可视区外)**没有任何槽位**承载它 → 不刷新、不显示;
+            - 于是**屏幕上没有任何一行处于选中态**, 而右侧详情卡已经切到
+              新会话 —— 界面自相矛盾, 用户既看不到自己选中了谁, 也无法
+              判断 Enter 会连到哪台机器。
+          实测(100 行 / 可视 10 行, 连按 15 次下移): Top 恒为 0、
+          SelectedIndex=15、处于选中态的槽位数 = 0。
+
+        做法与 SSH 主机仪表盘的 Sync-SshHostDashboardScroll 同构:
+          选中行落在可视区外时, 把 Top 移到能看见它的位置, 再由
+          Set-TmuxTuiSessionScroll 重填槽位(内容没变的槽位会被跳过)。
+
+    .PARAMETER ListView
+        New-TmuxTuiSessionRowList 产物。
+
+    .OUTPUTS
+        [bool] 是否真的滚动了(未滚动返回 $false)。
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$ListView
+    )
+
+    $index = [int]$ListView.SelectedIndex
+    if ($index -lt 0) { return $false }
+
+    $top = [int]$ListView.Top
+    $height = [int]$ListView.Height
+    $target = $top
+    if ($index -lt $top) { $target = $index }
+    elseif ($index -ge ($top + $height)) { $target = $index - $height + 1 }
+
+    $maxTop = [Math]::Max(0, @($ListView.Rows).Count - $height)
+    if ($target -lt 0) { $target = 0 }
+    if ($target -gt $maxTop) { $target = $maxTop }
+
+    if ($target -ne $top) {
+        Set-TmuxTuiSessionScroll -ListView $ListView -Top $target
+        return $true
+    }
+    return $false
+}
