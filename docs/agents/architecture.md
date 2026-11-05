@@ -32,7 +32,29 @@
 - **终端所有权不变量**: `$script:TmuxTerminalOwner` 标记当前谁在管终端 ('Legacy' 默认 / 'Tgui' = TG 独占)。
   - 'Tgui' 下 `Enter-TmuxAlternateScreen` / `Exit-TmuxAlternateScreen` / `Clear-TmuxScreen` **整体静音** —— 不发 `\e[?1049h/l`、不做 `[Console]::Clear`、不改 `$script:TmuxAltScreenActive`, 备用屏生命周期由 TG 的 `Init/Run/Shutdown` 独占 (禁止双层嵌套, 契约测试在 `Enter-TmuxAlternateScreen.Tests.ps1` / `Show-TmuxTuiDashboard.Tests.ps1`)。
   - 业务动作 (附着/新建/SSH/删除) 只在 `Run` 已返回 + `Shutdown` 已交还终端之后, 于主屏幕执行。
-- 主机选择 (`Show-HostSelector` → `Show-SshHostDashboard`) **先于**渲染分支: 无 `-HostName` 时先选主机, 取消选择不进任何仪表盘 (`Start-TmuxSession.TuiDispatch.Tests.ps1`)。
+- 主机选择 (`Show-HostSelector` → `Show-SshHostDashboard`) **先于**渲染分支: 无 `-HostName` 时先选主机, 取消选择不进任何仪表盘 (`Start-TmuxSession.TuiDispatch.Tests.ps1`).
+
+### TUI 导航与异步生命周期契约 (2026-11 性能与稳定性审计)
+
+- **选中行必须始终可见**: `Update-*Selection` 只刷新旧/新两行并**跳过越界槽位**。因此选中行移出可视区时必须滚动, 否则屏幕上**没有任何一行处于选中态**, 而右侧详情卡已切到新会话(界面自相矛盾)。
+  - tmux 侧: `Sync-TmuxTuiSessionScroll` (`Private/New-TmuxTuiSessionRowList.ps1`), 由窗口层 KeyDown 处理器调用, 与 SSH 侧的 `Sync-SshHostDashboardScroll` 同构。
+  - SSH 侧: `Sync-SshHostDashboardScroll` (`Private/Invoke-SshHostDashboard.ps1`)。
+- **UI 线程不得等作业停下来**: `Stop-Job` 与 `Remove-Job -Force` **都会等作业真的停下**; 探测作业可能卡在 `.NET WaitForExit` 上(远端连不上时最长 `ConnectTimeout+10s`), 实测把 UI 线程冻住 2.5s / 7.5s。主机切换时**不再同步停止**, 改为"**放弃**"该探测(结果本来就要被 RequestId 护栏丢弃)→ 放进 `$State.StaleProbes` → 心跳只对**已结束**的作业做 `Remove-Job`(瞬时, 不阻塞) → 腾出的槽位让新主机的探测立即发起。退出时统一收尾。
+- **详情卡的值守卫**: 上下移动时多数字段的原值没变。详情卡用 `RawValues` 登记原值, **原值未变就整段跳过裁剪**(裁剪逐字符测宽, 是按键路径最贵的一步); 实测同值重复刷新 0.576ms → 0.194ms(3.0x)。SSH 详情面板的远端状态字段同样走等值守卫(`Set-SshHostDetailLabelText`), 避免"文字没变却把视图标脏"。
+- **异步结果护栏**: 详情面板回填必须 **RequestId 与 `ActiveRequestId` 一致 且 主机名与当前选中主机一致**(双重匹配); 结果本身仍按主机名缓存(那是该主机的事实, 不是污染)。同一时刻至多一个探测在飞。
+- **宽度口径**: 所有列/详情文本一律经 `Get-SshHostListClip` → `Get-TguiTextWidth`(按**显示宽度**, CJK 计 2 列); 全仓没有用 `.Length`/`Substring` 做列对齐的。已与 vendored `Wcwidth` 4.0.0 逐字符比对: `●▸│…→✗▁█⚠·` 等符号与 CJK **全部一致**(0 处不符)。
+
+### TUI 性能基线 (2026-11 实测, Linux + pwsh 7.6.9, 无头)
+
+| 指标 | 实测 |
+|---|---|
+| 按键处理(含选中态更新) | P50 0.73~0.96ms / P95 ~2.0ms / Max ~16ms |
+| 列表重绘 | 两行重绘 ≈ 14ms/周期; 全量重绘 ≈ 55~63ms/周期(约 4 倍差距 ⇒ 局部重绘确实生效) |
+| 主循环周期 | 25fps → 56ms; 60fps → 45ms; 100fps → 17ms(帧率上限**确实生效**) |
+| 静置 CPU | 25fps 0.67 核 / 60fps 0.72 核 / 100fps 0.75 核(100fps 只多约 12%; 基础占用来自 TG 驱动自身, 与视图数量无关) |
+| 首次装配 | ~0.9s, 其中 `Get-TuiDashboardTheme` 首次 554ms(**一次性 JIT/反射预热**, 第二次起 1.5ms → 0.1ms) |
+| 内存趋势 | 连续移动 200 次: GC 堆 **-4.3MB**, 工作集 +9MB(无泄漏) |
+
 
 ### PSTui TableView 留白约束 (P1.7, 2026-10-19 记录; **已存档**)
 
