@@ -50,18 +50,28 @@ $script:StartupLoadOrder = @(
 # --- 1) 按清单顺序 dot-source ---
 # 注意: dot-source 必须留在 profile 顶层执行 —— 放进函数体内时, 被定义的函数
 # 会随函数作用域一起销毁, 反而拿不到函数。
+#
+# 失败处理 (2026-11 模块可靠性治理):
+#   阶段 1 的 5 个文件**全部来自 ShellPrompt 模块的核心脚本目录**, 模块导入会
+#   加载同一批文件。因此"阶段 1 加载失败"等价于"模块导入必然失败"。
+#   此时必须:
+#     1) 用 Write-Error 明确报错(不是 Write-Warning —— 警告会被当成"可忽略");
+#     2) 记录到 $script:StartupFailedFiles, 供下方**中止模块依赖命令的注册**。
+#   若继续注册 sss / Start-TmuxSession / ssh-copy-id 等包装命令, 用户会拿到
+#   "命令存在但一调用就报错"的假可用状态 —— 这正是本轮要根除的问题。
 $script:StartupFailedFiles = [System.Collections.Generic.List[string]]::new()
 foreach ($rel in $script:StartupLoadOrder) {
     $full = Join-Path $script:StartupBannerDir $rel
     if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
         $script:StartupFailedFiles.Add($rel)
+        Write-Error "[ShellPrompt] 欢迎语依赖脚本缺失 ($rel): $full"
         continue
     }
     try {
         . $full
     } catch {
         $script:StartupFailedFiles.Add($rel)
-        Write-Warning "[ShellPrompt] 欢迎语依赖脚本加载失败 ($rel): $($_.Exception.Message)"
+        Write-Error "[ShellPrompt] 欢迎语依赖脚本加载失败 ($rel): $($_.Exception.Message)"
     }
 }
 Stamp('P1_after_dot_source')
@@ -125,70 +135,152 @@ if ($startupUnresolved.Count -gt 0) {
     }
 }
 
-if ($script:StartupMissingCommands.Count -gt 0 -or $script:StartupFailedFiles.Count -gt 0) {
-    Write-Warning (
-        "[ShellPrompt] 欢迎语依赖加载不完整 —— 缺失命令: {0}; 缺失文件: {1}" -f
-        ($script:StartupMissingCommands -join ', '),
+# --- 3) 启动期结论 ---
+# 3a) 阶段 1 加载不完整 => 模块导入必然失败 => 后续依赖模块的命令**不注册**。
+#     这是"杜绝半残废注册"的关键闸门: 失败要**可诊断**(明确报错 + 明确缺失项),
+#     而不是留下一堆调用即报错的空壳命令。
+$script:StartupChainHealthy = ($script:StartupFailedFiles.Count -eq 0)
+
+if (-not $script:StartupChainHealthy) {
+    Write-Error (
+        "[ShellPrompt] 启动期依赖链不完整 —— 失败文件: {0}。" +
+        "已中止 ShellPrompt 公开命令 (sss / Start-TmuxSession / ssh-copy-id / Copy-SshPublicKey) 的注册: " +
+        "这些命令依赖的模块与阶段 1 共用同一批核心脚本, 导入必然同样失败。" -f
         ($script:StartupFailedFiles -join ', ')
     )
-} else {
+}
+
+# 3b) 启动期自检发现"调用了但没加载"的命令 —— 维护者提示, 不阻断启动
+#     (与既有约定一致: 自检不通过只告警)。但必须把缺失项说清楚。
+if ($script:StartupMissingCommands.Count -gt 0) {
+    Write-Warning (
+        "[ShellPrompt] 启动期自检: 以下命令被调用但当前不可解析 —— {0}。" +
+        "请把对应的定义文件补进 $script:StartupLoadOrder。" -f
+        ($script:StartupMissingCommands -join ', ')
+    )
+}
+
+# 3c) 欢迎语 —— 只在启动链完整且**标准输出未被重定向**时打印。
+#     非交互宿主(管道 / CI / 重定向)不打印: banner 走 Write-Host, 在被重定向
+#     的标准输出里会污染调用方的管道结果(实测: banner 会出现在重定向 stdout 的
+#     第一行, 业务输出被挤到后面)。
+#
+#     闸门只看 [Console]::IsOutputRedirected 一个信号, 且**失败时放行**(打印):
+#       - 只判"输出是否重定向", 因为只有 stdout 被重定向才会污染管道结果;
+#       - 不用 [Console]::IsInputRedirected: 它在 scoop pwsh / Windows Terminal
+#         上有已知的误报(交互终端也返回 true), 用它做闸门会在真实终端上误吞
+#         欢迎语 —— 见 Private/Get-ConsoleUiBackend.ps1 的同类说明;
+#       - 判定失败就按"交互式"处理, 保证正常启动行为与改动前完全一致。
+$startupOutputRedirected = $false
+try {
+    $startupOutputRedirected = [Console]::IsOutputRedirected
+} catch {
+    $startupOutputRedirected = $false
+}
+if ($script:StartupChainHealthy -and $script:StartupMissingCommands.Count -eq 0 -and -not $startupOutputRedirected) {
     Show-UserScoopLogo
 }
 
 # ============================================================
 # 别名 — 保证在 ShellPrompt 模块懒加载前即可使用
 # ============================================================
+# 这两个别名与 ShellPrompt 模块无关, 因此**不受启动链健康度影响**, 始终注册。
 Set-Alias ll Get-ChildItem -ErrorAction SilentlyContinue
 Set-Alias which where.exe -ErrorAction SilentlyContinue
 
 # ============================================================
 # ShellPrompt 懒加载
 # ============================================================
-function Ensure-ShellPrompt {
-    if (-not (Get-Module ShellPrompt)) {
-        $ModulePath = Join-Path $script:ActualRoot "ShellPrompt\ShellPrompt.psd1"
+# 注册前置条件: 阶段 1 (启动期依赖链) 必须完整。
+# 阶段 1 的文件与模块核心脚本同源 —— 阶段 1 失败 => 模块导入必然失败。
+# 此时若仍注册 sss / ssh-copy-id 等包装命令与别名, 用户会拿到"命令存在但
+# 一调用就报错"的假可用状态。因此启动链不完整时, 整块**不注册**, 并已在上面
+# 用 Write-Error 明确报出原因。
+if ($script:StartupChainHealthy) {
+
+    function Ensure-ShellPrompt {
+        <#
+        .SYNOPSIS
+            确保 ShellPrompt 模块已导入(懒加载入口); 失败时抛可定位的终止错误。
+        .DESCRIPTION
+            1) 模块已在会话里且导出面完整 => 直接返回, 不重复导入。
+            2) 模块在会话里但**导出面不完整**(半初始化残留) => 先卸载再重载。
+            3) 否则导入; 导入抛错 => 以终止错误抛出, 错误信息含模块路径与原始异常。
+            4) 导入"没抛错"不等于"可用": 导入后再核对一次导出面, 缺命令即判定失败。
+               这一步是"杜绝假可用状态"的最后一道闸门。
+        #>
+        [CmdletBinding()]
+        [OutputType([void])]
+        param()
+
+        $expected = @(
+            'Show-UserScoopLogo'
+            'Start-TmuxSession'
+            'Copy-SshPublicKey'
+            'Invoke-Reload'
+            'Update-Weather'
+        )
+
+        $module = Get-Module -Name 'ShellPrompt' -ErrorAction SilentlyContinue
+        if ($module) {
+            $missing = @($expected | Where-Object {
+                    -not (Get-Command -Module 'ShellPrompt' -Name $_ -ErrorAction SilentlyContinue)
+                })
+            if ($missing.Count -eq 0) { return }
+            # 模块在会话里但导出不完整 => 半初始化残留, 强制卸载后重载
+            Remove-Module -Name 'ShellPrompt' -Force -ErrorAction SilentlyContinue
+        }
+
+        $ModulePath = Join-Path $script:ActualRoot (Join-Path 'ShellPrompt' 'ShellPrompt.psd1')
         try {
             Import-Module $ModulePath -ErrorAction Stop -Verbose:$false
         } catch {
-            # 暴露真实导入错误，避免上层 wrapper 误判为“模块未正确导入”
-            Write-Error "[ShellPrompt] 模块导入失败 ($ModulePath): $($_.Exception.Message)"
-            return
+            # 抛终止错误而不是 Write-Error: 上层 wrapper 必须能明确区分
+            # "模块没加载成功", 不能继续往下走到"命令不存在"的次生错误上。
+            throw ("[ShellPrompt] 模块导入失败 ({0}): {1}" -f $ModulePath, $_.Exception.Message)
+        }
+
+        $missing = @($expected | Where-Object {
+                -not (Get-Command -Module 'ShellPrompt' -Name $_ -ErrorAction SilentlyContinue)
+            })
+        if ($missing.Count -gt 0) {
+            throw ("[ShellPrompt] 模块导入后导出命令不完整 (缺: {0}), 模块未正确加载: {1}" -f
+                ($missing -join ', '), $ModulePath)
         }
     }
-}
 
-# 公开命令名 wrapper — 懒加载未触发时也能直接调用 Start-TmuxSession
-# 关键:内部通过 Get-Command -Module 获取模块命令对象,避免与自身重名导致无限递归
-function Start-TmuxSession {
-    [CmdletBinding()]
-    param([Parameter(ValueFromRemainingArguments = $true)] [object[]] $Arguments)
-    Ensure-ShellPrompt
-    $cmd = Get-Command -Module ShellPrompt -Name Start-TmuxSession -ErrorAction SilentlyContinue
-    if (-not $cmd) {
-        Write-Error "ShellPrompt 模块未正确导入,无法调用 Start-TmuxSession"
-        return
+    # 公开命令名 wrapper — 懒加载未触发时也能直接调用 Start-TmuxSession
+    # 关键:内部通过 Get-Command -Module 获取模块命令对象,避免与自身重名导致无限递归
+    function Start-TmuxSession {
+        [CmdletBinding()]
+        param([Parameter(ValueFromRemainingArguments = $true)] [object[]] $Arguments)
+        Ensure-ShellPrompt
+        $cmd = Get-Command -Module ShellPrompt -Name Start-TmuxSession -ErrorAction SilentlyContinue
+        if (-not $cmd) {
+            throw "[ShellPrompt] ShellPrompt 模块未正确导入,无法调用 Start-TmuxSession"
+        }
+        & $cmd @Arguments
     }
-    & $cmd @Arguments
-}
 
-# 短别名 — 历史兼容
-Set-Alias -Name sss -Value Start-TmuxSession -Scope Global
+    # 短别名 — 历史兼容
+    Set-Alias -Name sss -Value Start-TmuxSession -Scope Global
 
-# ssh-copy-id wrapper — 懒加载未触发时也能直接调用,避免模块作用域别名在
-# 调用方 shell 不可见的问题（Set-ProfileAliases.ps1 注册的是模块作用域别名,
-# 只在模块内可见,Set-Alias -Scope Global 才是真正的全局别名）
-function Copy-SshPublicKey {
-    [CmdletBinding()]
-    param([Parameter(ValueFromRemainingArguments = $true)] [object[]] $Arguments)
-    Ensure-ShellPrompt
-    $cmd = Get-Command -Module ShellPrompt -Name Copy-SshPublicKey -ErrorAction SilentlyContinue
-    if (-not $cmd) {
-        Write-Error "ShellPrompt 模块未正确导入,无法调用 Copy-SshPublicKey"
-        return
+    # ssh-copy-id wrapper — 懒加载未触发时也能直接调用,避免模块作用域别名在
+    # 调用方 shell 不可见的问题（Set-ProfileAliases.ps1 注册的是模块作用域别名,
+    # 只在模块内可见,Set-Alias -Scope Global 才是真正的全局别名）
+    function Copy-SshPublicKey {
+        [CmdletBinding()]
+        param([Parameter(ValueFromRemainingArguments = $true)] [object[]] $Arguments)
+        Ensure-ShellPrompt
+        $cmd = Get-Command -Module ShellPrompt -Name Copy-SshPublicKey -ErrorAction SilentlyContinue
+        if (-not $cmd) {
+            throw "[ShellPrompt] ShellPrompt 模块未正确导入,无法调用 Copy-SshPublicKey"
+        }
+        & $cmd @Arguments
     }
-    & $cmd @Arguments
+    Set-Alias -Name ssh-copy-id -Value Copy-SshPublicKey -Scope Global -Force
+
 }
-Set-Alias -Name ssh-copy-id -Value Copy-SshPublicKey -Scope Global -Force
 
 # ============================================================
 # 阶段 2：延迟初始化
