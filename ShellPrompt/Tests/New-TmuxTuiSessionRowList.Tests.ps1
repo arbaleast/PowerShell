@@ -7,14 +7,18 @@
 #   2. New-TmuxTuiSessionRowList: 槽位数 == 可视高度, 容器 CanFocus 为真
 #      (方向键由编排层在 KeyDown 里实现), 首帧槽位 RowIndex 反映真实行,
 #      选中槽位 Selected 为真, 越界 SelectedIndex 被容忍;
-#   3. Set-TmuxTuiSessionSlot: 选中行整行换 Selected 配色, 未选中行用正文配色,
-#      状态点配色跟随 Attached/Detached(选中行用 Selected* 变体),
-#      名称/状态/窗口数分别落到对应标签, 空格位(RowIndex=-1)清空全部内容标签;
+#   3. Set-TmuxTuiSessionSlot: 选中行用 SelectionBg(蓝底) + ▎ 指示符,
+#      行内文本一律提亮(绝无 DarkGray); 未选中行用正文配色,
+#      状态点配色跟随 Attached(绿)/Detached(灰), 未选中 Attached 状态文本
+#      走 AttachedText(状态联动), 名称/状态/窗口数分别落到对应标签,
+#      空格位(RowIndex=-1)清空全部内容标签;
 #   4. Update-TmuxTuiSessionSelection: 同下标幂等返回 $false, 换行返回 $true
 #      并同步 SelectedIndex, **只重写旧/新两行**(性能契约: 脏区只两行);
 #   5. Set-TmuxTuiSessionScroll: Top 夹紧到 [0, max(0, 行数-高度)], 超出末行的
 #      槽位被清空, 内容未变的槽位不被重写(跳过未变槽位);
-#   6. Move-TmuxTuiSessionSelection: 边界夹取(不环绕), 中间移动恰好一行。
+#   6. Move-TmuxTuiSessionSelection: 边界夹取(不环绕), 中间移动恰好一行;
+#   7. 阶段一(2026-11-06)可读性契约: 选中行底色**不是洋红**, 选中行任何
+#      文本片段都不得是 DarkGray 前景。
 #
 # 说明: Terminal.Gui 视图可以在无 TTY 的环境下**构造**(不进事件循环),
 #       本文件只组装/刷新视图, 不 Init / 不 Run。
@@ -171,7 +175,7 @@ Describe 'Set-TmuxTuiSessionSlot: 槽位渲染与配色' {
         $script:mod = Get-Module -Name 'ShellPrompt'
     }
 
-    It '选中行背景用 Selected 方案(紫底), 未选中行背景用正文 Text 方案' {
+    It '选中行背景用 SelectionBg(蓝底), 未选中行背景用正文 Text 方案' {
         $result = & $script:mod {
             $tg = Get-TguiContext
             $theme = Get-TuiDashboardTheme -Tgui $tg
@@ -181,12 +185,100 @@ Describe 'Set-TmuxTuiSessionSlot: 槽位渲染与配色' {
             )
             $lv = New-TmuxTuiSessionRowList -Rows $rows -Width 56 -Height 3 -SelectedIndex 0 -Theme $theme -Tgui $tg
             [PSCustomObject]@{
-                SelectedBg   = ($lv.Slots[0].Bg.GetScheme() -eq $theme.Selected)
+                SelectedBg   = ($lv.Slots[0].Bg.GetScheme() -eq $theme.SelectionBg)
                 UnselectedBg = ($lv.Slots[1].Bg.GetScheme() -eq $theme.Text)
             }
         }
         $result.SelectedBg | Should -BeTrue
         $result.UnselectedBg | Should -BeTrue
+    }
+
+    It '选中行底色**不是**洋红(不再使用 theme.Selected 的洋红底)' {
+        # 2026-11-06 阶段一: 洋红底 + 行首绿点造成红绿眩光, 且洋红底上残留
+        # DarkGray 文字几乎不可读。选中行改为蓝底(SelectionBg)。
+        $result = & $script:mod {
+            $tg = Get-TguiContext
+            $theme = Get-TuiDashboardTheme -Tgui $tg
+            $rows = @(
+                [PSCustomObject]@{ No = 1; Session = 'alpha'; Status = 'Attached'; Windows = 2; Name = 'alpha' }
+            )
+            $lv = New-TmuxTuiSessionRowList -Rows $rows -Width 56 -Height 3 -SelectedIndex 0 -Theme $theme -Tgui $tg
+            $selBg = $lv.Slots[0].Bg.GetScheme()
+            $magenta = $theme.Selected
+            [PSCustomObject]@{
+                IsMagentaScheme = ($selBg -eq $magenta)
+                SelBgRgb         = "$($selBg.Normal.Background.R),$($selBg.Normal.Background.G),$($selBg.Normal.Background.B)"
+                MagentaBgRgb     = "$($magenta.Normal.Background.R),$($magenta.Normal.Background.G),$($magenta.Normal.Background.B)"
+                IsSelectionBg    = ($selBg -eq $theme.SelectionBg)
+            }
+        }
+        $result.IsMagentaScheme | Should -BeFalse -Because '选中行不得再使用洋红底方案'
+        $result.SelBgRgb | Should -Not -Be $result.MagentaBgRgb -Because '选中行背景 RGB 不得是洋红'
+        $result.IsSelectionBg | Should -BeTrue -Because '选中行底色必须走 SelectionBg 语义方案'
+    }
+
+    It '选中行首字符是 ▎(U+258E)并用 SelectionDot 方案' {
+        $result = & $script:mod {
+            $tg = Get-TguiContext
+            $theme = Get-TuiDashboardTheme -Tgui $tg
+            $rows = @(
+                [PSCustomObject]@{ No = 1; Session = 'alpha'; Status = 'Attached'; Windows = 2; Name = 'alpha' }
+            )
+            $lv = New-TmuxTuiSessionRowList -Rows $rows -Width 56 -Height 3 -SelectedIndex 0 -Theme $theme -Tgui $tg
+            [PSCustomObject]@{
+                DotText  = [string]$lv.Slots[0].Dot.Text
+                IsDot    = ($lv.Slots[0].Dot.GetScheme() -eq $theme.SelectionDot)
+                DotColor = "$($theme.SelectionDot.Normal.Foreground.R),$($theme.SelectionDot.Normal.Foreground.G),$($theme.SelectionDot.Normal.Foreground.B)"
+            }
+        }
+        $result.DotText | Should -BeExactly ([string][char]0x258E) -Because '选中行用 ▎ 锚定"这一行被选中"'
+        $result.IsDot | Should -BeTrue
+    }
+
+    It '选中行任何文本片段都不得是 DarkGray 前景(暗字压蓝底不可读)' {
+        $result = & $script:mod {
+            $tg = Get-TguiContext
+            $theme = Get-TuiDashboardTheme -Tgui $tg
+            $rows = @(
+                [PSCustomObject]@{ No = 1; Session = 'alpha'; Status = 'Attached'; Windows = 2; Name = 'alpha' }
+            )
+            $lv = New-TmuxTuiSessionRowList -Rows $rows -Width 56 -Height 3 -SelectedIndex 0 -Theme $theme -Tgui $tg
+            $dimRgb = "$($theme.Dim.Normal.Foreground.R),$($theme.Dim.Normal.Foreground.G),$($theme.Dim.Normal.Foreground.B)"
+            $slot = $lv.Slots[0]
+            $segments = @($slot.Dot, $slot.Name, $slot.Status, $slot.Windows)
+            $dark = @()
+            foreach ($seg in $segments) {
+                $rgb = "$($seg.GetScheme().Normal.Foreground.R),$($seg.GetScheme().Normal.Foreground.G),$($seg.GetScheme().Normal.Foreground.B)"
+                if ($rgb -eq $dimRgb) { $dark += $seg.Text }
+            }
+            [PSCustomObject]@{
+                DarkSegments = @($dark)
+                NameRgb      = "$($slot.Name.GetScheme().Normal.Foreground.R),$($slot.Name.GetScheme().Normal.Foreground.G),$($slot.Name.GetScheme().Normal.Foreground.B)"
+                WinRgb       = "$($slot.Windows.GetScheme().Normal.Foreground.R),$($slot.Windows.GetScheme().Normal.Foreground.G),$($slot.Windows.GetScheme().Normal.Foreground.B)"
+            }
+        }
+        @($result.DarkSegments).Count | Should -Be 0 -Because '选中行不允许残留 DarkGray 文本'
+        # 选中行会话名与窗口数必须是"最亮的白"(White)
+        $white = '255,255,255'
+        $result.NameRgb | Should -Be $white
+        $result.WinRgb | Should -Be $white
+    }
+
+    It '选中行会话名与窗口数用 SelectionBgText 方案(白 on 蓝)' {
+        $result = & $script:mod {
+            $tg = Get-TguiContext
+            $theme = Get-TuiDashboardTheme -Tgui $tg
+            $rows = @(
+                [PSCustomObject]@{ No = 1; Session = 'alpha'; Status = 'Attached'; Windows = 2; Name = 'alpha' }
+            )
+            $lv = New-TmuxTuiSessionRowList -Rows $rows -Width 56 -Height 3 -SelectedIndex 0 -Theme $theme -Tgui $tg
+            [PSCustomObject]@{
+                Name   = ($lv.Slots[0].Name.GetScheme() -eq $theme.SelectionBgText)
+                Windows = ($lv.Slots[0].Windows.GetScheme() -eq $theme.SelectionBgText)
+            }
+        }
+        $result.Name | Should -BeTrue
+        $result.Windows | Should -BeTrue
     }
 
     It '状态点配色跟随 Attached(绿) / Detached(灰)' {
@@ -207,7 +299,7 @@ Describe 'Set-TmuxTuiSessionSlot: 槽位渲染与配色' {
         $result.Detached | Should -BeTrue
     }
 
-    It '选中行的状态点用 Selected* 变体(语义色不变, 只换底色)' {
+    It '未选中行首字符: Attached 是 ●(U+25CF), Detached 是 ○(U+25CB)' {
         $result = & $script:mod {
             $tg = Get-TguiContext
             $theme = Get-TuiDashboardTheme -Tgui $tg
@@ -215,26 +307,89 @@ Describe 'Set-TmuxTuiSessionSlot: 槽位渲染与配色' {
                 [PSCustomObject]@{ No = 1; Session = 'alpha'; Status = 'Attached'; Windows = 2; Name = 'alpha' }
                 [PSCustomObject]@{ No = 2; Session = 'beta'; Status = 'Detached'; Windows = 3; Name = 'beta' }
             )
-            $lv = New-TmuxTuiSessionRowList -Rows $rows -Width 56 -Height 3 -SelectedIndex 0 -Theme $theme -Tgui $tg
+            $lv = New-TmuxTuiSessionRowList -Rows $rows -Width 56 -Height 3 -SelectedIndex -1 -Theme $theme -Tgui $tg
             [PSCustomObject]@{
-                SelAttached = ($lv.Slots[0].Dot.GetScheme() -eq $theme.SelectedAttached)
-                SelDetached = ($lv.Slots[1].Dot.GetScheme() -eq $theme.SelectedDetached)
+                AttachedDot = [string]$lv.Slots[0].Dot.Text
+                DetachedDot = [string]$lv.Slots[1].Dot.Text
             }
         }
-        # 第 0 行是选中行(Attached)
-        $result.SelAttached | Should -BeTrue
-        # 第 1 行未选中, 仍是普通 Detached 配色
-        $result.SelDetached | Should -BeFalse
+        $result.AttachedDot | Should -BeExactly ([string][char]0x25CF)
+        $result.DetachedDot | Should -BeExactly ([string][char]0x25CB)
     }
 
-    It '名称 / 状态 / 窗口数分别落到对应标签' {
+    It '状态联动: 未选中 Attached 行的状态文本用 AttachedText 方案(亮绿)' {
+        # 2026-11-06 阶段一核心修复: 右侧详情面板与顶部统计已经是绿的,
+        # 左侧 Attached 文本却还是暗灰 —— 三处状态色必须同源。
+        $result = & $script:mod {
+            $tg = Get-TguiContext
+            $theme = Get-TuiDashboardTheme -Tgui $tg
+            $rows = @(
+                [PSCustomObject]@{ No = 1; Session = 'alpha'; Status = 'Attached'; Windows = 2; Name = 'alpha' }
+                [PSCustomObject]@{ No = 2; Session = 'beta'; Status = 'Detached'; Windows = 3; Name = 'beta' }
+            )
+            $lv = New-TmuxTuiSessionRowList -Rows $rows -Width 56 -Height 3 -SelectedIndex -1 -Theme $theme -Tgui $tg
+            [PSCustomObject]@{
+                Attached = ($lv.Slots[0].Status.GetScheme() -eq $theme.AttachedText)
+                Detached = ($lv.Slots[1].Status.GetScheme() -eq $theme.Detached)
+                AttachedText = [string]$lv.Slots[0].Status.Text
+                DetachedText = [string]$lv.Slots[1].Status.Text
+            }
+        }
+        $result.Attached | Should -BeTrue -Because '未选中 Attached 状态文本必须用 AttachedText(亮绿)'
+        $result.Detached | Should -BeTrue -Because '未选中 Detached 状态文本用 Detached(暗灰)'
+        $result.AttachedText | Should -BeExactly 'Attached'
+        $result.DetachedText | Should -BeExactly 'Detached'
+    }
+
+    It '选中行状态文本: Attached 用 SelectionAttached(亮绿 on 蓝), Detached 用 SelectionDetached(白 on 蓝)' {
+        $result = & $script:mod {
+            $tg = Get-TguiContext
+            $theme = Get-TuiDashboardTheme -Tgui $tg
+            $rows = @(
+                [PSCustomObject]@{ No = 1; Session = 'alpha'; Status = 'Attached'; Windows = 2; Name = 'alpha' }
+                [PSCustomObject]@{ No = 2; Session = 'beta'; Status = 'Detached'; Windows = 3; Name = 'beta' }
+            )
+            $lvA = New-TmuxTuiSessionRowList -Rows $rows -Width 56 -Height 3 -SelectedIndex 0 -Theme $theme -Tgui $tg
+            $lvD = New-TmuxTuiSessionRowList -Rows $rows -Width 56 -Height 3 -SelectedIndex 1 -Theme $theme -Tgui $tg
+            [PSCustomObject]@{
+                SelAttached = ($lvA.Slots[0].Status.GetScheme() -eq $theme.SelectionAttached)
+                SelDetached = ($lvD.Slots[1].Status.GetScheme() -eq $theme.SelectionDetached)
+                SelAttachedRgb = "$($theme.SelectionAttached.Normal.Foreground.R),$($theme.SelectionAttached.Normal.Foreground.G),$($theme.SelectionAttached.Normal.Foreground.B)"
+                SelDetachedRgb = "$($theme.SelectionDetached.Normal.Foreground.R),$($theme.SelectionDetached.Normal.Foreground.G),$($theme.SelectionDetached.Normal.Foreground.B)"
+            }
+        }
+        $result.SelAttached | Should -BeTrue
+        $result.SelDetached | Should -BeTrue
+        # 亮绿 / 白 —— 都不是暗灰
+        $result.SelAttachedRgb | Should -Be '22,198,12'
+        $result.SelDetachedRgb | Should -Be '255,255,255'
+    }
+
+    It '未选中行: 会话名用 Text(白), 窗口数用 Subtle(灰)' {
+        $result = & $script:mod {
+            $tg = Get-TguiContext
+            $theme = Get-TuiDashboardTheme -Tgui $tg
+            $rows = @(
+                [PSCustomObject]@{ No = 1; Session = 'alpha'; Status = 'Attached'; Windows = 2; Name = 'alpha' }
+            )
+            $lv = New-TmuxTuiSessionRowList -Rows $rows -Width 56 -Height 3 -SelectedIndex -1 -Theme $theme -Tgui $tg
+            [PSCustomObject]@{
+                Name    = ($lv.Slots[0].Name.GetScheme() -eq $theme.Text)
+                Windows = ($lv.Slots[0].Windows.GetScheme() -eq $theme.Subtle)
+            }
+        }
+        $result.Name | Should -BeTrue
+        $result.Windows | Should -BeTrue
+    }
+
+    It '名称 / 状态 / 窗口数分别落到对应标签(未选中行)' {
         $result = & $script:mod {
             $tg = Get-TguiContext
             $theme = Get-TuiDashboardTheme -Tgui $tg
             $rows = @(
                 [PSCustomObject]@{ No = 1; Session = 'alpha'; Status = 'Attached'; Windows = 7; Name = 'alpha' }
             )
-            $lv = New-TmuxTuiSessionRowList -Rows $rows -Width 56 -Height 3 -SelectedIndex 0 -Theme $theme -Tgui $tg
+            $lv = New-TmuxTuiSessionRowList -Rows $rows -Width 56 -Height 3 -SelectedIndex -1 -Theme $theme -Tgui $tg
             $slot = $lv.Slots[0]
             [PSCustomObject]@{
                 Name    = [string]$slot.Name.Text

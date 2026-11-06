@@ -149,6 +149,8 @@ function New-TmuxTuiShortcutList {
                 BindApp      = $BindApp
                 Enabled      = $Enabled
                 NoDispatch   = $NoDispatch
+                # 阶段一: 展示用键名(可与真实绑定键不同 —— 如 'q/Esc' 合并项)
+                DisplayKey   = $null
             }) | Out-Null
     }
 
@@ -194,6 +196,35 @@ function New-TmuxTuiShortcutList {
     # 应用级已有的 Esc->Quit 绑定冲突(见文件头"派发接线"第 2 条)。
     & $addCandidate 'Esc' '退出' 'Quit' 7 99 $false $true $true
 
+    # ================================================================
+    # 阶段一(2026-11-06): Esc 与 q 合并为**单一展示项** "q/Esc 退出"
+    # ================================================================
+    # 旧实现: 尾部是 "| q 退出 | Esc 退出" —— 同一个动作(q 与 Esc 都退出)
+    #   在底栏出现两次, 视觉冗余, 且 Esc 项是纯展示(no-op)项。
+    # 新实现: 只保留**一个** q/Esc 展示项(展示键名 "q/Esc"), 底层**仍然同时
+    #   响应 q 与 Esc 两个键** —— 快捷键栏是"展示", 不是键位契约的唯一来源:
+    #     - q  : 走 Shortcut.Action -> 动作值 'Quit' -> 编排层 RequestStop;
+    #     - Esc: 走 TG 内建的 Esc->Quit(应用级键表已绑定, 见文件头第 2 条),
+    #            外加列表容器 KeyDown 里的 Test-TguiQuitKey 兜底。
+    #   两个键都仍然有效, 只是底栏不再重复展示两次。
+    #
+    # ★ 合并在**取舍之前**做: 被合并后的项按 "q/Esc 退出" 的宽度参与预算,
+    #   这样宽屏与窄屏看到的都是同一个形态(不会出现宽屏合并、窄屏又分家)。
+    $quitCand = @($candidates | Where-Object { $_.ActionValue -eq 'Quit' -and $_.KeyName -ne 'Esc' })[0]
+    $escCand = @($candidates | Where-Object { $_.KeyName -eq 'Esc' })[0]
+    if ($null -ne $quitCand -and $null -ne $escCand) {
+        $quitCand.DisplayKey = 'q/Esc'    # 展示用键名; 真实绑定键仍是 q
+        $quitCand.Title = '退出'
+        $quitCand.NoDispatch = $false
+        $quitCand.DisplayOrder = [Math]::Min($quitCand.DisplayOrder, $escCand.DisplayOrder)
+        # Esc 候选直接丢弃(它的职责被 q/Esc 一项完全覆盖)
+        [void]$candidates.Remove($escCand)
+    }
+    elseif ($null -ne $escCand) {
+        # 理论上到不了这里(q 的优先级高于 Esc, 两者总在同一个候选集里)
+        $escCand.NoDispatch = $true
+    }
+
     # ---- 按可用宽度取舍 ----
     $selected = @($candidates)
     if ($WindowWidth -gt 0) {
@@ -204,7 +235,9 @@ function New-TmuxTuiShortcutList {
         $stopped = $false
         foreach ($c in ($candidates | Sort-Object -Property Priority)) {
             if ($stopped) { continue }
-            $content = (Get-TguiTextWidth -Text ([string]$c.KeyName)) + (Get-TguiTextWidth -Text ([string]$c.Title))
+            # 展示键名参与宽度计算(合并项是 "q/Esc", 比 "q" 宽)
+            $displayName = if ($null -ne $c.DisplayKey) { [string]$c.DisplayKey } else { [string]$c.KeyName }
+            $content = (Get-TguiTextWidth -Text $displayName) + (Get-TguiTextWidth -Text ([string]$c.Title))
             $add = $content + $gap
             if ($used + $add -le $budget) {
                 $chosen.Add($c) | Out-Null
@@ -227,7 +260,7 @@ function New-TmuxTuiShortcutList {
         #           热键会额外触发一次本项 Action, 与 TG 内建 Esc->Quit 各走一遍
         #           —— 键盘注入用例出现双 Quit)。按文件头既定契约, Esc 退出统一
         #           走 TG 内建路径, 展示项动作改为 no-op。
-        param($keyName, $title, $actionValue, $BindApp = $true, $Enabled = $true, $NoDispatch = $false)
+        param($keyName, $title, $actionValue, $BindApp = $true, $Enabled = $true, $NoDispatch = $false, $DisplayKey = $null)
         if (-not $NoDispatch) {
             $global:TguiActionDispatch = $Dispatch
             $escaped = ([string]$actionValue).Replace("'", "''")
@@ -236,10 +269,18 @@ function New-TmuxTuiShortcutList {
         } else {
             $actionDelegate = [System.Action]([scriptblock]::Create(''))
         }
+        # $keyName 是**真实绑定键**(TG 的 Key 静态属性名);
+        # $DisplayKey 只是**展示用的键名文字**(可以是 'q/Esc' 这种合并写法)——
+        # TG 的 KeyView 直接渲染 Key 对象, 所以合并写法只能靠 Title 承载,
+        # 这里把 'q/Esc' 的前半段作为真实键(q), 并把完整写法写进 Title 前缀。
         $keyObj = $keyType.GetProperty($keyName).GetValue($null)
+        $finalTitle = $title
+        if ($null -ne $DisplayKey -and [string]$DisplayKey -cne [string]$keyName) {
+            $finalTitle = "$DisplayKey $title"
+        }
         $sc = [System.Activator]::CreateInstance(
             $shortcutType,
-            @($keyObj, $title, $actionDelegate, ''))
+            @($keyObj, $finalTitle, $actionDelegate, ''))
         # Command 必须保持 NotBound: 与 Accept 同时出现会死循环崩进程(见文件头)
         $sc.Command = [Enum]::Parse($tg.Types.Command, 'NotBound')
         $sc.BindKeyToApplication = [bool]$BindApp
@@ -247,10 +288,10 @@ function New-TmuxTuiShortcutList {
         $result.Add($sc) | Out-Null
     }
 
-    # 显示序 = 动作定义顺序(Enter 附着 / n 新建 / r 刷新 / s SSH / x 删除 / q 退出 / Esc)
+    # 显示序 = 动作定义顺序(Enter 附着 / n 新建 / r 刷新 / s SSH / x 删除 / q/Esc 退出)
     $ordered = @($selected | Sort-Object -Property DisplayOrder)
     foreach ($c in $ordered) {
-        & $appendShortcut $c.KeyName $c.Title $c.ActionValue $c.BindApp $c.Enabled $c.NoDispatch
+        & $appendShortcut $c.KeyName $c.Title $c.ActionValue $c.BindApp $c.Enabled $c.NoDispatch $c.DisplayKey
     }
 
     return $result.ToArray()

@@ -14,6 +14,13 @@
 #   Label(空格文本)提供 —— 实测 Label 会按自身 Scheme 刷背景色,
 #   所以"选中行整行紫底"是真实背景而不是字符模拟。
 #
+# ★ 2026-11-06 阶段一(视觉层级与可读性修复):
+#   选中行不再用 BrightMagenta 整行铺底(红绿眩光 + 暗字压亮底不可读),
+#   改为 Blue 低对比底 + BrightCyan 指示符 ▎ 锚定; 选中行内**所有**
+#   文本片段强制提亮(会话名/窗口数 = White, Detached 提亮到 White),
+#   严禁残留 DarkGray。未选中行的 Attached 文本改为**亮绿**, 与右侧
+#   详情面板与顶部统计形成"状态联动"。
+#
 # ★ 为什么移动选中不重建 View:
 #   槽位是**固定**的(数量 = 列表可视高度), 滚动时复用槽位重填内容。
 #   重建 View 会让 TG 重排整棵树, 那才是性能倒退。
@@ -31,9 +38,15 @@ function Get-TmuxTuiSessionRowGeometry {
         按会话列表可视宽度算出各列的 X 偏移与宽度(列几何的唯一计算点)。
 
     .DESCRIPTION
-        列固定为: 状态点(2) | 会话名(吃满) | 状态(9, 右对齐) | 窗口数(6, 右对齐)。
+        列固定为: 指示符(2) | 会话名(吃满) | 状态(9, 右对齐) | 窗口数(6, 右对齐)。
         会话名优先(占满剩余宽度), 次要信息(状态/窗口数)固定宽度右对齐 ——
         与主机列表同一套"名称优先、次要信息降权"的排布原则。
+
+        ★ 2026-11-06 阶段一: 最左侧新增**选中指示符列**(原状态点列改名):
+          - 未选中行: 该列显示状态点(● Attached 亮绿 / ○ Detached 暗灰);
+          - 选中行  : 该列显示 ▎(BrightCyan), 作为"这一行被选中"的强视觉锚点。
+          状态点的语义**不丢** —— 选中行把状态色搬到右侧状态文本上
+          (Attached 恒亮绿), 详见 Set-TmuxTuiSessionSlot。
 
     .PARAMETER Width
         列表可视宽度(列)。
@@ -197,7 +210,8 @@ function New-TmuxTuiSessionRowList {
         $rowView.Height = $dimAbsolute.Invoke($null, @(1))
         [void]$rowView.SetScheme($Theme.Text)
 
-        # 背景条: 整行宽的空格 Label —— 选中时换成紫底方案, 得到"整行高亮"
+        # 背景条: 整行宽的空格 Label —— 选中时换成暗蓝底方案, 得到"整行高亮"
+        # (阶段一: 取代旧的高饱和洋红底, 低对比不刺眼且行内文字都提得亮)
         $bg = [System.Activator]::CreateInstance($labelType)
         $bg.Text = (' ' * $Width)
         $bg.Width = $dimAbsolute.Invoke($null, @($Width))
@@ -227,7 +241,7 @@ function New-TmuxTuiSessionRowList {
         $dot = New-SessionRowLabel -X $geo.DotX -W $geo.DotWidth -Text '' -Scheme $Theme.Detached
         $name = New-SessionRowLabel -X $geo.NameX -W $geo.NameWidth -Text '' -Scheme $Theme.Text
         $status = New-SessionRowLabel -X $geo.StatusX -W ([Math]::Max(1, $geo.StatusWidth)) -Text '' -Scheme $Theme.Detached -RightAlign $true
-        $windows = New-SessionRowLabel -X $geo.WindowsX -W $geo.WindowsWidth -Text '' -Scheme $Theme.Dim -RightAlign $true
+        $windows = New-SessionRowLabel -X $geo.WindowsX -W $geo.WindowsWidth -Text '' -Scheme $Theme.Subtle -RightAlign $true
 
         foreach ($lbl in @($bg, $dot, $name, $status, $windows)) { [void]$rowView.Add($lbl) }
         [void]$container.Add($rowView)
@@ -326,24 +340,71 @@ function Set-TmuxTuiSessionSlot {
     $row = $ListView.Rows[$RowIndex]
     $isAttached = ([string]$row.Status -eq 'Attached')
 
-    # ---- 背景条 + 各列配色(选中态换"紫底"配套方案) ----
-    [void]$slot.Bg.SetScheme($(if ($Selected) { $theme.Selected } else { $theme.Text }))
+    # ================================================================
+    # 配色映射表(2026-11-06 阶段一 · 选中态可读性修复)
+    # ================================================================
+    # 未选中行(Normal):
+    #   背景   Black                (正文底)
+    #   指示符 ● Attached 亮绿 / ○ Detached 暗灰
+    #   会话名 White               (会话名恒为白色, 不被状态色污染)
+    #   状态   Attached 亮绿 / Detached 暗灰   <- 状态联动(阶段一核心修复:
+    #          右侧详情面板已经是绿的, 左侧 Attached 文本却还是暗灰)
+    #   窗口数 Gray                (次要信息降权, 但不用 DarkGray 以免看不见)
+    #
+    # 选中行(Selected):
+    #   背景   Blue(白字蓝底)      <- **彻底移除 BrightMagenta 整行底**
+    #          (旧实现在洋红底上残留 DarkGray 文字, 暗字压亮底几乎不可读;
+    #           洋红底还会与行首绿点产生红绿眩光冲突)
+    #   指示符 ▎ BrightCyan         <- 强视觉锚点, 明确"这一行被选中"
+    #   会话名 White                <- 强制提亮, 不许残留暗色
+    #   状态   Attached 亮绿 / Detached 提亮为 White
+    #          (Detached 在暗蓝底上用 DarkGray 依旧不可读, 故提亮)
+    #   窗口数 White                <- 强制提亮
+    #
+    # 不变量(测试断言): 选中行的**任何**文本片段都不得是 DarkGray 前景。
+    if ($Selected) {
+        [void]$slot.Bg.SetScheme($theme.SelectionBg)
+        $slot.Dot.Text = [string][char]0x258E   # ▎ 选中指示符
+        [void]$slot.Dot.SetScheme($theme.SelectionDot)
 
-    $dotScheme = if ($isAttached) {
-        $(if ($Selected) { $theme.SelectedAttached } else { $theme.Attached })
+        $slot.Name.Text = Get-SshHostListClip -Text ([string]$row.Session) -Width $geo.NameWidth
+        [void]$slot.Name.SetScheme($theme.SelectionBgText)
+
+        if ($geo.StatusWidth -gt 0) {
+            $slot.Status.Text = Get-SshHostListClip -Text ([string]$row.Status) -Width $geo.StatusWidth
+            [void]$slot.Status.SetScheme($(if ($isAttached) { $theme.SelectionAttached } else { $theme.SelectionDetached }))
+        }
+        else {
+            $slot.Status.Text = ''
+        }
+
+        $windowsText = ''
+        try { $windowsText = [string][int]$row.Windows } catch { $windowsText = '' }
+        $slot.Windows.Text = Get-SshHostListClip -Text $windowsText -Width $geo.WindowsWidth
+        [void]$slot.Windows.SetScheme($theme.SelectionBgText)
+        return
+    }
+
+    # ---- 未选中行 ----
+    [void]$slot.Bg.SetScheme($theme.Text)
+
+    if ($isAttached) {
+        $slot.Dot.Text = [string][char]0x25CF   # ●
+        [void]$slot.Dot.SetScheme($theme.Attached)
     }
     else {
-        $(if ($Selected) { $theme.SelectedDetached } else { $theme.Detached })
+        $slot.Dot.Text = [string][char]0x25CB   # ○
+        [void]$slot.Dot.SetScheme($theme.Detached)
     }
-    $slot.Dot.Text = [string][char]0x25CF   # ●
-    [void]$slot.Dot.SetScheme($dotScheme)
 
     $slot.Name.Text = Get-SshHostListClip -Text ([string]$row.Session) -Width $geo.NameWidth
-    [void]$slot.Name.SetScheme($(if ($Selected) { $theme.Selected } else { $theme.Text }))
+    [void]$slot.Name.SetScheme($theme.Text)
 
     if ($geo.StatusWidth -gt 0) {
         $slot.Status.Text = Get-SshHostListClip -Text ([string]$row.Status) -Width $geo.StatusWidth
-        [void]$slot.Status.SetScheme($(if ($Selected) { $theme.SelectedMeta } else { $theme.Dim }))
+        # ★ 状态联动(阶段一修复): Attached 文本必须是**亮绿**, 与右侧详情面板
+        #   与顶部统计的绿点/绿字形成同一套视觉语言; Detached 用暗灰(空闲)。
+        [void]$slot.Status.SetScheme($(if ($isAttached) { $theme.AttachedText } else { $theme.Detached }))
     }
     else {
         $slot.Status.Text = ''
@@ -352,7 +413,7 @@ function Set-TmuxTuiSessionSlot {
     $windowsText = ''
     try { $windowsText = [string][int]$row.Windows } catch { $windowsText = '' }
     $slot.Windows.Text = Get-SshHostListClip -Text $windowsText -Width $geo.WindowsWidth
-    [void]$slot.Windows.SetScheme($(if ($Selected) { $theme.SelectedDim } else { $theme.Dim }))
+    [void]$slot.Windows.SetScheme($theme.Subtle)
 }
 
 function Update-TmuxTuiSessionSelection {

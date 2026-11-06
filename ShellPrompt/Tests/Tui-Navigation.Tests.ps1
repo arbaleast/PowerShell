@@ -219,6 +219,80 @@ Describe '极端终端尺寸下的布局' {
         ($wide.NameX + $wide.NameWidth) | Should -BeLessOrEqual $wide.StatusX
         ($wide.StatusX + $wide.StatusWidth) | Should -BeLessOrEqual $wide.WindowsX
     }
+
+    It '阶段一响应式分栏: 窄屏单栏(不显示工作区), 宽屏双栏(列表/竖线/工作区互不重叠)' {
+        $built = & $script:mod {
+            param($w)
+            $rows = @(1..3 | ForEach-Object {
+                    [PSCustomObject]@{ No = $_; Session = "sess-$_"; Status = 'Detached'; Windows = 1; Name = "sess-$_" } })
+            $vm = [PSCustomObject]@{
+                Mode = 'Session'; SessionRows = $rows
+                Counts = [PSCustomObject]@{ Total = 3; Attached = 0; Detached = 3 }
+                ErrorCode = ''; ErrorMessage = ''; Hint = ''; SelectedSession = $null
+            }
+            New-TmuxTuiDashboardWindow -ViewModel $vm -HostName 'h' `
+                -ConnectionState '已连接' -HasSessions $true -Dispatch { param($a) $null = $a } `
+                -WindowWidth $w -WindowHeight 24 -SelectedIndex 0
+        } 60
+        # 60 列: 单栏 —— 没有工作区, 列表铺满
+        $built.Layout.SplitMode | Should -Be 'Single'
+        $built.ShowDetail | Should -BeFalse
+        $built.DetailPanel | Should -BeNullOrEmpty
+        $built.Divider | Should -BeNullOrEmpty
+        $built.Layout.ListWidth | Should -Be 60
+
+        $builtWide = & $script:mod {
+            param($w)
+            $rows = @(1..3 | ForEach-Object {
+                    [PSCustomObject]@{ No = $_; Session = "sess-$_"; Status = 'Detached'; Windows = 1; Name = "sess-$_" } })
+            $vm = [PSCustomObject]@{
+                Mode = 'Session'; SessionRows = $rows
+                Counts = [PSCustomObject]@{ Total = 3; Attached = 0; Detached = 3 }
+                ErrorCode = ''; ErrorMessage = ''; Hint = ''; SelectedSession = $null
+            }
+            New-TmuxTuiDashboardWindow -ViewModel $vm -HostName 'h' `
+                -ConnectionState '已连接' -HasSessions $true -Dispatch { param($a) $null = $a } `
+                -WindowWidth $w -WindowHeight 24 -SelectedIndex 0
+        } 120
+        $builtWide.Layout.SplitMode | Should -Be 'Dual'
+        $builtWide.ShowDetail | Should -BeTrue
+        $builtWide.DetailPanel | Should -Not -BeNullOrEmpty
+        $builtWide.Divider | Should -Not -BeNullOrEmpty
+        # 双栏不变量: 列表 + 竖线 + 2 列呼吸间距 + 工作区 == 屏宽
+        $plan = $builtWide.Layout
+        ($plan.ListWidth + 3 + $plan.DetailWidth) | Should -Be 120
+        $plan.DividerX | Should -Be $plan.ListWidth
+        $plan.DetailX | Should -Be ($plan.ListWidth + 3)
+    }
+}
+
+Describe 'tmux 会话工作区 (2026-11-06 阶段一三段式)' {
+
+    It '工作区是三段式(无 FrameView 外框), 且暴露 Session/Status/Index 等真实字段' {
+        $state = & $script:mod {
+            $tg = Get-TguiContext
+            $theme = Get-TuiDashboardTheme -Tgui $tg
+            $panel = New-TmuxTuiSessionDetailPanel -Width 60 -Height 24 -HostName 'deb' -Theme $theme -Tgui $tg
+            $row = [PSCustomObject]@{ No = 2; Session = 'work'; Status = 'Attached'; Windows = 3; Name = 'work' }
+            Set-TmuxTuiSessionDetail -Panel $panel -Row $row
+            [PSCustomObject]@{
+                ViewType    = $panel.View.GetType().Name
+                SectionText = (@($panel.Sections | ForEach-Object { [string]$_.Title.Text }) -join '|')
+                ActionKeys  = (@($panel.ActionKeyLabels.Keys | Sort-Object) -join ',')
+                Session     = [string]$panel.Labels['Session'].Text
+                Status      = [string]$panel.Labels['Status'].Text
+                Index       = [string]$panel.Labels['Index'].Text
+                Host        = [string]$panel.Labels['Host'].Text
+            }
+        }
+        $state.ViewType | Should -Not -Be 'FrameView' -Because '工作区去掉外框后不再有"双重竖线"'
+        $state.SectionText | Should -BeExactly 'SESSION OVERVIEW|WINDOWS|ACTIONS'
+        $state.ActionKeys | Should -BeExactly 'Enter,n,r,x'
+        $state.Session | Should -BeExactly 'work'
+        $state.Status | Should -BeExactly '● Attached'
+        $state.Index | Should -BeExactly '2'
+        $state.Host | Should -BeExactly 'deb'
+    }
 }
 
 Describe '中文字符(CJK 双宽)的显示宽度与截断' {

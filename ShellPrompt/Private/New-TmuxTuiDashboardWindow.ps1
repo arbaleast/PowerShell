@@ -17,8 +17,17 @@
 #
 # 几何不变量(Goal 三-5, 由 New-TmuxTuiLayoutPlan 一次算出):
 #   Window.BorderStyle = $null 时, Window 内容区 == 整个 Frame, 绝对坐标 == 屏幕坐标。
-#   行分配: 0 标题 / 1 统计 / 2 辅助(空态或错误) / 3..H-2 表格 / H-1 快捷键栏。
-#   表格用**绝对高度**而不是 Dim.Fill —— Fill 必然与贴底的 StatusBar 重叠 1 行。
+#   行分配: 0 标题 / 1 统计 / 2 辅助(空态或错误) / 3..H-2 主体 / H-1 快捷键栏。
+#   主体用**绝对高度**而不是 Dim.Fill —— Fill 必然与贴底的 StatusBar 重叠 1 行。
+#
+# ★ 2026-11-06 阶段一(视觉层级与工作区布局重构):
+#   真机取证暴露的缺陷与本文件的修复:
+#     1. 顶部统计无重点 -> 统计行拆成 5 片, Attached 段在 Attached>0 时亮绿;
+#     2. 标题带三段挤成一行同色 -> 拆成品牌(亮青)/ 主机(灰)/ 状态徽标(绿红);
+#     3. 双重竖线 + 大空框 -> 右侧改无外框三段式工作区, 全窗只剩一条竖线;
+#     4. 宽屏左侧固定 64 列 -> 分栏比例改由 New-TmuxTuiLayoutPlan 按断点算出。
+#   详见 New-TmuxTuiLayoutPlan.ps1 的分栏断点表与
+#   New-TmuxTuiSessionDetailPanel.ps1 的三段式结构说明。
 #
 # 契约: 不进事件循环(无头可测), 不做业务分发 —— Shortcut.Action 才是分发点。
 
@@ -29,17 +38,28 @@ function New-TmuxTuiDashboardWindow {
 
     .DESCRIPTION
         布局(绝对坐标, 由 New-TmuxTuiLayoutPlan 计算):
-          行 0      标题带: 左=产品标识+主机, 右=连接状态徽标(两个不重叠的 Label)
-          行 1      统计: 会话总数/Attached/Detached
+          行 0      标题带(阶段一: **三片**不重叠 Label)
+                    左 = 品牌(亮青, 'ShellPrompt / TMUX MANAGER')
+                    中 = 主机(灰, '· 主机 <HostName>')
+                    右 = 连接状态徽标(右对齐; '● 已连接' 绿 / '○ 未连接' 红)
+          行 1      统计(阶段一: **五片**不重叠 Label)
+                    会话总数 / · / Attached(Attached>0 时亮绿) / · / Detached
           行 2      状态标题: 空态提示 或 错误码+原因(有会话时留空)
-          行 3..H-2 主体: 会话表格(绝对高度, 不与快捷键栏重叠)
-                    空态/错误态改为**居中**的可执行指引(表格隐藏, 不画空框)
+          行 3..H-2 主体: 左=会话列表 | 单条竖线 | 右=三段式会话工作区
+                    空态/错误态改为**居中**的可执行指引(列表/工作区隐藏)
           行 H-1    底部快捷键栏(StatusBar, Pos.AnchorEnd())
+
+        分栏断点(阶段一, 全部由 New-TmuxTuiLayoutPlan 算出):
+          < 72 列    : 单栏(只显示列表, 右侧工作区整体隐藏)
+          72 - 99 列 : 列表 42% / 工作区 58%
+          100-139 列 : 列表 40% / 工作区 60%
+          >= 140 列  : 列表封顶 50~54 列, 剩余全给右侧工作区
 
         缩放: 终端尺寸变化时由编排层用新尺寸重建整窗(纯函数负责几何, 重建开销低)。
 
         返回 PSCustomObject: Window/Table/Source/StatusBar/Shortcuts/CountLabels/
-        StateLabel/GuidanceLabel/ShowSessionTable/Layout。
+        StatsLabels/BrandLabel/HostLabel/StateLabel/GuidanceLabel/
+        ShowSessionTable/ShowDetail/Layout。
 
     .PARAMETER ViewModel
         ConvertTo-TmuxTuiViewModel 的产物
@@ -152,33 +172,56 @@ function New-TmuxTuiDashboardWindow {
     $alignEnum = $labelType.GetProperty('TextAlignment').PropertyType
     $isErrorState = ($ViewModel.Mode -eq 'Error')
 
-    # ---- 标题带(2026-10-31 UI 层次升级): 左=产品标识+主机, 右=连接状态徽标 ----
+    # ---- 标题带(2026-10-31 UI 层次升级 / 2026-11-06 阶段一配色重构):
+    #      左=品牌标识+主机, 右=连接状态徽标 ----
     # 之前标题/主机/连接状态挤在同一行同一个 Label 里:
     #   - 三者同色同字号, 没有任何层次(真机取证: 整行一个 SGR 属性);
     #   - 窄终端(40 列)整行被截断, **连接状态直接看不见**(用户无法判断是否连上)。
     # 现拆成两个不重叠的 Label: 左半产品标识(按可用宽度取长/中/短形态),
     # 右半连接状态(右对齐), 两者宽度由"状态文案宽"反推, 标题永不挤掉状态。
-    $stateText = if ($isErrorState) { '连接失败' } else { $ConnectionState }
+    #
+    # ★ 阶段一: 连接状态改成"符号 + 颜色"双重表达:
+    #   已连接 = "● 已连接"(亮绿) / 未连接 = "○ 未连接"(亮红)
+    #   —— 16 色终端里不靠颜色单独承载语义, 符号本身就是可读的。
+    # $ConnectionState 是编排层传进来的**状态文案**(默认 '已连接';
+    # 失败态可传 '连接失败'), 它决定徽标是绿是红 —— 文案本身仍按
+    # "符号 + 状态词"统一成形, 不再直接透传任意字符串(否则符号会丢)。
+    $isConnected = (-not $isErrorState) -and ([string]$ConnectionState -ne '连接失败')
+    $stateText = if ($isConnected) { '● 已连接' } else { '○ 未连接' }
     $stateWidth = (Get-TguiTextWidth -Text $stateText) + 2   # +2 = 右侧留白
     $leftWidth = $WindowWidth - $stateWidth
     if ($leftWidth -lt 0) { $leftWidth = 0 }
 
-    $titleText = if ($leftWidth -ge 34) {
-        "ShellPrompt TMUX Manager · 主机 $HostName"
-    }
-    elseif ($leftWidth -ge 20) {
-        "sss tmux · 主机 $HostName"
-    }
-    else {
-        "sss · $HostName"
+    # 品牌行: "ShellPrompt" 亮青 + "/ TMUX MANAGER" 次要色 + "· 主机 <Host>" 柔和白
+    # 阶段一把品牌行拆成**两片**Label: 品牌段(AccentCyan 亮青)与主机段(柔和白),
+    # 这样"产品名"与"当前连接目标"是两层, 而不是一整行同色。
+    $brandText = if ($leftWidth -ge 34) { 'ShellPrompt / TMUX MANAGER' }
+    elseif ($leftWidth -ge 20) { 'sss / TMUX' }
+    else { 'sss' }
+    $brandWidth = (Get-TguiTextWidth -Text $brandText) + 1
+    if ($brandWidth -gt $leftWidth) { $brandWidth = $leftWidth }
+
+    $hostText = ''
+    if ($leftWidth -gt $brandWidth + 1) {
+        $hostTail = "· 主机 $HostName"
+        $hostBudget = $leftWidth - $brandWidth - 1
+        $hostText = Get-SshHostListClip -Text $hostTail -Width $hostBudget
     }
 
     $lt1 = [System.Activator]::CreateInstance($labelType)
-    $lt1.Text = $titleText
+    $lt1.Text = $brandText
     $lt1.X = $posAbsolute.Invoke($null, @(0))
     $lt1.Y = $posAbsolute.Invoke($null, @($layout.TitleRow))
-    $lt1.Width = $dimAbsolute.Invoke($null, @($leftWidth))
+    $lt1.Width = $dimAbsolute.Invoke($null, @([Math]::Max(1, $brandWidth)))
     $lt1.Height = $dimAbsolute.Invoke($null, @(1))
+
+    # 主机段: 与品牌段不重叠, 紧跟其后(阶段一新增的第三片)
+    $lt6 = [System.Activator]::CreateInstance($labelType)
+    $lt6.Text = $hostText
+    $lt6.X = $posAbsolute.Invoke($null, @([Math]::Max(0, $brandWidth)))
+    $lt6.Y = $posAbsolute.Invoke($null, @($layout.TitleRow))
+    $lt6.Width = $dimAbsolute.Invoke($null, @([Math]::Max(1, $leftWidth - $brandWidth)))
+    $lt6.Height = $dimAbsolute.Invoke($null, @(1))
 
     $lt4 = [System.Activator]::CreateInstance($labelType)
     $lt4.Text = $stateText
@@ -188,8 +231,6 @@ function New-TmuxTuiDashboardWindow {
     $lt4.Height = $dimAbsolute.Invoke($null, @(1))
     $lt4.TextAlignment = [Enum]::Parse($alignEnum, 'End')
 
-    $lt2 = [System.Activator]::CreateInstance($labelType)
-    $lt2.Text = "会话: $($ViewModel.Counts.Total) · Attached: $($ViewModel.Counts.Attached) · Detached: $($ViewModel.Counts.Detached)"
     $lt3 = [System.Activator]::CreateInstance($labelType)
     if ($isErrorState) {
         # 错误码与长错误文本**只进辅助行**, 不塞进会话表格行
@@ -202,15 +243,53 @@ function New-TmuxTuiDashboardWindow {
         $lt3.Text = ''
     }
 
-    # lt2/lt3 占满宽度(与标题带不同行, 不存在遮挡)
-    $labels = @($lt2, $lt3)
-    $labelRows = @($layout.StatsRow, $layout.HintRow)
-    for ($i = 0; $i -lt $labels.Count; $i++) {
-        $labels[$i].X = $posAbsolute.Invoke($null, @(0))
-        $labels[$i].Y = $posAbsolute.Invoke($null, @($labelRows[$i]))
-        $labels[$i].Width = $dimFill.Invoke($null, @())
-        $labels[$i].Height = $dimAbsolute.Invoke($null, @(1))
+    # ---- 统计行(阶段一 · 联动高亮) ----
+    # 旧实现: "会话: N · Attached: N · Detached: N" 挤在**一个** Label 里,
+    #   整行同色, 没有任何重点 —— 而左侧列表里 Attached 的会话是**亮绿**的,
+    #   顶部统计却一点提示都没有, 两处没有视觉呼应。
+    # 新实现: 拆成 4 片不重叠的 Label:
+    #   [会话: N] [·] [Attached: N(亮绿)] [·] [Detached: N(暗灰)]
+    #   Attached > 0 时该段显式高亮为亮绿, 与列表里的绿点/绿字形成联动。
+    $totalText = "会话: $($ViewModel.Counts.Total)"
+    $attachedText = "Attached: $($ViewModel.Counts.Attached)"
+    $detachedText = "Detached: $($ViewModel.Counts.Detached)"
+    $sepText = '·'
+
+    $statsTotal = [System.Activator]::CreateInstance($labelType)
+    $statsTotal.Text = $totalText
+    $statsAttached = [System.Activator]::CreateInstance($labelType)
+    $statsAttached.Text = $attachedText
+    $statsDetached = [System.Activator]::CreateInstance($labelType)
+    $statsDetached.Text = $detachedText
+    $statsSep1 = [System.Activator]::CreateInstance($labelType)
+    $statsSep1.Text = $sepText
+    $statsSep2 = [System.Activator]::CreateInstance($labelType)
+    $statsSep2.Text = $sepText
+
+    $statsWidths = @(
+        [PSCustomObject]@{ Label = $statsTotal;    Text = $totalText }
+        [PSCustomObject]@{ Label = $statsSep1;     Text = $sepText }
+        [PSCustomObject]@{ Label = $statsAttached; Text = $attachedText }
+        [PSCustomObject]@{ Label = $statsSep2;     Text = $sepText }
+        [PSCustomObject]@{ Label = $statsDetached; Text = $detachedText }
+    )
+    $statsX = 0
+    foreach ($seg in $statsWidths) {
+        $segWidth = (Get-TguiTextWidth -Text $seg.Text) + 1
+        if ($statsX + $segWidth -gt $WindowWidth) { $segWidth = [Math]::Max(1, $WindowWidth - $statsX) }
+        $seg.Label.X = $posAbsolute.Invoke($null, @($statsX))
+        $seg.Label.Y = $posAbsolute.Invoke($null, @($layout.StatsRow))
+        $seg.Label.Width = $dimAbsolute.Invoke($null, @([Math]::Max(1, $segWidth)))
+        $seg.Label.Height = $dimAbsolute.Invoke($null, @(1))
+        $statsX += $segWidth
+        if ($statsX -ge $WindowWidth) { break }
     }
+
+    # lt3 占满宽度(辅助行, 与统计行不同行, 不存在遮挡)
+    $lt3.X = $posAbsolute.Invoke($null, @(0))
+    $lt3.Y = $posAbsolute.Invoke($null, @($layout.HintRow))
+    $lt3.Width = $dimFill.Invoke($null, @())
+    $lt3.Height = $dimAbsolute.Invoke($null, @(1))
 
     # ---- 主体区居中指引(仅空态/错误态): 取代"空表格框"的破损观感 ----
     # 旧实现在空态/错误态仍画出表格边框 + 表头却没有数据行, 看起来像渲染坏了;
@@ -232,23 +311,20 @@ function New-TmuxTuiDashboardWindow {
     # 旧/新两行; 并在右侧加会话详情卡, 建立"列表 <-> 详情"的信息层级。
     $theme = Get-TuiDashboardTheme -Tgui $tg
 
-    # 分栏几何: 窄屏(<72 列)收起详情卡, 列表吃满整宽
-    $showDetail = ($WindowWidth -ge 72)
-    if ($showDetail) {
-        $listWidth = [int][Math]::Floor($WindowWidth * 0.55)
-        if ($WindowWidth -ge 100) { $listWidth = 64 }
-        $listWidth = [Math]::Max(30, [Math]::Min($listWidth, $WindowWidth - 30))
-        $dividerX = $listWidth + 1
-        $detailX = $listWidth + 3
-        $detailWidth = $WindowWidth - $detailX
-        if ($detailWidth -lt 24) { $showDetail = $false }
-    }
-    if (-not $showDetail) {
-        $listWidth = $WindowWidth
-        $dividerX = -1
-        $detailX = -1
-        $detailWidth = 0
-    }
+    # 分栏几何(2026-11-06 阶段一): **统一由 New-TmuxTuiLayoutPlan 算出**。
+    # 旧实现在本文件里另算了一套(72 列起双栏 / 55% / >=100 列固定 64 列),
+    # 与布局计划脱节, 造成"宽屏列表固定 64 列, 会话名与右侧状态跨度过大"。
+    # 新断点(见 New-TmuxTuiLayoutPlan):
+    #   < 72 列  : 单栏(只显示列表, 右侧工作区整体隐藏)
+    #   72-99    : 列表 42% / 工作区 58%
+    #   100-139  : 列表 40% / 工作区 60%
+    #   >= 140   : 列表封顶 50~54 列, 剩余全给右侧工作区
+    # 竖线只有**一条**(右侧工作区不再有 FrameView 外框), 竖线与工作区之间留 2 列呼吸间距。
+    $showDetail = ($layout.SplitMode -eq 'Dual')
+    $listWidth = $layout.ListWidth
+    $dividerX = $layout.DividerX
+    $detailX = $layout.DetailX
+    $detailWidth = $layout.DetailWidth
 
     $sessionList = New-TmuxTuiSessionRowList -Rows @($ViewModel.SessionRows) -Width $listWidth `
         -Height $layout.TableHeight -SelectedIndex $SelectedIndex -Theme $theme -Tgui $tg
@@ -256,6 +332,7 @@ function New-TmuxTuiDashboardWindow {
     $sessionList.View.Y = $posAbsolute.Invoke($null, @($layout.TableRow))
 
     # ---- 竖向分隔线(只做视觉分区, 不参与焦点/键盘) ----
+    # 全窗**唯一**的竖线: 旧实现左侧列表自带竖线 + 右侧 FrameView 边框, 双线并行。
     $divider = $null
     if ($dividerX -ge 0 -and $layout.TableHeight -gt 0) {
         $divider = [System.Activator]::CreateInstance($labelType)
@@ -268,11 +345,11 @@ function New-TmuxTuiDashboardWindow {
         [void]$divider.SetScheme($theme.Divider)
     }
 
-    # ---- 右侧会话详情卡 ----
+    # ---- 右侧「会话工作区」(三段式, 无外框) ----
     $detailPanel = $null
     if ($showDetail) {
         $detailPanel = New-TmuxTuiSessionDetailPanel -Width $detailWidth -Height $layout.TableHeight `
-            -Theme $theme -Tgui $tg
+            -HostName $HostName -Theme $theme -Tgui $tg
         $detailPanel.View.X = $posAbsolute.Invoke($null, @($detailX))
         $detailPanel.View.Y = $posAbsolute.Invoke($null, @($layout.TableRow))
         # 初始落位: 选中会话的真实字段(没有选中就全部 '—')
@@ -399,9 +476,10 @@ function New-TmuxTuiDashboardWindow {
     if ($null -eq $window) {
         throw 'TGUI 组装失败: window 为 $null(异常路径)'
     }
-    # 顺序 = 绘制顺序(后加的盖在上面): 标题带左/右两片宽度不重叠, 不会互相遮挡。
+    # 顺序 = 绘制顺序(后加的盖在上面): 标题带各片宽度不重叠, 不会互相遮挡。
     $bodyViews = [System.Collections.Generic.List[object]]::new()
-    foreach ($v in @($lt1, $lt4, $lt2, $lt3, $lt5, $sessionList.View)) { $bodyViews.Add($v) }
+    foreach ($v in @($lt1, $lt6, $lt4, $lt3, $lt5, $sessionList.View)) { $bodyViews.Add($v) }
+    foreach ($v in $statsWidths) { $bodyViews.Add($v.Label) }
     if ($null -ne $divider) { $bodyViews.Add($divider) }
     if ($null -ne $detailPanel) { $bodyViews.Add($detailPanel.View) }
     $bodyViews.Add($statusBar)
@@ -434,8 +512,7 @@ function New-TmuxTuiDashboardWindow {
         Write-Verbose "[New-TmuxTuiDashboardWindow] ALC 主题配色失败(继续 TG 默认): $($_.Exception.Message)"
     }
     $bodyScheme = Resolve-TguiScheme -Tgui $tg -Names @('Base', 'Menu', 'Dialog')
-    $barScheme = Resolve-TguiScheme -Tgui $tg -Names @('Menu', 'Base', 'Dialog')
-    foreach ($view in @($window, $lt2, $lt3, $lt5)) {
+    foreach ($view in @($window, $lt3, $lt5)) {
         if ($null -eq $bodyScheme) { continue }
         try {
             [void]$view.SetScheme($bodyScheme)
@@ -443,13 +520,28 @@ function New-TmuxTuiDashboardWindow {
             Write-Verbose "[New-TmuxTuiDashboardWindow] 子视图 SetScheme 失败: $($_.Exception.Message)"
         }
     }
-    if ($null -ne $barScheme) {
-        # 标题带左半(产品标识)取 Menu 边缘带(SchemeOverrides 键在: 正常可见; 不可见则退回 Base)
-        try {
-            [void]$lt1.SetScheme($barScheme)
-        } catch {
-            Write-Verbose "[New-TmuxTuiDashboardWindow] 标题行 SetScheme(Menu) 失败: $($_.Exception.Message)"
+    # ---- 阶段一: 品牌行 / 主机行 / 统计行各段都走**语义 Scheme**(16 色直控) ----
+    # 旧实现把标题行绑到 TG 的 'Menu' 边缘带(靠主题配置里的 Sky 冰青),
+    # 阶段一改成显式的语义色: 品牌=亮青, 主机=柔和白, 统计各段按角色分色。
+    # 这样"谁亮谁暗"不再依赖主题配置文件, 16 色终端里表现是确定的。
+    try {
+        [void]$lt1.SetScheme($theme.AccentCyan)
+        [void]$lt6.SetScheme($theme.Subtle)
+        [void]$statsTotal.SetScheme($theme.Text)
+        [void]$statsSep1.SetScheme($theme.Dim)
+        [void]$statsSep2.SetScheme($theme.Dim)
+        [void]$statsDetached.SetScheme($theme.Dim)
+        # ★ 状态联动: Attached > 0 时该段显式高亮为亮绿, 与左侧列表里的
+        #   绿点/绿字、右侧详情面板的绿徽标形成同一套视觉语言。
+        if ($ViewModel.Counts.Attached -gt 0) {
+            [void]$statsAttached.SetScheme($theme.AttachedText)
         }
+        else {
+            [void]$statsAttached.SetScheme($theme.Dim)
+        }
+    }
+    catch {
+        Write-Verbose "[New-TmuxTuiDashboardWindow] 品牌/统计行 SetScheme 失败: $($_.Exception.Message)"
     }
     # 底部快捷键栏取 **Base**: TG 的 StatusBar 用 HotNormal 画键名、Normal 画标签,
     # 于是"键名=Base.HotNormal(Sky 冰青)/ 标签=Base.Normal(亮白)" —— 键名跳出来、
@@ -463,15 +555,17 @@ function New-TmuxTuiDashboardWindow {
             Write-Verbose "[New-TmuxTuiDashboardWindow] 快捷键栏 SetScheme 失败: $($_.Exception.Message)"
         }
     }
-    # ---- 连接状态徽标(标题带右半): 成功=Dialog 绿, 失败=Error 红 ----
-    $stateSchemeNames = if ($isErrorState) { @('Error', 'Menu', 'Base') } else { @('Dialog', 'Menu', 'Base') }
-    $stateScheme = Resolve-TguiScheme -Tgui $tg -Names $stateSchemeNames
-    if ($null -ne $stateScheme) {
-        try {
-            [void]$lt4.SetScheme($stateScheme)
-        } catch {
-            Write-Verbose "[New-TmuxTuiDashboardWindow] 状态徽标 SetScheme 失败: $($_.Exception.Message)"
-        }
+    # ---- 连接状态徽标(标题带右半): 成功=亮绿, 失败=亮红 ----
+    # 阶段一: 改用**语义 Scheme**(Attached 亮绿 / Offline 亮红), 不再依赖
+    # TG 主题配置里的 'Dialog'/'Error' 槽位 —— "● 已连接" 的符号本身已能
+    # 表达状态, 颜色只是加强, 两层都稳。
+    if ($isConnected) {
+        try { [void]$lt4.SetScheme($theme.Attached) }
+        catch { Write-Verbose "[New-TmuxTuiDashboardWindow] 状态徽标 SetScheme 失败: $($_.Exception.Message)" }
+    }
+    else {
+        try { [void]$lt4.SetScheme($theme.Offline) }
+        catch { Write-Verbose "[New-TmuxTuiDashboardWindow] 状态徽标 SetScheme 失败: $($_.Exception.Message)" }
     }
     # ---- 状态标题行(空态/错误态)方案绑定 ----
     # 只在有内容时换色: 有会话时留空, 绑 Base 恒定(行为不变)。
@@ -504,11 +598,20 @@ function New-TmuxTuiDashboardWindow {
         Divider     = $divider
         StatusBar   = $statusBar
         Shortcuts   = $shortcuts
-        CountLabels = @($lt1, $lt2, $lt3)
+        # 阶段一: 统计行拆成 5 片(总数/分隔/Attached/分隔/Detached),
+        #   Attached 段在 Attached>0 时为亮绿(状态联动)。
+        #   .StatsLabel 保留为"整行文本拼起来的视图"(旧调用方按 Text 取整行)。
+        CountLabels = @($lt1, $lt3)
+        StatsLabels = @($statsTotal, $statsSep1, $statsAttached, $statsSep2, $statsDetached)
+        StatsLabel  = $statsAttached
+        StatsAttachedLabel = $statsAttached
+        BrandLabel  = $lt1
+        HostLabel   = $lt6
         # 2026-10-31 UI 升级新增: 标题带右半(连接状态徽标) 与 主体居中指引
         StateLabel     = $lt4
         GuidanceLabel  = $lt5
         ShowSessionTable = $showSessionTable
+        ShowDetail       = $showDetail
         Layout      = $layout
     }
 }

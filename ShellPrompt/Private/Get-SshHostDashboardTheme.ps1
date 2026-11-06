@@ -53,6 +53,18 @@ function Get-SshHostDashboardTheme {
           CardBorder   卡片边框(深灰 on 黑)
           Hint         底部提示(深灰 on 黑)
           EmptyHint    空态/加载态(深灰 on 黑)
+          Attached     会话 Attached(亮绿 on 黑)
+          Detached     会话 Detached(深灰 on 黑)
+          AccentCyan   品牌/小标题/选中指示符(亮青 on 黑) —— 阶段一新增
+          SelectionBg  选中行底(白 on 蓝) —— 阶段一新增(低对比, 不刺眼)
+          SelectionBgText 选中行会话名/窗口数(白 on 蓝) —— 阶段一新增
+          SelectionMeta   选中行次要文本(灰 on 蓝) —— 阶段一新增
+          SelectionAttached 选中行 Attached(亮绿 on 蓝) —— 阶段一新增
+          SelectionDetached 选中行 Detached(白 on 蓝) —— 阶段一新增
+          SelectionDot      选中行首指示符(亮青 on 蓝) —— 阶段一新增
+          SectionTitle      工作区区块小标题(亮青 on 黑) —— 阶段一新增
+          AttachedText      列表内 Attached 文本(亮绿 on 黑) —— 阶段一新增
+          Subtle            次要说明文字(灰 on 黑) —— 阶段一新增
 
         **只做构造**: 不调用 Application.Init, 无头可测(TG 静态初始化在
         Get-TguiContext 阶段完成)。
@@ -162,6 +174,44 @@ function Get-SshHostDashboardTheme {
         Detached         = New-Cn16Scheme -Foreground 'DarkGray' -Background 'Black'
         SelectedAttached = New-Cn16Scheme -Foreground 'BrightGreen' -Background 'Magenta'
         SelectedDetached = New-Cn16Scheme -Foreground 'Gray' -Background 'Magenta'
+
+        # ================================================================
+        # 2026-11-06 阶段一(tmux TUI 视觉层级重构)新增的语义角色
+        # ================================================================
+        # 背景: 真机取证发现选中行用 BrightMagenta 整行铺底时:
+        #   - 行首绿点(●)与洋红底产生红绿眩光冲突;
+        #   - 行内右侧 Attached/Detached 与窗口数仍是 DarkGray, 在洋红底上
+        #     几乎不可读(暗字压亮底, 对比度不足);
+        #   - 顶部统计与左侧列表的状态色各说各话(左暗右绿), 没有联动。
+        # 对策: 选中行**不再用任何高饱和底色**, 改为"暗蓝灰底 + 强前景锚点";
+        #      状态色在"未选中/选中"两态**保持同一语义色**(Attached 恒亮绿),
+        #      只在选中态把 Detached 提亮到 White 以保证可读。
+        #
+        # 16 色映射表(阶段一新增角色; ColorName16 的实际枚举名:
+        #   Black/Blue/Green/Cyan/Red/Magenta/Yellow/Gray/DarkGray/
+        #   BrightBlue/BrightGreen/BrightCyan/BrightRed/BrightMagenta/BrightYellow/White
+        #   —— 注意**没有** BrightWhite / DarkBlue: "最亮的白"就是 White,
+        #      "最深的蓝"就是 Blue):
+        #   AccentCyan      BrightCyan  on Black   —— 品牌/小标题/选中指示符
+        #   SelectionBg     White       on Blue    —— 选中行底(低对比, 不刺眼)
+        #   SelectionBgText White       on Blue    —— 选中行会话名/窗口数
+        #   SelectionMeta   Gray        on Blue    —— 选中行次要文本
+        #   SelectionAttached BrightGreen on Blue
+        #   SelectionDetached White      on Blue
+        #   SelectionDot    BrightCyan  on Blue   —— 选中行首指示符 ▎
+        #   SectionTitle    BrightCyan  on Black   —— 工作区区块小标题
+        #   AttachedText    BrightGreen  on Black  —— 列表内 Attached 文本(联动)
+        #   Subtle          Gray        on Black   —— 次要说明文字
+        AccentCyan          = New-Cn16Scheme -Foreground 'BrightCyan' -Background 'Black'
+        SelectionBg         = New-Cn16Scheme -Foreground 'White' -Background 'Blue'
+        SelectionBgText     = New-Cn16Scheme -Foreground 'White' -Background 'Blue'
+        SelectionMeta       = New-Cn16Scheme -Foreground 'Gray' -Background 'Blue'
+        SelectionAttached   = New-Cn16Scheme -Foreground 'BrightGreen' -Background 'Blue'
+        SelectionDetached   = New-Cn16Scheme -Foreground 'White' -Background 'Blue'
+        SelectionDot        = New-Cn16Scheme -Foreground 'BrightCyan' -Background 'Blue'
+        SectionTitle        = New-Cn16Scheme -Foreground 'BrightCyan' -Background 'Black'
+        AttachedText        = New-Cn16Scheme -Foreground 'BrightGreen' -Background 'Black'
+        Subtle              = New-Cn16Scheme -Foreground 'Gray' -Background 'Black'
     }
 
     $script:SshHostDashboardThemeCache = $theme

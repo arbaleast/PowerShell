@@ -81,6 +81,53 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
             $plan = & $script:mod { New-TmuxTuiLayoutPlan -Width 40 -Height 6 }
             $plan.TableHeight | Should -BeGreaterOrEqual 1
         }
+
+        It '响应式分栏断点 (2026-11-06 阶段一): 72 列以下单栏 / 72-99 列表 42% / 100-139 列表 40% / 140 以上列表 50~54' {
+            $plans = & $script:mod {
+                foreach ($w in @(40, 60, 71, 72, 80, 99, 100, 120, 139, 140, 160, 200)) {
+                    $plan = New-TmuxTuiLayoutPlan -Width $w -Height 35
+                    [PSCustomObject]@{
+                        Width       = $plan.Width
+                        SplitMode   = $plan.SplitMode
+                        ListWidth   = $plan.ListWidth
+                        ListRatio   = $plan.ListRatio
+                        DividerX    = $plan.DividerX
+                        DetailX     = $plan.DetailX
+                        DetailWidth = $plan.DetailWidth
+                    }
+                }
+            }
+            $plans | Should -HaveCount 12
+
+            foreach ($p in $plans) {
+                if ($p.Width -lt 72) {
+                    $p.SplitMode | Should -Be 'Single' -Because "$($p.Width) 列必须单栏"
+                    $p.ListWidth | Should -Be $p.Width
+                    $p.DetailWidth | Should -Be 0
+                    $p.DividerX | Should -Be -1
+                    $p.DetailX | Should -Be -1
+                    continue
+                }
+
+                $p.SplitMode | Should -Be 'Dual' -Because "$($p.Width) 列必须双栏"
+                if ($p.Width -le 99) {
+                    $p.ListRatio | Should -Be 0.42 -Because "$($p.Width) 列属于 42% 档"
+                }
+                elseif ($p.Width -le 139) {
+                    $p.ListRatio | Should -Be 0.4 -Because "$($p.Width) 列属于 40% 档"
+                }
+                else {
+                    $p.ListWidth | Should -BeGreaterOrEqual 50 -Because "$($p.Width) 列的大屏档位列表不得窄于 50"
+                    $p.ListWidth | Should -BeLessOrEqual 54 -Because "$($p.Width) 列的大屏档位列表不得宽于 54"
+                }
+
+                # 双栏几何不变量: 列表 + 1(竖线) + 2(呼吸间距) + 工作区 == 屏宽
+                ($p.ListWidth + 3 + $p.DetailWidth) | Should -Be $p.Width
+                $p.DividerX | Should -Be $p.ListWidth
+                $p.DetailX | Should -Be ($p.ListWidth + 3)
+                $p.DetailWidth | Should -BeGreaterOrEqual 24
+            }
+        }
     }
 
     Context '真实 Terminal.Gui 布局测量(Window.Layout)' {
@@ -169,14 +216,19 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
             }
         }
 
-        It 'Esc 不重复绑定到应用级(TG 已内置 Esc->Quit, 重复绑定会抛异常)' {
+        It '阶段一: 列表里不再有独立的 Esc 快捷键项(避免与 TG 内建 Esc->Quit 重复绑定)' {
+            # TG 应用级键表默认已绑定 Esc->Quit, 重复 AddApp 会抛异常;
+            # 阶段一干脆**不生成** Esc 项, 退出项合并为 "q/Esc 退出"(真实绑定键仍是 q)。
             $bindings = & $script:mod {
                 $list = New-TmuxTuiShortcutList -HasSessions $true -Dispatch { }
-                $list | ForEach-Object { [PSCustomObject]@{ Key = $_.Key.ToString(); Bind = $_.BindKeyToApplication } }
+                $list | ForEach-Object { [PSCustomObject]@{ Key = $_.Key.ToString(); Title = $_.Title.ToString(); Bind = $_.BindKeyToApplication } }
             }
-            $esc = $bindings | Where-Object { $_.Key -eq 'Esc' }
-            $esc | Should -Not -BeNullOrEmpty
-            $esc.Bind | Should -BeFalse
+            @($bindings | Where-Object { $_.Key -eq 'Esc' }).Count | Should -Be 0 -Because '不得再登记 Esc 绑定(TG 已内置)'
+            # 退出项仍然只有一个, 且它的真实绑定键是 q
+            $exit = @($bindings | Where-Object { $_.Title -match '退出' })
+            $exit | Should -HaveCount 1
+            $exit[0].Key | Should -Be 'q'
+            $exit[0].Bind | Should -BeTrue
         }
 
         It '无会话时删除项显式标注不可用且不绑定键位' {

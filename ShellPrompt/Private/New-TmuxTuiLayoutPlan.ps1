@@ -12,11 +12,20 @@
 #   所以几何必须由"屏幕尺寸"一次算出, 窗口重建时复用 —— 这就是本函数。
 #
 # 行分配(内容区行号, 0 基):
-#   0        标题行   (ShellPrompt TMUX Manager | 主机 | 连接状态)
-#   1        统计行   (会话总数 / Attached / Detached)
+#   0        标题行   (ShellPrompt / TMUX MANAGER | 主机 | 连接状态)
+#   1        统计行   (会话总数 / Attached / Detached, Attached 段高亮联动)
 #   2        辅助行   (空态提示 或 错误码+原因+可执行操作; 有会话时留空)
-#   3..H-2   会话表格 (Height = H - 4)
+#   3..H-2   主体区   (Height = H - 4)
+#             ├─ 左侧会话列表(自定义行, 局部两行重绘)
+#             ├─ 单条竖线 │ (DarkGray) + 2 列呼吸间距
+#             └─ 右侧「会话工作区」三段式(无外框)
 #   H-1      底部快捷键栏 (StatusBar, Pos.AnchorEnd())
+#
+# 分栏断点(2026-11-06 阶段一重构, 取代"宽屏固定 64 列"):
+#   < 72 列    : Single —— 单栏, 只显示左侧列表, 右侧工作区整体隐藏
+#   72 - 99 列 : Dual   —— 列表 42% / 工作区 58%
+#   100-139 列 : Dual   —— 列表 40% / 工作区 60%
+#   >= 140 列  : Dual   —— 列表封顶 50~54 列, 剩余全给右侧工作区
 #
 # 契约: 纯函数, 不触碰控制台/网络/TG —— 可对 100x30 / 120x35 / 160x45 三档直接断言。
 
@@ -37,11 +46,20 @@ function New-TmuxTuiLayoutPlan {
           .StatusBarRow             快捷键栏行号(= Height - 1)
           .StatusBarHeight          快捷键栏高度(1)
           .Columns                  列计划(New-TmuxTuiColumnPlan 的产物)
+          .SplitMode                分栏模式: 'Single'(单栏) / 'Dual'(双栏)
+          .ListWidth                左侧会话列表宽度(列)
+          .DividerX                 分隔竖线所在列(-1 = 不画)
+          .DetailX                  右侧工作区起始列(-1 = 不画)
+          .DetailWidth              右侧工作区宽度(列; 单栏时 0)
+          .ListRatio                左侧列表占屏比例(单栏时 1.0)
 
         不变量(测试直接断言):
           - TableRow(=3) > HintRow(=2) > StatsRow(=1) > TitleRow(=0)   顶部不重叠
           - TableBottomRow(= Height - 2) < StatusBarRow(= Height - 1)  底部不重叠
           - TableHeight >= 1                                            极小窗口也不为负
+          - 单栏模式: ListWidth = Width, DetailWidth = 0, DividerX = -1
+          - 双栏模式: ListWidth + 1(竖线) + 2(呼吸间距) + DetailWidth = Width
+          - ListWidth >= 1, DetailWidth >= 1(双栏时), 两者都不为负
 
     .PARAMETER Width
         终端可用列数(缺省 120)。
@@ -87,6 +105,71 @@ function New-TmuxTuiLayoutPlan {
     $tableHeight = $Height - $tableRow - $statusBarHeight   # = Height - 4 => 行 3..H-2
     if ($tableHeight -lt 1) { $tableHeight = 1 }
 
+    # ================================================================
+    # 分栏几何(2026-11-06 阶段一 · 响应式布局比例重构)
+    # ================================================================
+    # 旧实现: 宽屏(>=100 列)左侧列表**固定 64 列**, 会话名与右侧状态之间
+    #   出现巨大黑色跨度; 且 72~99 列用 55%, 100~139 列用固定 64 列,
+    #   档位之间跳变不连续。
+    # 新实现: 按终端列数分四档, 左侧列表**占比**恒定且右侧工作区吃掉余量:
+    #   < 72 列  : 单栏(只显示左侧列表, 右侧工作区整体隐藏)
+    #   72-99    : 双栏, 列表 42% / 工作区 58%
+    #   100-139  : 双栏, 列表 40% / 工作区 60%
+    #   >= 140   : 双栏, 列表**封顶 50~54 列**(按 40% 算但不超过 54),
+    #               剩余全部给右侧工作区 —— 彻底消除"会话名与状态跨度过大"
+    #
+    # 竖线与呼吸间距(消除"双重竖线"):
+    #   左列表 | 1 列竖线 │ | 2 列呼吸间距 | 右工作区
+    #   —— 只有**一条**竖线(旧实现左侧列表自带竖线 + 右侧 FrameView 边框
+    #      又是一条, 现在右侧不再有 FrameView 外框, 只剩这一条)。
+    $splitMode = 'Single'
+    $listRatio = 1.0
+    $listWidth = $Width
+    $dividerX = -1
+    $detailX = -1
+    $detailWidth = 0
+
+    if ($Width -ge 72) {
+        $splitMode = 'Dual'
+        if ($Width -ge 140) {
+            # 大屏: 40% 但封顶 54 列(下限 50) —— 右侧工作区吃掉全部余量
+            $listWidth = [int][Math]::Floor($Width * 0.4)
+            if ($listWidth -gt 54) { $listWidth = 54 }
+            if ($listWidth -lt 50) { $listWidth = 50 }
+            $listRatio = [Math]::Round($listWidth / $Width, 4)
+        }
+        elseif ($Width -ge 100) {
+            $listRatio = 0.4
+            $listWidth = [int][Math]::Floor($Width * 0.4)
+        }
+        else {
+            $listRatio = 0.42
+            $listWidth = [int][Math]::Floor($Width * 0.42)
+        }
+
+        # 右侧工作区至少 24 列(装得下三段式区块标题), 不够就退回单栏
+        $detailWidth = $Width - $listWidth - 3   # 1 列竖线 + 2 列呼吸间距
+        if ($detailWidth -lt 24) {
+            # 右侧放不下 -> 退回单栏(宁可单栏也不要半截工作区)
+            $splitMode = 'Single'
+            $listRatio = 1.0
+            $listWidth = $Width
+            $dividerX = -1
+            $detailX = -1
+            $detailWidth = 0
+        }
+        else {
+            $dividerX = $listWidth        # 竖线紧贴列表右缘(列表占 0..listWidth-1)
+            $detailX = $listWidth + 3    # 竖线(1) + 呼吸间距(2)
+        }
+    }
+
+    # 列表宽度硬下限: 状态点 + 会话名至少要放得下(几何函数另有细粒度取舍)
+    if ($listWidth -lt 20) { $listWidth = 20 }
+    if ($splitMode -eq 'Single') {
+        $listWidth = $Width
+    }
+
     return [PSCustomObject]@{
         Width            = $Width
         Height           = $Height
@@ -99,5 +182,11 @@ function New-TmuxTuiLayoutPlan {
         StatusBarRow     = $statusBarRow
         StatusBarHeight  = $statusBarHeight
         Columns          = @(New-TmuxTuiColumnPlan -WindowWidth $Width)
+        SplitMode        = $splitMode
+        ListWidth        = $listWidth
+        ListRatio        = $listRatio
+        DividerX         = $dividerX
+        DetailX          = $detailX
+        DetailWidth      = $detailWidth
     }
 }
