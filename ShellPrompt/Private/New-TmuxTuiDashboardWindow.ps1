@@ -2,7 +2,8 @@
 #
 # 背景 (2026-10-30 TGUI 迁移 · 阶段 B):
 #   Goal 三: Window = 顶部状态区(产品标题/SSH 主机/连接状态/会话统计)
-#     + 中间会话表格(New-TmuxTuiSessionTable)
+#     + 中间会话行列表(New-TmuxTuiSessionRowList; 旧 TableView 轨
+#       New-TmuxTuiSessionTable 已随 2026-11-07 架构精简删除)
 #     + 底部 StatusBar(Shortcut 列表, New-TmuxTuiShortcutList)
 #     + 空态/错误态独立 Label 区(不放表格行)。
 #   Terminal.Gui 全部布局/绘制/缩放, 本函数是"组装层"。

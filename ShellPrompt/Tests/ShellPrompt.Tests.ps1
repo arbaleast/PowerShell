@@ -109,8 +109,7 @@ Describe 'Command Export' {
             'Read-TmuxConsoleLine', 'Enter-TmuxAlternateScreen', 'Exit-TmuxAlternateScreen',
             'Get-TguiContext',
             'ConvertTo-TmuxTuiViewModel',
-            # 旧会话表格轨: 源文件本波保留, 随后续 commit 删除时同步移除这两个名字
-            'New-TmuxTuiColumnPlan', 'New-TmuxTuiSessionTable', 'Show-TmuxTuiDashboard',
+            'Show-TmuxTuiDashboard',
             # 2026-10-30 TGUI 迁移阶段 B: 仪表盘编排/工厂/动作分发(导出盲区收口)
             'New-TmuxTuiShortcutList', 'New-TmuxTuiDashboardWindow',
             'Invoke-TmuxSessionDeletion', 'Invoke-TmuxTuiAction',

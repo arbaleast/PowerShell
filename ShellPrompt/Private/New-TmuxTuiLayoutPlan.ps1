@@ -45,7 +45,6 @@ function New-TmuxTuiLayoutPlan {
           .TableBottomRow           会话表格最后一行(= Height - 2)
           .StatusBarRow             快捷键栏行号(= Height - 1)
           .StatusBarHeight          快捷键栏高度(1)
-          .Columns                  列计划(New-TmuxTuiColumnPlan 的产物)
           .SplitMode                分栏模式: 'Single'(单栏) / 'Dual'(双栏)
           .ListWidth                左侧会话列表宽度(列)
           .DividerX                 分隔竖线所在列(-1 = 不画)
@@ -178,7 +177,8 @@ function New-TmuxTuiLayoutPlan {
         TableBottomRow   = $tableRow + $tableHeight - 1
         StatusBarRow     = $statusBarRow
         StatusBarHeight  = $statusBarHeight
-        Columns          = @(New-TmuxTuiColumnPlan -WindowWidth $Width)
+        # .Columns(New-TmuxTuiColumnPlan 产物)已随旧 TableView 会话表轨删除
+        #   (2026-11-07 架构精简): 该字段产物无任何生产消费点。
         SplitMode        = $splitMode
         ListWidth        = $listWidth
         ListRatio        = $listRatio

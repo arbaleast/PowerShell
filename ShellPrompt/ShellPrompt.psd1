@@ -6,8 +6,9 @@
     CompanyName       = 'arbaleast'
     Copyright         = '(c) 2024 arbaleast. All rights reserved.'
     Description       = 'PowerShell prompt and remote session management module (Spectre.Console UI)'
-    # v2.0 单轨 Spectre: UI 渲染全部走 PwshSpectreConsole (要求 7.6+),
-    # 已移除 PS 5.1 fallback 与 legacy ANSI 路径
+    # v2.0+ 双 UI 轨: 交互式仪表盘/主机面板由 ALC 原生 Terminal.Gui v2 渲染,
+    # 菜单与提示条走 Spectre.Console (要求 7.6+); 已移除 PS 5.1 fallback
+    # 与 legacy ANSI 路径
     PowerShellVersion = '7.6'
 
     FunctionsToExport = @(
