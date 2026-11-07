@@ -103,6 +103,6 @@ Describe 'tmux 会话状态一致性审计 (2026-10-29)' {
 }
 
 # 2026-10-30 PSTui 移除: 原 Context 'Restore-GridViewSelection: 会话名键列的
-# 隐藏字段恢复' 随 Out-ConsoleGridView 轨删除。TGUI 轨的选中读回契约
-# (SelectedCell.Y → 完整行对象)由 Invoke-TguiHostSelector 编排层承担,
-# 返回行即原始行对象, 不存在"隐藏列裁剪/恢复"环节, 无对应用例。
+# 隐藏字段恢复' 随 Out-ConsoleGridView 轨删除。2026-11-07 起选中读回契约由
+# 现行 TG 仪表盘分发(Show-TmuxTuiDashboard 轨)承担: 选中行直接取会话行列表
+# 的完整行对象, 不存在"隐藏列裁剪/恢复"环节, 无对应用例。

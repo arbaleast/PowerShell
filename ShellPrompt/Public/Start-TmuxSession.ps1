@@ -7,7 +7,8 @@
 #   Read-TmuxActionKey / Get-TmuxPlaceholderRow 及本函数内的 legacy 主循环
 #   (Enter/Exit-TmuxAlternateScreen 备用屏管理) 同批删除。
 #   PSTui 依赖本身已同日随 Modules/PSTui 删除 —— SSH 主机选择器改由
-#   ALC 原生的 Terminal.Gui v2 轨(Invoke-TguiHostSelector)承接。
+#   Terminal.Gui v2 仪表盘轨(Show-HostSelector -> Show-SshHostDashboard)承接;
+#   前一版单表格轨 Invoke-TguiHostSelector 也已按 2026-11-07 架构精简审计删除。
 # 移除前的行为契约(备用屏交接/删除二次确认/键位分发)由 Terminal.Gui 轨完整承载:
 #   - 状态对象/行序稳定/错误码: Invoke-TmuxSessionFetch / Get-TmuxSessionState;
 #   - 附着/新建/删除/SSH 直连: Invoke-TmuxAttach / New-TmuxSession /

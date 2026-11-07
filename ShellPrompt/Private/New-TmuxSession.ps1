@@ -45,7 +45,7 @@ param(
 
     if ($script:TmuxAltScreenActive -eq $true) {
         # ---- 绝对坐标布局(2026-10-30 第五轮修复) ----
-        # 主循环每次迭代开头已 Clear-TmuxScreen(\e[2J\e[H), 此处屏幕是干净的,
+        # 主循环由 Terminal.Gui 独占备用屏与画面缓冲并全量重绘, 此处屏幕是干净的,
         # 全部渲染走 [Console]::WindowHeight 推导的绝对坐标, 不基于旧光标位置:
         #   Y = $h - 6  提示语(输入会话名称...)
         #   Y = $h - 5  "> <输入缓冲区>"
@@ -93,7 +93,7 @@ param(
     }
 
     if ($null -eq $newName) {
-        # Esc = 取消创建: 回到主循环, 下一轮迭代 Clear-TmuxScreen + 绝对重绘恢复画面
+        # Esc = 取消创建: 回到主循环, 由 Terminal.Gui 重新全量重绘恢复画面
         return
     }
     if ([string]::IsNullOrWhiteSpace($newName)) {

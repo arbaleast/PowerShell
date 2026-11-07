@@ -89,10 +89,10 @@ Describe 'Command Export' {
 
     It '不应导出单轨化后新增的内部实现函数' {
         $privateNames = @(
-            # 2026-10-30 PSTui 移除: GridView 轨实现随 Modules/PSTui 删除,
-            # 主机选择器改由 ALC 原生 Terminal.Gui v2 轨承接(以下均为内部实现)
-            'Invoke-TguiHostSelector', 'New-TguiHostSelectorWindow',
-            'Get-HostSelectorRow', 'Resolve-TguiThemeName',
+            # 2026-10-30 PSTui 移除: GridView 轨实现随 Modules/PSTui 删除;
+            # 2026-11-07 旧主机选择器轨与全量清屏原语随源文件删除,
+            #   对应名字从本名单移除(以下均为内部实现)
+            'Resolve-TguiThemeName',
             'Get-ConsoleUiBackend', 'Assert-ConsoleUiReady',
             'Invoke-TmuxAttach',
             # 2026-10-30 TUI 重构: 单视图 + 单行动作条 + 后台取数的内部实现
@@ -104,12 +104,12 @@ Describe 'Command Export' {
             'Submit-TmuxBackgroundTask', 'Receive-TmuxBackgroundTask',
             'Invoke-TmuxSessionFetch', 'Submit-WttrPrefetch', 'Receive-WttrPrefetch',
             # 2026-10-30 第三轮 TUI 修复: Input 态输入机 / 备用屏幕生命周期
-            # 2026-10-30 第五轮修复: Clear-TmuxScreen(绝对的全量重绘原语)
             # 2026-10-30 TGUI 迁移阶段 A: Terminal.Gui 上下文加载器
             # + UI 视图模型/键位动作纯函数映射
             'Read-TmuxConsoleLine', 'Enter-TmuxAlternateScreen', 'Exit-TmuxAlternateScreen',
-            'Clear-TmuxScreen', 'Get-TguiContext',
+            'Get-TguiContext',
             'ConvertTo-TmuxTuiViewModel',
+            # 旧会话表格轨: 源文件本波保留, 随后续 commit 删除时同步移除这两个名字
             'New-TmuxTuiColumnPlan', 'New-TmuxTuiSessionTable', 'Show-TmuxTuiDashboard',
             # 2026-10-30 TGUI 迁移阶段 B: 仪表盘编排/工厂/动作分发(导出盲区收口)
             'New-TmuxTuiShortcutList', 'New-TmuxTuiDashboardWindow',
@@ -320,56 +320,6 @@ Describe 'Resolve-ColorTable (颜色语义解析)' {
     }
 }
 
-Describe 'Get-HostSelectorRow (主机选择表格行)' {
-
-    It '应按输入顺序生成行' {
-        $rows = & $script:mod {
-            Get-HostSelectorRow -Hosts @('debian', 'ubuntu')
-        }
-        $rows.Count | Should -Be 2
-        $rows[0].Host | Should -Be 'debian'
-        $rows[1].Host | Should -Be 'ubuntu'
-    }
-
-    It '列属性集应不再包含 Desc(2026-10-19 P0 删除冗余列)' {
-        # 旧 Desc 列内容'SSH 远程主机'与 Host 列重复, 已随 P0 改进移除。
-        # 锁定回归: 任何让 Desc 字段再次出现的改动都视为破坏本契约。
-        $rows = & $script:mod { Get-HostSelectorRow -Hosts @('debian') }
-        $rows[0].PSObject.Properties.Name | Should -Not -Contain 'Desc'
-    }
-
-    It 'Value 应等于主机名' {
-        $rows = & $script:mod { Get-HostSelectorRow -Hosts @('debian') }
-        $rows[0].Value | Should -Be 'debian'
-    }
-
-    It 'LastHost 应被置顶' {
-        $rows = & $script:mod {
-            Get-HostSelectorRow -Hosts @('debian', 'ubuntu', 'arch') -LastHost 'ubuntu'
-        }
-        $rows[0].Host | Should -Be 'ubuntu'
-    }
-
-    It 'LastHost 行应标注 ● last(兼容 ★ 最近变体)' {
-        $rows = & $script:mod {
-            Get-HostSelectorRow -Hosts @('debian', 'ubuntu') -LastHost 'ubuntu'
-        }
-        $rows[0].State | Should -Match '● last|★ 最近'
-    }
-
-    It '非 LastHost 行的 State 应为空' {
-        $rows = & $script:mod {
-            Get-HostSelectorRow -Hosts @('debian', 'ubuntu') -LastHost 'ubuntu'
-        }
-        $rows[1].State | Should -Be ''
-    }
-
-    It 'Disabled 应恒为 false' {
-        $rows = & $script:mod { Get-HostSelectorRow -Hosts @('debian') }
-        $rows[0].Disabled | Should -BeFalse
-    }
-}
-
 Describe '已删除的全局操作菜单实现(2026-10-30 TUI 重构)' {
 
     # 原"全局操作菜单"是第二个表格面板, 与会话列表上下重复渲染。
@@ -531,10 +481,10 @@ Describe '交互式 UI 单轨契约 (Terminal.Gui v2 回归防护)' {
     }
 
     It 'TerminalGui 主轨实现文件应存在于模块目录内' {
+        # 2026-11-07: 旧主机选择器视图/编排轨的 4 个源文件已随死代码清理删除,
+        # 本名单只保留仍在生产链路上的实现文件。
         $privateDir = Join-Path $script:mod.ModuleBase 'Private'
         foreach ($file in @(
-                'New-TguiHostSelectorWindow.ps1', 'Invoke-TguiHostSelector.ps1',
-                'Get-HostSelectorRow.ps1', 'Get-HostSelectorStateText.ps1',
                 'Show-HostSelector.ps1', 'Get-ConsoleUiBackend.ps1',
                 'Set-TguiTheme.ps1', 'Resolve-TguiThemeName.ps1',
                 'Get-TguiContext.ps1')) {

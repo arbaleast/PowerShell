@@ -11,9 +11,9 @@
 #     + \e[2J\e[H 硬清屏归位(第五轮修复: 每次进入/恢复都从左上角开始);
 #   - Exit-TmuxAlternateScreen: finally 中写 \e[?1049l 恢复原屏幕,
 #     try 块无论正常结束还是抛异常/Ctrl-C 都会执行到 finally;
-#   - Clear-TmuxScreen: 第五轮修复新增 —— 主事件循环**每一次迭代开头**
-#     强制全量重绘前的绝对清屏(绝对的全量重绘机制), 消除状态切换后的
-#     残影/双底栏/输入光标残留;
+#   - Clear-TmuxScreen(第五轮修复引入)已删除(2026-11-07 架构精简):
+#     主循环由 Show-TmuxTuiDashboard 内 Terminal.Gui Init/Run/Shutdown
+#     独占备用屏与画面缓冲, 迭代间不再需要循环外清屏调用点;
 #   - 幂等: Enter/Exit 由 $script:TmuxAltScreenActive 状态位守护, 重复
 #     Enter/Exit 不会写出多余的协议序列。
 #   - 全屏交互子动作(tmux attach / 新建并附着 / 直连 SSH)执行前后由调用方
@@ -43,9 +43,9 @@ function Enter-TmuxAlternateScreen {
             Enter-TmuxAlternateScreen
             try { ...主循环... } finally { Exit-TmuxAlternateScreen }
 
-        切换后主循环迭代开头会立刻调用 Clear-TmuxScreen(.NET 原生清屏 +
-        SetCursorPosition(0,0), 2026-10-30 第六轮: Goal 1 规范), 这里不再
-        重复发送 \e[2J\e[H, 备用屏内容语义单一: 只负责换屏, 不负责清屏。
+        切换后主循环的画面由 Terminal.Gui 独占管理(Init/Run/Shutdown),
+        迭代间不再有独立的清屏调用点(Clear-TmuxScreen 已随旧主循环轨删除,
+        2026-11-07 架构精简), 备用屏内容语义单一: 只负责换屏, 不负责清屏。
 
         TGUI 模式($script:TmuxTerminalOwner = 'Tgui'): 终端由 Terminal.Gui 独占,
         备用屏由它自己发 ESC[?1049h/l 管理 —— 本函数直接返回, 绝不发第二条
@@ -92,43 +92,6 @@ function Exit-TmuxAlternateScreen {
     $script:TmuxAltScreenActive = $false
 }
 
-function Clear-TmuxScreen {
-    <#
-    .SYNOPSIS
-        全量重绘前的绝对清屏:.NET 原生 [Console]::Clear + SetCursorPosition(0,0)。
-
-    .DESCRIPTION
-        第六轮修复(2026-10-30): 按 Goal 1 规范改用 .NET 原生清屏 ——
-            [Console]::Clear()
-            [Console]::SetCursorPosition(0, 0)
-        收益: 某些 conhost 宿主上纯 ANSI \e[2J 只清可视区、历史仍可回滚;
-        .NET 清屏把回滚历史一起抹掉, 即使终端不支持 1049 备用屏协议
-        也不会翻出进入 TUI 前的 Shell 历史("Esc 后见 detached 历史"的根因)。
-
-        重定向控制台(测试/管道)上 Clear 会抛"句柄无效"异常 —— 回退为
-        等效 ANSI 序列, 行为永不中断。主事件循环 while 的**每一次迭代
-        开头**调用本函数; 主事件循环期间备用屏由 Show-TmuxTuiDashboard 的
-        TG Init/Run/Shutdown 独占管理。
-
-    .EXAMPLE
-        while ($true) {
-            Clear-TmuxScreen
-            ...渲染与交互...
-        }
-    #>
-    [CmdletBinding()]
-    [OutputType([void])]
-    param()
-
-    # TGUI 接管终端时不做任何事: 不清屏, 不触碰 TG 的画面缓冲区
-    # (防御纵深, 2026-10-30 审计 #3: TG 路径下 [Console]::Clear 会抹掉
-    #  Terminal.Gui 自管的备用屏内容 —— 屏幕所有权归 'Tgui' 时必须整体静音)
-    if ($script:TmuxTerminalOwner -eq 'Tgui') { return }
-    try {
-        [Console]::Clear()
-        [Console]::SetCursorPosition(0, 0)
-    } catch {
-        # 重定向控制台(测试/管道)取不到屏幕缓冲句柄: 回退等效 ANSI 清屏序列
-        Write-Host -NoNewline "`e[2J`e[H"
-    }
-}
+# Clear-TmuxScreen 已随旧主循环轨删除(2026-11-07 架构精简审计):
+#   当前主循环由 Show-TmuxTuiDashboard 内 Terminal.Gui Init/Run/Shutdown 独占
+#   备用屏与画面缓冲, 迭代间不存在循环外清屏调用点。

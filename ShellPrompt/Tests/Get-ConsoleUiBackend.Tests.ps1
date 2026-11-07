@@ -221,9 +221,10 @@ Describe 'Menu dispatchers (主机选择器单轨契约)' {
         $keys | Should -Not -Contain 'Backend'
     }
 
-    It 'Terminal.Gui 主机选择器实现函数应存在于模块私有作用域' {
-        foreach ($name in @('Invoke-TguiHostSelector', 'New-TguiHostSelectorWindow',
-                'Get-HostSelectorRow', 'Get-ConsoleUiBackend', 'Assert-ConsoleUiReady')) {
+    It 'Terminal.Gui 主轨实现函数应存在于模块私有作用域' {
+        # 2026-11-07: 旧主机选择器视图/编排轨的 3 个函数随源文件删除,
+        # 名单只保留仍在生产链路上的主轨实现。
+        foreach ($name in @('Get-ConsoleUiBackend', 'Assert-ConsoleUiReady')) {
             $found = & $script:mod {
                 param($n) [bool](Get-Command $n -CommandType Function -ErrorAction SilentlyContinue)
             } $name
@@ -246,10 +247,9 @@ Describe 'Menu dispatchers (主机选择器单轨契约)' {
         }
     }
 
-    It '主机选择器实现不得被导出到调用方可见的命令列表' {
+    It '主轨内部实现不得被导出到调用方可见的命令列表' {
         $exported = @(Get-Command -Module ShellPrompt | Select-Object -ExpandProperty Name)
-        foreach ($name in @('Invoke-TguiHostSelector', 'New-TguiHostSelectorWindow',
-                'Get-HostSelectorRow', 'Get-ConsoleUiBackend', 'Assert-ConsoleUiReady')) {
+        foreach ($name in @('Get-ConsoleUiBackend', 'Assert-ConsoleUiReady')) {
             $exported | Should -Not -Contain $name
         }
     }

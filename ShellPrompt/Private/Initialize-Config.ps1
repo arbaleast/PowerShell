@@ -25,7 +25,6 @@ $script:Config = [ordered]@{
     Colors = [ordered]@{
         FreshGreen = "$Esc[38;2;137;209;133m"
         SageGreen  = "$Esc[38;2;159;177;159m"
-        DarkGray   = "$Esc[38;2;50;50;50m"
         MidGray    = "$Esc[38;2;100;100;100m"
         # 标题色 (Cyan): 菜单 / 标题区主色, 提升与正文色的层级差
         Cyan       = "$Esc[38;2;112;199;209m"

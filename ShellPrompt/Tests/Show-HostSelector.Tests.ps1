@@ -1,108 +1,19 @@
 <#
 .SYNOPSIS
-    Terminal.Gui v2 主机选择器的 Pester 测试(视图组装层 + 非交互护栏)
+    Show-HostSelector(SSH 主机选择分发器)的 Pester 测试(业务装配层)
 
 .DESCRIPTION
-    2026-10-30 PSTui 移除: 主机选择器改由 ALC 原生 Terminal.Gui v2 承接。
-    覆盖:
-      - New-TguiHostSelectorWindow 整窗组装(无头可测, 不进事件循环)
-      - Invoke-TguiHostSelector 非交互护栏(重定向环境必须直接返回 $null,
-        不允许进入阻塞的 TUI 循环)
-      - Get-HostSelectorRow 行构造契约(经 Show-HostSelector 使用)
-    交互循环(Enter/Esc/过滤重建/缩放)依赖真实 TTY 事件注入, 由真机验收承担;
+    2026-11-07 旧主机选择器视图/编排轨随源文件移除后, 本文件只保留生产分发器
+    Show-HostSelector 的装配契约 —— 唯一呈现路径为 Show-SshHostDashboard
+    -> Invoke-SshHostDashboard。覆盖:
+      - 空主机列表告警并返回 $null(不入交互循环)
+      - 非交互环境下先被 Assert-ConsoleUiReady 拦下(可定位的终止错误)
+      - 仪表盘返回 $null 时透传 $null; 返回选中行时透传该行(.Value = 主机名)
+      - LastHost 为空时从 $script:Config.SSH.LastHost 回退
+      - 主机名数组全量透传给仪表盘(不做前置过滤)
+    交互循环(Enter/Esc/过滤)依赖真实 TTY 事件注入, 由真机验收承担;
     本文件不模拟(仓库纪律: 未验证的交互不声称通过)。
 #>
-
-Describe 'New-TguiHostSelectorWindow (TGUI 主机选择器整窗组装)' {
-
-    BeforeAll {
-        Import-Module (Join-Path $PSScriptRoot '..\ShellPrompt.psd1') -Force -ErrorAction Stop
-        $script:mod = Get-Module ShellPrompt
-    }
-
-    It '应组装出 Window + TableView + TextField + StatusBar(无头)' {
-        $win = & $script:mod {
-            $rows = Get-HostSelectorRow -Hosts @('debian', 'ubuntu') -LastHost 'ubuntu'
-            New-TguiHostSelectorWindow -Title 'SSH 主机选择器 (2)' -Rows $rows -Dispatch { param($a) [void]$a }
-        }
-        $win | Should -Not -BeNullOrEmpty
-        $win.Window.GetType().FullName | Should -Be 'Terminal.Gui.Views.Window'
-        $win.Table.GetType().FullName | Should -Be 'Terminal.Gui.Views.TableView'
-        $win.FilterField.GetType().FullName | Should -Be 'Terminal.Gui.Views.TextField'
-        $null -ne $win.StatusBar | Should -Be $true
-    }
-
-    It '行数据应进入表格数据源(HOST / STATE 两列)' {
-        $win = & $script:mod {
-            $rows = Get-HostSelectorRow -Hosts @('debian', 'ubuntu', 'arch') -LastHost 'ubuntu'
-            $w = New-TguiHostSelectorWindow -Title 'T' -Rows $rows -Dispatch { param($a) [void]$a }
-            [PSCustomObject]@{
-                Columns  = $w.Source.Columns
-                RowCount = $rows.Count
-            }
-        }
-        # EnumerableTableSource.Columns 在 2.4.10 是 [int](列数, 探针 p25 实测)
-        $win.Columns | Should -Be 2
-        $win.RowCount | Should -Be 3
-    }
-
-    It '过滤文本应回填 TextField(跨重建保持)' {
-        $win = & $script:mod {
-            $rows = Get-HostSelectorRow -Hosts @('debian', 'ubuntu')
-            New-TguiHostSelectorWindow -Title 'T' -Rows $rows -Filter 'deb' -Dispatch { param($a) [void]$a }
-        }
-        [string]$win.FilterField.Text | Should -Be 'deb'
-    }
-
-    It 'SelectedIndex 应预选指定行' {
-        $win = & $script:mod {
-            $rows = Get-HostSelectorRow -Hosts @('debian', 'ubuntu', 'arch') -LastHost 'ubuntu'
-            $w = New-TguiHostSelectorWindow -Title 'T' -Rows $rows -SelectedIndex 2 -Dispatch { param($a) [void]$a }
-            [PSCustomObject]@{
-                SelectedY = $w.Table.Value.SelectedCell.Y
-                RowCount  = $rows.Count
-            }
-        }
-        $win.SelectedY | Should -Be 2
-    }
-
-    It '空过滤结果(空行集合)应仍可组装(空表不崩)' {
-        $win = & $script:mod {
-            New-TguiHostSelectorWindow -Title 'T' -Rows @() -Dispatch { param($a) [void]$a }
-        }
-        $win | Should -Not -BeNullOrEmpty
-        $win.Table | Should -Not -BeNullOrEmpty
-    }
-
-    It 'ShouldProcess 否定时应返回 $null(组装必须显式确认)' {
-        $win = & $script:mod {
-            $rows = Get-HostSelectorRow -Hosts @('debian')
-            New-TguiHostSelectorWindow -Title 'T' -Rows $rows -Dispatch { param($a) [void]$a } -WhatIf
-        }
-        $win | Should -BeNullOrEmpty
-    }
-}
-
-Describe 'Invoke-TguiHostSelector (非交互护栏)' {
-
-    BeforeAll {
-        Import-Module (Join-Path $PSScriptRoot '..\ShellPrompt.psd1') -Force -ErrorAction Stop
-        $script:mod = Get-Module ShellPrompt
-    }
-
-    It '重定向环境下必须直接返回 $null 且不阻塞' {
-        # Pester 运行时 stdin/stdout 均被重定向 —— 探针实测:
-        # 该环境下 TG Init 成功但 Run 事件循环永久阻塞, 因此必须提前护栏。
-        $rows = & $script:mod { Get-HostSelectorRow -Hosts @('debian', 'ubuntu') }
-        $result = & $script:mod { param($r) Invoke-TguiHostSelector -Rows $r } $rows
-        $result | Should -BeNullOrEmpty
-    }
-
-    It '空行集合应直接返回 $null(不触碰 TGUI)' {
-        $result = & $script:mod { Invoke-TguiHostSelector -Rows @() }
-        $result | Should -BeNullOrEmpty
-    }
-}
 
 Describe 'Show-HostSelector (分发器业务装配)' {
 

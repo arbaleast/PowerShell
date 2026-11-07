@@ -3,9 +3,8 @@
 # 唯一轨:
 #   - SSH 主机仪表盘(多区域: 分类导航 / 主机列表 / 详情卡片 / 快捷键栏)
 #     -> Show-SshHostDashboard -> Invoke-SshHostDashboard
-# 历史(保留可用, 不是默认路径):
-#   - Invoke-TguiHostSelector(单表格主机选择器)仍在模块内, 未删除;
-#     仪表盘轨取代它成为默认呈现, 旧实现可随时回退。
+# 历史: 旧单表格轨 Invoke-TguiHostSelector 已按 2026-11-07 架构精简审计删除,
+#   分发器现在唯一直达 SSH 主机仪表盘轨, 无可回退的旧实现。
 # 对外契约(不变): 返回含 .Value 字段的 PSCustomObject, 或 $null(用户退出)。
 # 注意: 分发器不使用 @PSBoundParameters 透传, 否则分发专用参数会被
 #       泄漏进实现函数, 造成参数绑定错误。逐个显式传递。
