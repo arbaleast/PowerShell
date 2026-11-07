@@ -14,12 +14,17 @@
 #   Label(空格文本)提供 —— 实测 Label 会按自身 Scheme 刷背景色,
 #   所以"选中行整行紫底"是真实背景而不是字符模拟。
 #
-# ★ 2026-11-06 阶段一(视觉层级与可读性修复):
-#   选中行不再用 BrightMagenta 整行铺底(红绿眩光 + 暗字压亮底不可读),
-#   改为 Blue 低对比底 + BrightCyan 指示符 ▎ 锚定; 选中行内**所有**
-#   文本片段强制提亮(会话名/窗口数 = White, Detached 提亮到 White),
-#   严禁残留 DarkGray。未选中行的 Attached 文本改为**亮绿**, 与右侧
-#   详情面板与顶部统计形成"状态联动"。
+# ★ 2026-11-06 #9b871512 "Forest Matrix"(翡翠绿/竹青)重构:
+#   选中态**不再铺任何底色** —— 阶段一的"整行纯蓝(0,0,255)"在 Windows
+#   Terminal 上依然刺眼(大面积高饱和蓝铺满一行, 对比度过载)。新做法:
+#     - 背景**恒为 Black**(选中与未选中都一样);
+#     - 选中态靠**序号徽标** ┃02┃ (U+2503, BrightGreen) 锚定位置,
+#       未选中态同宽留白(" 01  ", DarkGray) => 两态会话名起点完全对齐;
+#     - 选中行的会话名/窗口数提亮为 BrightWhite, 状态 Attached 恒亮绿;
+#     - 状态列改**简写** "● Att" / "○ Det"(各 5 列), 消灭"会话名与状态
+#       之间的大跨度黑洞;
+#     - 窗口数列改 "3w" 形态, 右对齐 4 列。
+#   ★ 严禁用字母 o 充当图标 —— 一律用正规 Unicode 符号(● ○ ┃ · ─ │)。
 #
 # ★ 为什么移动选中不重建 View:
 #   槽位是**固定**的(数量 = 列表可视高度), 滚动时复用槽位重填内容。
@@ -32,21 +37,72 @@
 #     在键盘回调里调用;
 #   - 选中变化路径(Update-TmuxTuiSessionSelection)**只改两行**, 不重建任何 View。
 
+function Get-TmuxTuiStateShort {
+    <#
+    .SYNOPSIS
+        把会话状态压成列表用的**简写**(纯函数)。
+
+    .DESCRIPTION
+        #9b871512: 左栏变窄后, "Attached"/"Detached" 八个字符会把会话名与
+        状态之间拉出"大跨度黑洞"。改成 5 字符的简写:
+            Attached  -> "● Att"
+            Detached  -> "○ Det"
+        未知/空状态 -> "○ Det"(按空闲处理, 不伪造状态)。
+
+        符号 + 文字**双重表达**(16 色终端里不靠颜色单独承载语义):
+        实心 ● = 有客户端连着, 空心 ○ = 空闲。
+
+    .PARAMETER Status
+        原始状态文本('Attached'/'Detached'/'attached'/'detached'/空)。
+
+    .OUTPUTS
+        [string] 简写状态文本。
+
+    .EXAMPLE
+        Get-TmuxTuiStateShort -Status 'Attached'   # => '● Attached' 的简写 '● Att'
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $false)]
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Status
+    )
+
+    $filled = [string][char]0x25CF   # ●
+    $hollow = [string][char]0x25CB   # ○
+    if ([string]::IsNullOrEmpty($Status)) { return "$hollow Det" }
+    if ($Status -match '(?i)^attached') { return "$filled Att" }
+    return "$hollow Det"
+}
+
 function Get-TmuxTuiSessionRowGeometry {
     <#
     .SYNOPSIS
         按会话列表可视宽度算出各列的 X 偏移与宽度(列几何的唯一计算点)。
 
     .DESCRIPTION
-        列固定为: 指示符(2) | 会话名(吃满) | 状态(9, 右对齐) | 窗口数(6, 右对齐)。
-        会话名优先(占满剩余宽度), 次要信息(状态/窗口数)固定宽度右对齐 ——
-        与主机列表同一套"名称优先、次要信息降权"的排布原则。
+        列固定为: 序号徽标(6) | 会话名(吃满) | 状态简写(6, 右对齐) | 窗口数(4, 右对齐)。
 
-        ★ 2026-11-06 阶段一: 最左侧新增**选中指示符列**(原状态点列改名):
-          - 未选中行: 该列显示状态点(● Attached 亮绿 / ○ Detached 暗灰);
-          - 选中行  : 该列显示 ▎(BrightCyan), 作为"这一行被选中"的强视觉锚点。
-          状态点的语义**不丢** —— 选中行把状态色搬到右侧状态文本上
-          (Attached 恒亮绿), 详见 Set-TmuxTuiSessionSlot。
+        ★ 2026-11-06 #9b871512 "Forest Matrix" 重构:
+          - 最左列不再是 2 列的状态点, 而是 **6 列的序号徽标**:
+              选中行 ┃02┃  (BrightGreen, U+2503 包裹两位序号)
+              未选中行 " 01  " (DarkGray, 左右各留一个空格对齐)
+            徽标**只做位置锚点**, 不铺背景 —— 选中态靠前景色 + 徽标形状
+            区分, 彻底取消"整行涂蓝"。
+          - 状态列改**简写**: Attached -> "● Att", Detached -> "○ Det"
+            (各 5 列 + 1 空隙 = 6 列), 不再用 8 字符的 "Attached"/"Detached",
+            消灭"会话名与状态之间的大跨度黑洞"。
+          - 窗口数列改 "3w" 形态(数字 + w), 右对齐 4 列。
+          - 状态点**不再另占一列**: Attached 恒 BrightGreen(选中与否一致),
+            Detached 未选中 DarkGray / 选中 White。
+
+        响应式取舍(名称优先): 列表变窄时**先舍次要列**, 保会话名。
+          < 26 列: 只剩 序号徽标 + 会话名(状态/窗口数都藏掉)
+          < 34 列: 保留状态, 藏掉窗口数
+          >= 34 列: 三列全留
 
     .PARAMETER Width
         列表可视宽度(列)。
@@ -66,21 +122,21 @@ function Get-TmuxTuiSessionRowGeometry {
         [int]$Width
     )
 
+    # 序号徽标: "┃02┃" = 1 + 2 + 1 = 4 列可见字符; 徽标占 6 列
+    # (左边 1 列空隙 + 4 列徽标 + 右边 1 列空隙), 未选中态用空格占位,
+    # 保证"选中/未选中"两态的会话名起点**完全对齐**。
     $dotX = 1
-    $dotWidth = 2
-    $statusWidth = 9
-    $windowsWidth = 6
-    $nameX = 4
+    $dotWidth = 6
+    $statusWidth = 6
+    $windowsWidth = 4
+    $nameX = $dotX + $dotWidth
 
     # 响应式取舍(与旧列计划同一思路): 列表变窄时**先舍次要列**, 保会话名。
-    #   < 30 列: 只剩 状态点 + 会话名(状态/窗口数都藏掉)
-    #   < 40 列: 保留状态, 藏掉窗口数
-    #   >= 40 列: 三列全留
-    if ($Width -lt 30) {
+    if ($Width -lt 26) {
         $statusWidth = 0
         $windowsWidth = 0
     }
-    elseif ($Width -lt 40) {
+    elseif ($Width -lt 34) {
         $windowsWidth = 0
     }
 
@@ -238,10 +294,10 @@ function New-TmuxTuiSessionRowList {
             return $lbl
         }
 
-        $dot = New-SessionRowLabel -X $geo.DotX -W $geo.DotWidth -Text '' -Scheme $Theme.Detached
-        $name = New-SessionRowLabel -X $geo.NameX -W $geo.NameWidth -Text '' -Scheme $Theme.Text
-        $status = New-SessionRowLabel -X $geo.StatusX -W ([Math]::Max(1, $geo.StatusWidth)) -Text '' -Scheme $Theme.Detached -RightAlign $true
-        $windows = New-SessionRowLabel -X $geo.WindowsX -W $geo.WindowsWidth -Text '' -Scheme $Theme.Subtle -RightAlign $true
+        $dot = New-SessionRowLabel -X $geo.DotX -W $geo.DotWidth -Text '' -Scheme $Theme.ForestBadgeOff
+        $name = New-SessionRowLabel -X $geo.NameX -W $geo.NameWidth -Text '' -Scheme $Theme.ForestName
+        $status = New-SessionRowLabel -X $geo.StatusX -W ([Math]::Max(1, $geo.StatusWidth)) -Text '' -Scheme $Theme.ForestDetached -RightAlign $true
+        $windows = New-SessionRowLabel -X $geo.WindowsX -W $geo.WindowsWidth -Text '' -Scheme $Theme.ForestWinCount -RightAlign $true
 
         foreach ($lbl in @($bg, $dot, $name, $status, $windows)) { [void]$rowView.Add($lbl) }
         [void]$container.Add($rowView)
@@ -323,17 +379,17 @@ function Set-TmuxTuiSessionSlot {
     $slot.Selected = $Selected
 
     if ($RowIndex -lt 0 -or $RowIndex -ge $ListView.Rows.Count) {
-        # 空格位: 背景用正文方案(黑底)把缩放/过滤后的残影擦掉
+        # 空格位: 背景用黑底把缩放/过滤后的残影擦掉
         $slot.Bg.Text = (' ' * $ListView.Width)
         [void]$slot.Bg.SetScheme($theme.Text)
         $slot.Dot.Text = ''
-        [void]$slot.Dot.SetScheme($theme.Detached)
+        [void]$slot.Dot.SetScheme($theme.ForestBadgeOff)
         $slot.Name.Text = ''
-        [void]$slot.Name.SetScheme($theme.Text)
+        [void]$slot.Name.SetScheme($theme.ForestName)
         $slot.Status.Text = ''
-        [void]$slot.Status.SetScheme($theme.Detached)
+        [void]$slot.Status.SetScheme($theme.ForestDetached)
         $slot.Windows.Text = ''
-        [void]$slot.Windows.SetScheme($theme.Dim)
+        [void]$slot.Windows.SetScheme($theme.ForestWinCount)
         return
     }
 
@@ -341,79 +397,78 @@ function Set-TmuxTuiSessionSlot {
     $isAttached = ([string]$row.Status -eq 'Attached')
 
     # ================================================================
-    # 配色映射表(2026-11-06 阶段一 · 选中态可读性修复)
+    # 配色映射表(2026-11-06 #9b871512 "Forest Matrix")
     # ================================================================
+    # 原则: **背景恒为 Black**(不铺任何饱和底色), 靠前景色 + 徽标形状分层。
+    #
     # 未选中行(Normal):
-    #   背景   Black                (正文底)
-    #   指示符 ● Attached 亮绿 / ○ Detached 暗灰
-    #   会话名 White               (会话名恒为白色, 不被状态色污染)
-    #   状态   Attached 亮绿 / Detached 暗灰   <- 状态联动(阶段一核心修复:
-    #          右侧详情面板已经是绿的, 左侧 Attached 文本却还是暗灰)
-    #   窗口数 Gray                (次要信息降权, 但不用 DarkGray 以免看不见)
+    #   背景     Black
+    #   序号徽标 " 01  "  DarkGray   (与选中态同宽, 保证会话名起点对齐)
+    #   会话名   Gray
+    #   状态     "● Att" BrightGreen / "○ Det" DarkGray
+    #   窗口数   "3w"   DarkGray
     #
     # 选中行(Selected):
-    #   背景   Blue(白字蓝底)      <- **彻底移除 BrightMagenta 整行底**
-    #          (旧实现在洋红底上残留 DarkGray 文字, 暗字压亮底几乎不可读;
-    #           洋红底还会与行首绿点产生红绿眩光冲突)
-    #   指示符 ▎ BrightCyan         <- 强视觉锚点, 明确"这一行被选中"
-    #   会话名 White                <- 强制提亮, 不许残留暗色
-    #   状态   Attached 亮绿 / Detached 提亮为 White
-    #          (Detached 在暗蓝底上用 DarkGray 依旧不可读, 故提亮)
-    #   窗口数 White                <- 强制提亮
+    #   背景     Black                    <- **不铺底色**(阶段一的纯蓝底已取消)
+    #   序号徽标 "┃02┃"  BrightGreen      <- 强视觉锚点, 替代整行涂色
+    #   会话名   BrightWhite              <- 提亮
+    #   状态     "● Att" BrightGreen / "○ Det" White
+    #   窗口数   "3w"   BrightWhite       <- 提亮
     #
-    # 不变量(测试断言): 选中行的**任何**文本片段都不得是 DarkGray 前景。
+    # 不变量(测试断言):
+    #   - 选中行的**任何**文本片段都不得是 DarkGray 前景(暗字在黑底上不可读);
+    #   - Attached 状态**无论选中与否**都是 BrightGreen(状态语义恒定);
+    #   - 徽标只用 U+2503(┃)与空格, **禁止**用字母 o 当图标。
+    $badge = ''
+    try { $badge = ([int]$row.No).ToString('00') } catch { $badge = '00' }
+    if ($badge.Length -gt 2) { $badge = $badge.Substring($badge.Length - 2) }
+
+    $windowsCount = 0
+    try { $windowsCount = [int]$row.Windows } catch { $windowsCount = 0 }
+
     if ($Selected) {
-        [void]$slot.Bg.SetScheme($theme.SelectionBg)
-        $slot.Dot.Text = [string][char]0x258E   # ▎ 选中指示符
-        [void]$slot.Dot.SetScheme($theme.SelectionDot)
+        [void]$slot.Bg.SetScheme($theme.Text)
+        # 序号徽标: ┃02┃ (U+2503 包裹), BrightGreen
+        $slot.Dot.Text = ([string][char]0x2503) + $badge + ([string][char]0x2503)
+        [void]$slot.Dot.SetScheme($theme.ForestBadge)
 
         $slot.Name.Text = Get-SshHostListClip -Text ([string]$row.Session) -Width $geo.NameWidth
-        [void]$slot.Name.SetScheme($theme.SelectionBgText)
+        [void]$slot.Name.SetScheme($theme.ForestNameOn)
 
         if ($geo.StatusWidth -gt 0) {
-            $slot.Status.Text = Get-SshHostListClip -Text ([string]$row.Status) -Width $geo.StatusWidth
-            [void]$slot.Status.SetScheme($(if ($isAttached) { $theme.SelectionAttached } else { $theme.SelectionDetached }))
+            $slot.Status.Text = Get-SshHostListClip -Text (Get-TmuxTuiStateShort -Status ([string]$row.Status)) -Width $geo.StatusWidth
+            [void]$slot.Status.SetScheme($(if ($isAttached) { $theme.ForestAttached } else { $theme.ForestDetachedOn }))
         }
         else {
             $slot.Status.Text = ''
         }
 
-        $windowsText = ''
-        try { $windowsText = [string][int]$row.Windows } catch { $windowsText = '' }
-        $slot.Windows.Text = Get-SshHostListClip -Text $windowsText -Width $geo.WindowsWidth
-        [void]$slot.Windows.SetScheme($theme.SelectionBgText)
+        $slot.Windows.Text = Get-SshHostListClip -Text ("$windowsCount" + 'w') -Width $geo.WindowsWidth
+        [void]$slot.Windows.SetScheme($theme.ForestWinCountOn)
         return
     }
 
     # ---- 未选中行 ----
     [void]$slot.Bg.SetScheme($theme.Text)
 
-    if ($isAttached) {
-        $slot.Dot.Text = [string][char]0x25CF   # ●
-        [void]$slot.Dot.SetScheme($theme.Attached)
-    }
-    else {
-        $slot.Dot.Text = [string][char]0x25CB   # ○
-        [void]$slot.Dot.SetScheme($theme.Detached)
-    }
+    # 序号徽标: 纯空格占位(与选中态同宽 -> 会话名起点对齐)
+    $slot.Dot.Text = "  $badge  "
+    [void]$slot.Dot.SetScheme($theme.ForestBadgeOff)
 
     $slot.Name.Text = Get-SshHostListClip -Text ([string]$row.Session) -Width $geo.NameWidth
-    [void]$slot.Name.SetScheme($theme.Text)
+    [void]$slot.Name.SetScheme($theme.ForestName)
 
     if ($geo.StatusWidth -gt 0) {
-        $slot.Status.Text = Get-SshHostListClip -Text ([string]$row.Status) -Width $geo.StatusWidth
-        # ★ 状态联动(阶段一修复): Attached 文本必须是**亮绿**, 与右侧详情面板
-        #   与顶部统计的绿点/绿字形成同一套视觉语言; Detached 用暗灰(空闲)。
-        [void]$slot.Status.SetScheme($(if ($isAttached) { $theme.AttachedText } else { $theme.Detached }))
+        $slot.Status.Text = Get-SshHostListClip -Text (Get-TmuxTuiStateShort -Status ([string]$row.Status)) -Width $geo.StatusWidth
+        # ★ Attached 恒亮绿(选中与否一致) —— 状态语义不随选中态漂移。
+        [void]$slot.Status.SetScheme($(if ($isAttached) { $theme.ForestAttached } else { $theme.ForestDetached }))
     }
     else {
         $slot.Status.Text = ''
     }
 
-    $windowsText = ''
-    try { $windowsText = [string][int]$row.Windows } catch { $windowsText = '' }
-    $slot.Windows.Text = Get-SshHostListClip -Text $windowsText -Width $geo.WindowsWidth
-    [void]$slot.Windows.SetScheme($theme.Subtle)
+    $slot.Windows.Text = Get-SshHostListClip -Text ("$windowsCount" + 'w') -Width $geo.WindowsWidth
+    [void]$slot.Windows.SetScheme($theme.ForestWinCount)
 }
 
 function Update-TmuxTuiSessionSelection {

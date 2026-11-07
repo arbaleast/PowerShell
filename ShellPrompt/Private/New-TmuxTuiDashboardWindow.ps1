@@ -31,6 +31,79 @@
 #
 # 契约: 不进事件循环(无头可测), 不做业务分发 —— Shortcut.Action 才是分发点。
 
+function Get-TmuxTuiDetailRow {
+    <#
+    .SYNOPSIS
+        取出指定会话的**完整**视图行(基础字段 + 详情字段合并, 纯函数)。
+
+    .DESCRIPTION
+        #9b871512: ViewModel 把数据分成两半 ——
+          - SessionRows[i]   : 列表用的基础字段(No/Session/Status/Windows(int)/Name)
+          - SessionDetails[i]: 详情字段(Created/Activity/WindowList/PreviewLines/
+                               PaneCount)
+        原因: SessionRows.Windows 是**窗口数(int)**, 是列表列 'WINDOWS' 的既有
+        契约(老测试断言它是 int), 不能改成数组; 详情另放平行结构, 两边语义
+        互不污染。
+
+        右栏驾驶舱需要**两者都有**, 所以这里按下标合并成一个对象返回。
+        合并是**纯内存**操作 —— 切换会话时零网络、零延迟(护栏 2)。
+
+        向后兼容: ViewModel 没有 SessionDetails 时(老 Mock), 只返回基础行,
+        详情字段缺失 -> 右栏优雅降级为 'N/A'(护栏: 不崩)。
+
+    .PARAMETER ViewModel
+        ConvertTo-TmuxTuiViewModel 的产物。
+
+    .PARAMETER Index
+        会话下标(-1 或越界 => 返回 $null)。
+
+    .OUTPUTS
+        [PSCustomObject] 合并后的会话行; 越界时 $null。
+
+    .EXAMPLE
+        $row = Get-TmuxTuiDetailRow -ViewModel $vm -Index 0
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [object]$ViewModel,
+
+        [Parameter(Mandatory = $false)]
+        [int]$Index = -1
+    )
+
+    if ($null -eq $ViewModel) { return $null }
+    $rows = @($ViewModel.SessionRows)
+    if ($Index -lt 0 -or $Index -ge $rows.Count) { return $null }
+
+    $base = $rows[$Index]
+    $merged = [ordered]@{}
+    foreach ($p in $base.PSObject.Properties) { $merged[$p.Name] = $p.Value }
+
+    # 详情字段: 有 SessionDetails 就按下标合并, 没有就留空(右栏降级)
+    $details = @()
+    if ($null -ne $ViewModel.PSObject.Properties['SessionDetails']) {
+        $details = @($ViewModel.SessionDetails)
+    }
+    if ($Index -lt $details.Count) {
+        $detail = $details[$Index]
+        if ($null -ne $detail) {
+            foreach ($p in $detail.PSObject.Properties) {
+                # SessionRows.Windows 是 int(窗口数), SessionDetails.Windows 是
+                # 数组(拓扑) —— 名字冲突时**不覆盖**基础行的 int,
+                # 拓扑另用 WindowList 取(两个名字都指向同一数组)。
+                if ($p.Name -eq 'Windows' -and $merged.Contains('Windows')) { continue }
+                $merged[$p.Name] = $p.Value
+            }
+        }
+    }
+
+    return [PSCustomObject]$merged
+}
+
 function New-TmuxTuiDashboardWindow {
     <#
     .SYNOPSIS
@@ -180,30 +253,45 @@ function New-TmuxTuiDashboardWindow {
     # 现拆成两个不重叠的 Label: 左半产品标识(按可用宽度取长/中/短形态),
     # 右半连接状态(右对齐), 两者宽度由"状态文案宽"反推, 标题永不挤掉状态。
     #
-    # ★ 阶段一: 连接状态改成"符号 + 颜色"双重表达:
-    #   已连接 = "● 已连接"(亮绿) / 未连接 = "○ 未连接"(亮红)
-    #   —— 16 色终端里不靠颜色单独承载语义, 符号本身就是可读的。
+    # ★ #9b871512 Forest Matrix: 顶栏改成"品牌 + 主机 + 会话计数"三段。
+    #   品牌  ShellPrompt TMUX   Cyan(BrightCyan)
+    #   主机  Host: debian       White
+    #   计数  Sessions: 3 (1 Attached)  —— Attached > 0 时计数段亮绿
+    #   连接  ● 已连接 / ○ 未连接  —— 绿/红, "符号 + 颜色"双重表达
+    #
     # $ConnectionState 是编排层传进来的**状态文案**(默认 '已连接';
     # 失败态可传 '连接失败'), 它决定徽标是绿是红 —— 文案本身仍按
     # "符号 + 状态词"统一成形, 不再直接透传任意字符串(否则符号会丢)。
     $isConnected = (-not $isErrorState) -and ([string]$ConnectionState -ne '连接失败')
     $stateText = if ($isConnected) { '● 已连接' } else { '○ 未连接' }
-    $stateWidth = (Get-TguiTextWidth -Text $stateText) + 2   # +2 = 右侧留白
-    $leftWidth = $WindowWidth - $stateWidth
-    if ($leftWidth -lt 0) { $leftWidth = 0 }
 
-    # 品牌行: "ShellPrompt" 亮青 + "/ TMUX MANAGER" 次要色 + "· 主机 <Host>" 柔和白
-    # 阶段一把品牌行拆成**两片**Label: 品牌段(AccentCyan 亮青)与主机段(柔和白),
-    # 这样"产品名"与"当前连接目标"是两层, 而不是一整行同色。
-    $brandText = if ($leftWidth -ge 34) { 'ShellPrompt / TMUX MANAGER' }
-    elseif ($leftWidth -ge 20) { 'sss / TMUX' }
+    # 会话计数段(右侧, 紧挨连接徽标): "Sessions: 3 (1 Attached)"
+    $attachedCount = [int]$ViewModel.Counts.Attached
+    $totalCount = [int]$ViewModel.Counts.Total
+    $countsText = "Sessions: $totalCount ($attachedCount Attached)"
+    $countsWidth = (Get-TguiTextWidth -Text $countsText) + 2
+
+    $stateWidth = (Get-TguiTextWidth -Text $stateText) + 2   # +2 = 右侧留白
+    $rightWidth = $stateWidth + $countsWidth
+    $leftWidth = $WindowWidth - $rightWidth
+    if ($leftWidth -lt 0) {
+        # 窄终端: 计数段先让位(连接状态更重要), 再让位品牌
+        $countsWidth = 0
+        $rightWidth = $stateWidth
+        $leftWidth = $WindowWidth - $rightWidth
+        if ($leftWidth -lt 0) { $leftWidth = 0 }
+    }
+
+    # 品牌段: "ShellPrompt TMUX" (Cyan) / 主机段: "Host: debian" (White)
+    $brandText = if ($leftWidth -ge 30) { 'ShellPrompt TMUX' }
+    elseif ($leftWidth -ge 16) { 'ShellPrompt' }
     else { 'sss' }
     $brandWidth = (Get-TguiTextWidth -Text $brandText) + 1
     if ($brandWidth -gt $leftWidth) { $brandWidth = $leftWidth }
 
     $hostText = ''
     if ($leftWidth -gt $brandWidth + 1) {
-        $hostTail = "· 主机 $HostName"
+        $hostTail = "Host: $HostName"
         $hostBudget = $leftWidth - $brandWidth - 1
         $hostText = Get-SshHostListClip -Text $hostTail -Width $hostBudget
     }
@@ -230,6 +318,16 @@ function New-TmuxTuiDashboardWindow {
     $lt4.Width = $dimAbsolute.Invoke($null, @($stateWidth))
     $lt4.Height = $dimAbsolute.Invoke($null, @(1))
     $lt4.TextAlignment = [Enum]::Parse($alignEnum, 'End')
+
+    # 会话计数段(#9b871512): 位于连接徽标左侧, 右对齐。
+    # 窄终端放不下时整段隐藏(Width=0 => 不渲染)。
+    $lt7 = [System.Activator]::CreateInstance($labelType)
+    $lt7.Text = $countsText
+    $lt7.X = $posAbsolute.Invoke($null, @([Math]::Max(0, $leftWidth - $countsWidth)))
+    $lt7.Y = $posAbsolute.Invoke($null, @($layout.TitleRow))
+    $lt7.Width = $dimAbsolute.Invoke($null, @([Math]::Max(1, $countsWidth)))
+    $lt7.Height = $dimAbsolute.Invoke($null, @(1))
+    $lt7.TextAlignment = [Enum]::Parse($alignEnum, 'End')
 
     $lt3 = [System.Activator]::CreateInstance($labelType)
     if ($isErrorState) {
@@ -353,9 +451,7 @@ function New-TmuxTuiDashboardWindow {
         $detailPanel.View.X = $posAbsolute.Invoke($null, @($detailX))
         $detailPanel.View.Y = $posAbsolute.Invoke($null, @($layout.TableRow))
         # 初始落位: 选中会话的真实字段(没有选中就全部 '—')
-        $initialRow = $null
-        $sessionRows = @($ViewModel.SessionRows)
-        if ($SelectedIndex -ge 0 -and $SelectedIndex -lt $sessionRows.Count) { $initialRow = $sessionRows[$SelectedIndex] }
+        $initialRow = Get-TmuxTuiDetailRow -ViewModel $ViewModel -Index $SelectedIndex
         Set-TmuxTuiSessionDetail -Panel $detailPanel -Row $initialRow
     }
 
@@ -370,6 +466,9 @@ function New-TmuxTuiDashboardWindow {
     #   (与既有 PendingAction 同一条通路)。
     $global:TguiSessionList = $sessionList
     $global:TguiSessionDetail = $detailPanel
+    # ViewModel 引用: 方向键切换会话时, 右栏驾驶舱要按它取**详情行**
+    # (相对时间/窗口拓扑/预览快照都已预转换好 —— 切换是纯内存操作, 零网络)。
+    $global:TguiSessionViewModel = $ViewModel
     $sessionList.View.add_KeyDown({
             param($eventSource, $key)
             try {
@@ -411,13 +510,22 @@ function New-TmuxTuiDashboardWindow {
                 # 与 SSH 主机仪表盘的 Sync-SshHostDashboardScroll 同构。
                 [void](Sync-TmuxTuiSessionScroll -ListView $list)
 
-                # 选中行变了 -> 右侧详情卡同步(纯本地字段, 无网络)
+                # 选中行变了 -> 右侧驾驶舱同步(纯内存, **零网络** —— 护栏 2)
+                # 详情行从 ViewModel 的平行数组里取(已预转换好相对时间/
+                # 路径/窗口拓扑/预览快照), 这里只做文本更新, 不发请求。
                 $panel = $global:TguiSessionDetail
                 if ($null -ne $panel) {
-                    $rows = @($list.Rows)
+                    $vmRef = $global:TguiSessionViewModel
                     $idx = [int]$list.SelectedIndex
                     $row = $null
-                    if ($idx -ge 0 -and $idx -lt $rows.Count) { $row = $rows[$idx] }
+                    if ($null -ne $vmRef) {
+                        $row = Get-TmuxTuiDetailRow -ViewModel $vmRef -Index $idx
+                    }
+                    else {
+                        # 兜底: 没有 ViewModel 引用时只用基础行(字段降级为 N/A)
+                        $rows = @($list.Rows)
+                        if ($idx -ge 0 -and $idx -lt $rows.Count) { $row = $rows[$idx] }
+                    }
                     Set-TmuxTuiSessionDetail -Panel $panel -Row $row
                 }
             }
@@ -478,7 +586,7 @@ function New-TmuxTuiDashboardWindow {
     }
     # 顺序 = 绘制顺序(后加的盖在上面): 标题带各片宽度不重叠, 不会互相遮挡。
     $bodyViews = [System.Collections.Generic.List[object]]::new()
-    foreach ($v in @($lt1, $lt6, $lt4, $lt3, $lt5, $sessionList.View)) { $bodyViews.Add($v) }
+    foreach ($v in @($lt1, $lt6, $lt7, $lt4, $lt3, $lt5, $sessionList.View)) { $bodyViews.Add($v) }
     foreach ($v in $statsWidths) { $bodyViews.Add($v.Label) }
     if ($null -ne $divider) { $bodyViews.Add($divider) }
     if ($null -ne $detailPanel) { $bodyViews.Add($detailPanel.View) }
@@ -520,24 +628,25 @@ function New-TmuxTuiDashboardWindow {
             Write-Verbose "[New-TmuxTuiDashboardWindow] 子视图 SetScheme 失败: $($_.Exception.Message)"
         }
     }
-    # ---- 阶段一: 品牌行 / 主机行 / 统计行各段都走**语义 Scheme**(16 色直控) ----
-    # 旧实现把标题行绑到 TG 的 'Menu' 边缘带(靠主题配置里的 Sky 冰青),
-    # 阶段一改成显式的语义色: 品牌=亮青, 主机=柔和白, 统计各段按角色分色。
-    # 这样"谁亮谁暗"不再依赖主题配置文件, 16 色终端里表现是确定的。
+    # ---- #9b871512 Forest Matrix: 顶栏 / 统计行各段都走**语义 Scheme** ----
+    # 全部 16 色直控(不依赖主题配置文件), "谁亮谁暗"是确定的:
+    #   品牌 = BrightCyan(竹青), 主机 = White, 会话计数 = Gray,
+    #   Attached 计数 = BrightGreen(状态联动), 其余统计 = DarkGray。
     try {
-        [void]$lt1.SetScheme($theme.AccentCyan)
-        [void]$lt6.SetScheme($theme.Subtle)
-        [void]$statsTotal.SetScheme($theme.Text)
-        [void]$statsSep1.SetScheme($theme.Dim)
-        [void]$statsSep2.SetScheme($theme.Dim)
-        [void]$statsDetached.SetScheme($theme.Dim)
+        [void]$lt1.SetScheme($theme.ForestBrand)
+        [void]$lt6.SetScheme($theme.ForestHost)
+        [void]$lt7.SetScheme($theme.ForestSummaryKey)
+        [void]$statsTotal.SetScheme($theme.ForestName)
+        [void]$statsSep1.SetScheme($theme.ForestFrame)
+        [void]$statsSep2.SetScheme($theme.ForestFrame)
+        [void]$statsDetached.SetScheme($theme.ForestDetached)
         # ★ 状态联动: Attached > 0 时该段显式高亮为亮绿, 与左侧列表里的
-        #   绿点/绿字、右侧详情面板的绿徽标形成同一套视觉语言。
+        #   绿点/绿字、右侧驾驶舱的绿徽标形成同一套视觉语言。
         if ($ViewModel.Counts.Attached -gt 0) {
-            [void]$statsAttached.SetScheme($theme.AttachedText)
+            [void]$statsAttached.SetScheme($theme.ForestAttached)
         }
         else {
-            [void]$statsAttached.SetScheme($theme.Dim)
+            [void]$statsAttached.SetScheme($theme.ForestDetached)
         }
     }
     catch {
@@ -560,7 +669,7 @@ function New-TmuxTuiDashboardWindow {
     # TG 主题配置里的 'Dialog'/'Error' 槽位 —— "● 已连接" 的符号本身已能
     # 表达状态, 颜色只是加强, 两层都稳。
     if ($isConnected) {
-        try { [void]$lt4.SetScheme($theme.Attached) }
+        try { [void]$lt4.SetScheme($theme.ForestAttached) }
         catch { Write-Verbose "[New-TmuxTuiDashboardWindow] 状态徽标 SetScheme 失败: $($_.Exception.Message)" }
     }
     else {
@@ -607,6 +716,7 @@ function New-TmuxTuiDashboardWindow {
         StatsAttachedLabel = $statsAttached
         BrandLabel  = $lt1
         HostLabel   = $lt6
+        CountsLabel = $lt7
         # 2026-10-31 UI 升级新增: 标题带右半(连接状态徽标) 与 主体居中指引
         StateLabel     = $lt4
         GuidanceLabel  = $lt5

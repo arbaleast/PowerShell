@@ -12,6 +12,16 @@
 #     ErrorCode/ErrorMessage/Hint —— 错误码与长错误文本**不进表格行**。
 #
 # 契约: 纯函数, 不触碰控制台和网络; 行序稳定(输入序即输出序)。
+#
+# 数据层扩展 (2026-11 TUI 右侧详情面板):
+#   会话行额外携带"渲染右侧面板所需的全部信息", 且**不允许**在渲染时再发网络请求:
+#     .Created / .Activity   相对时间文本(来自同一次 SSH 的 session_created/activity)
+#     .CreatedEpoch / .ActivityEpoch  原始 unix 时间戳(0 = 未知)
+#     .WindowList             该会话的窗口拓扑数组(元素形状见下方 .DESCRIPTION)
+#     .PreviewLines           该会话的预览快照(纯文本, 已剥 ANSI, 最多 8 行)
+#     .PaneCount              该会话的窗口分屏总数(用于 'Windows : 3 (4p)' 显示)
+#   旧数据(没有这些字段的会话对象)**必须优雅降级**: Created/Activity = 'N/A',
+#   WindowList/PreviewLines = 空数组, PaneCount = 0, 且绝不抛异常。
 
 function ConvertTo-TmuxTuiViewModel {
     <#
@@ -22,7 +32,10 @@ function ConvertTo-TmuxTuiViewModel {
         输出(PSCustomObject):
           .Mode          'Session' (有会话) / 'Empty' (确实无会话) / 'Error' (探测失败)
           .SessionRows   PSCustomObject 数组: {No=[int], Session=[string],
-                         Status=['Attached'|'Detached'], Windows=[int], Name=[string]};
+                         Status=['Attached'|'Detached'], Windows=[int], Name=[string],
+                         Created=[string], Activity=[string],
+                         CreatedEpoch=[long], ActivityEpoch=[long],
+                         WindowList=[object[]], PreviewLines=[string[]], PaneCount=[int]};
                          空态/错误态恒为空数组 —— 不伪造占位行进表格。
           .Counts        {Total, Attached, Detached}
           .ErrorCode / .ErrorMessage / .Hint   仅 Mode='Error' 非空
@@ -35,8 +48,19 @@ function ConvertTo-TmuxTuiViewModel {
     .PARAMETER PreviousSelected
         上一轮选中的会话名(刷新后尽量保留选中)。
 
+    .PARAMETER HomePath
+        远端用户 HOME 目录(可选)。用于把 pane_current_path 折叠成 '~/...'。
+        缺省时优先取会话对象自带的 HomePath; 两者都没有则走"剥掉 /home/<name> 或
+        /Users/<name> 段"的兜底启发式(见 ConvertTo-TmuxShortPath)。
+
     .OUTPUTS
         [PSCustomObject] 视图模型(Mode/SessionRows/Counts/ErrorCode/ErrorMessage/Hint/SelectedSession)
+
+    .NOTES
+        会话行里 .WindowList 的元素形状:
+          {Index=[int], Name=[string], Active=[bool], Panes=[int],
+           Command=[string], Path=[string], PathShort=[string]}
+        PathShort 是 Path 的 '~' 折叠结果, 供窄面板直接显示。
 
     .EXAMPLE
         $vm = ConvertTo-TmuxTuiViewModel -State (Get-TmuxSessionState -SessionData $raw)
@@ -50,7 +74,11 @@ function ConvertTo-TmuxTuiViewModel {
 
         [Parameter(Mandatory = $false)]
         [AllowEmptyString()]
-        [string]$PreviousSelected = ''
+        [string]$PreviousSelected = '',
+
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyString()]
+        [string]$HomePath = ''
     )
 
     $sessions = @()
@@ -75,12 +103,63 @@ function ConvertTo-TmuxTuiViewModel {
         # Windows 数: try 语句不能当表达式用, 先算再进哈希表仓库的 parse 坑
         $windows = 0
         try { $windows = [int]$s.Windows } catch { $windows = 0 }
+
+        # ---- 相对时间(2026-11): 老数据无时间戳时显示 'N/A', 绝不显示假时间 ----
+        $createdEpoch = 0
+        $activityEpoch = 0
+        if ($null -ne $s.Created) { try { $createdEpoch = [long]$s.Created } catch { $createdEpoch = 0 } }
+        if ($null -ne $s.Activity) { try { $activityEpoch = [long]$s.Activity } catch { $activityEpoch = 0 } }
+        $createdText = ConvertTo-TmuxRelativeTime -Epoch $createdEpoch
+        # 挂着的会话"此刻就有活动", 'Active now' 比一个具体分钟数更有信息量
+        $activityText = if ([string]$s.Status -eq 'attached') { 'Active now' } else { ConvertTo-TmuxRelativeTime -Epoch $activityEpoch }
+
+        # ---- 窗口拓扑 + 预览快照(2026-11): 全部来自同一次 SSH, 渲染期零网络 ----
+        $homeDir = $HomePath
+        if (-not $homeDir -and $null -ne $s.HomePath) { $homeDir = [string]$s.HomePath }
+        $windowList = [System.Collections.Generic.List[PSCustomObject]]::new()
+        $paneTotal = 0
+        if ($null -ne $s.WindowList) {
+            foreach ($w in @($s.WindowList | Where-Object { $null -ne $_ })) {
+                $panes = 0
+                try { $panes = [int]$w.Panes } catch { $panes = 0 }
+                $paneTotal += $panes
+                $wIndex = 0
+                try { $wIndex = [int]$w.Index } catch { $wIndex = 0 }
+                $path = ''
+                if ($null -ne $w.Path) { $path = [string]$w.Path }
+                $windowList.Add([PSCustomObject]@{
+                        Index     = $wIndex
+                        Name      = if ($null -ne $w.Name) { [string]$w.Name } else { '' }
+                        Active    = [bool]$w.Active
+                        Panes     = $panes
+                        Command   = if ($null -ne $w.Command) { [string]$w.Command } else { '' }
+                        Path      = $path
+                        PathShort = (ConvertTo-TmuxShortPath -Path $path -HomePath $homeDir)
+                    }) | Out-Null
+            }
+        }
+        # 旧数据没有分屏信息时用窗口个数兜底, 避免显示 '0p'
+        if ($paneTotal -eq 0) { $paneTotal = $windows }
+
+        $previewLines = @()
+        if ($null -ne $s.PreviewLines) {
+            $previewLines = @($s.PreviewLines | Where-Object { $null -ne $_ } |
+                    ForEach-Object { ConvertTo-TmuxPlainText -Text ([string]$_) })
+        }
+
         $rows.Add([PSCustomObject]@{
-                No      = $no
-                Session = [string]$s.Name
-                Status  = $statusText
-                Windows = $windows
-                Name    = [string]$s.Name
+                No            = $no
+                Session       = [string]$s.Name
+                Status        = $statusText
+                Windows       = $windows
+                Name          = [string]$s.Name
+                Created       = $createdText
+                Activity      = $activityText
+                CreatedEpoch  = $createdEpoch
+                ActivityEpoch = $activityEpoch
+                WindowList    = $windowList.ToArray()
+                PreviewLines  = $previewLines
+                PaneCount     = $paneTotal
             }) | Out-Null
     }
 
@@ -137,9 +216,34 @@ function ConvertTo-TmuxTuiViewModel {
         if ($match.Count -gt 0) { $selected = $PreviousSelected }
     }
 
+    # ---- 会话详情(并行结构): 右侧面板专用, 与 SessionRows 一一对应 ----
+    # 为什么另起一个结构而不是把窗口数组塞进 SessionRows.Windows:
+    #   SessionRows.Windows 是**窗口数(int)**, 是表格列 'WINDOWS' 的既有契约
+    #   (老测试断言它是 int), 不能改成数组。因此详情字段放在平行的
+    #   SessionDetails 里, 右面板按下标/名字对齐即可, 两边语义互不污染。
+    $details = [System.Collections.Generic.List[PSCustomObject]]::new()
+    foreach ($row in $rows) {
+        $details.Add([PSCustomObject]@{
+                No            = $row.No
+                Name          = $row.Name
+                Session       = $row.Session
+                Status        = $row.Status
+                Created       = $row.Created
+                Activity      = $row.Activity
+                CreatedEpoch  = $row.CreatedEpoch
+                ActivityEpoch = $row.ActivityEpoch
+                Windows       = $row.WindowList      # 窗口拓扑数组(元素: Index/Name/Active/Panes/Command/Path/PathShort)
+                WindowList    = $row.WindowList      # 同上, 别名, 便于按名字取
+                WindowCount   = $row.Windows          # 窗口数(int)
+                PreviewLines  = $row.PreviewLines
+                PaneCount     = $row.PaneCount
+            }) | Out-Null
+    }
+
     return [PSCustomObject]@{
         Mode            = $mode
         SessionRows     = $rows.ToArray()
+        SessionDetails  = $details.ToArray()
         Counts          = $counts
         ErrorCode       = $errorCode
         ErrorMessage    = $errorMessage

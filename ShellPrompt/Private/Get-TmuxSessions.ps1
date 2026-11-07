@@ -12,20 +12,49 @@ $script:TmuxAvailabilityCache = @{}
 $script:TmuxSessionFormatPrefix = 'TMUX_SESSION'
 $script:TmuxSessionsBeginMarker = 'TMUX_SESSIONS_BEGIN'
 $script:TmuxSessionsEndMarker = 'TMUX_SESSIONS_END'
+$script:TmuxWindowsBeginMarker = 'TMUX_WINDOWS_BEGIN'
+$script:TmuxWindowsEndMarker = 'TMUX_WINDOWS_END'
+$script:TmuxPreviewBeginMarker = 'TMUX_PREVIEW_BEGIN'
+$script:TmuxPreviewEndMarker = 'TMUX_PREVIEW_END'
 
 function Get-TmuxProbeCommand {
     <#
     .SYNOPSIS
-        构建远程 tmux 探测命令(单次 SSH 同时返回版本/机器可读会话/ls 兜底输出)
+        构建远程 tmux 探测命令(单次 SSH 同时返回版本/机器可读会话/窗口拓扑/预览快照/ls 兜底输出)
     .DESCRIPTION
         输出结构(用标记行切段, 避免会话名本身含特殊字符时切段错乱):
             TMUX_VERSION=<version>
+            TMUX_HOME=<远端用户 HOME>
             TMUX_SESSIONS_BEGIN
-            TMUX_SESSION <attached客户端数> <窗口数> <会话名>
+            TMUX_SESSION <attached客户端数> <窗口数> <创建时间戳> <活动时间戳> <会话名>
             ...
             TMUX_SESSIONS_END
+            TMUX_WINDOWS_BEGIN
+            TMUX_WSESSION <会话名>
+            TMUX_WINDOW <窗口序号> <是否活动窗口> <分屏数> <窗口名>
+            TMUX_PANE <窗口序号> <分屏序号> <是否活动分屏> <前台命令> <当前路径>
+            ...
+            TMUX_WINDOWS_END
+            TMUX_PREVIEW_BEGIN
+            TMUX_PREVSESSION <会话名>
+            TMUX_PREVIEW <预览文本行>
+            ...
+            TMUX_PREVIEW_END
             <tmux ls 人类可读输出>
-        会话名放在 format 串最后, 因此可以包含空格; 即便含冒号也不会与分隔符冲突。
+
+        设计约束(为什么这么绕):
+          - **零额外往返**: 窗口拓扑 / 预览快照 / HOME 目录全部塞进同一条命令,
+            UI 层永远不需要再发第二次 SSH。
+          - **自由文本一律放最后**: 会话名/窗口名/路径都可能含空格, 所以每个格式串
+            都把"可能含空格"的那个字段放在末尾, 解析时按"末尾吃掉剩余全部"处理;
+            会话名含冒号也不冲突(冒号只在分隔符层面有意义, 字段本身不含分隔符)。
+          - **逐会话循环**: 会话名含空格时不能用 `for s in $(...)` 拆词, 因此用
+            `list-sessions -F "#{session_name}" | while read` 逐行取名, 再用
+            `list-windows -t "$s"` / `list-panes -s -t "$s"` 精确取该会话的数据。
+          - **老 tmux 容错**: list-windows/list-panes/capture-pane 任一不被支持时,
+            对应段只是**空** —— 每条子命令都带 2>/dev/null 且用 `;` 串联, 任何一段失败
+            都不会影响其它段, 更不会让整个探测失败。
+          - **负载有界**: 预览用 `capture-pane -S -8 | tail -8`, 最多 8 行/会话。
     .OUTPUTS
         string
     .EXAMPLE
@@ -39,25 +68,41 @@ function Get-TmuxProbeCommand {
     # 输出被吞, 改用 `command -v` 拿绝对路径, 再用绝对路径跑 `tmux -V`。
     # 修 2026-10-01 (v1.3.2 hotfix): `command -v` 失败时多路径穷举, 命中第一个可执行即用。
     $binLookup = 'TMUX_BIN=$(command -v tmux 2>/dev/null || for p in /usr/bin/tmux /usr/local/bin/tmux /snap/bin/tmux /opt/homebrew/bin/tmux /usr/sbin/tmux; do [ -x "$p" ] && echo "$p" && break; done); '
-    $versionProbe = 'TMUX_V=$("$TMUX_BIN" -V 2>/dev/null); printf "TMUX_VERSION=%s\n" "${TMUX_V:-}"; '
+    # 版本号 + 远端 HOME 目录(路径折叠 "~" 需要, 单独 SSH 一次不允许, 顺带打印)
+    $versionProbe = 'TMUX_V=$("$TMUX_BIN" -V 2>/dev/null); printf "TMUX_VERSION=%s\n" "${TMUX_V:-}"; printf "TMUX_HOME=%s\n" "${HOME:-}"; '
     # 机器可读段: 老版本 tmux 不支持 -F 时该段为空, 由后续 ls 段兜底
-    $machineList = 'printf "TMUX_SESSIONS_BEGIN\n"; "$TMUX_BIN" list-sessions -F "TMUX_SESSION #{session_attached} #{session_windows} #{session_name}" 2>/dev/null; printf "TMUX_SESSIONS_END\n"; '
+    # session_created/session_activity 是较新的格式变量, 老 tmux 遇到**未知格式变量**
+    # 会整条命令报错退出(不是输出空串) -> 因此先试完整格式, 拿不到任何输出时
+    # 自动退回到三字段旧格式(attached/windows/name), 两种格式解析器都认。
+    $machineList = 'printf "TMUX_SESSIONS_BEGIN\n"; TMUX_LS=$("$TMUX_BIN" list-sessions -F "TMUX_SESSION #{session_attached} #{session_windows} #{session_created} #{session_activity} #{session_name}" 2>/dev/null); if [ -n "$TMUX_LS" ]; then printf "%s\n" "$TMUX_LS"; else "$TMUX_BIN" list-sessions -F "TMUX_SESSION #{session_attached} #{session_windows} #{session_name}" 2>/dev/null; fi; printf "TMUX_SESSIONS_END\n"; '
+    # 窗口拓扑段: 会话名 -> 窗口列表 + 分屏详情(命令/路径)。
+    # list-panes -s 列出会话内**所有**窗口的分屏, 用 window_index 关联回窗口;
+    # pane_id(%N) 一并带出, 预览快照用它做无歧义定位(会话名含冒号时仍能命中)。
+    $windowList = 'printf "TMUX_WINDOWS_BEGIN\n"; "$TMUX_BIN" list-sessions -F "#{session_name}" 2>/dev/null | while IFS= read -r TMUX_S || [ -n "$TMUX_S" ]; do [ -n "$TMUX_S" ] || continue; printf "TMUX_WSESSION %s\n" "$TMUX_S"; "$TMUX_BIN" list-windows -t "$TMUX_S" -F "TMUX_WINDOW #{window_index} #{window_active} #{window_panes} #{window_name}" 2>/dev/null; "$TMUX_BIN" list-panes -s -t "$TMUX_S" -F "TMUX_PANE #{window_index} #{pane_index} #{pane_active} #{pane_current_command} #{pane_current_path}" 2>/dev/null; done; printf "TMUX_WINDOWS_END\n"; '
+    # 预览快照段: 每个会话"活动窗口的活动分屏"的末尾 8 行纯文本。
+    # 定位方式: 先取活动窗口序号, 再在所有分屏里挑 (窗口序号匹配 且 pane_active=1) 的
+    # pane_id, 最后用 %N 定位 capture-pane —— 全程不依赖会话名, 名字含冒号也安全。
+    # tail -8 保证负载有界(不加 -S 时 capture-pane 只给可见区, -S -8 会带上历史)。
+    $previewList = 'printf "TMUX_PREVIEW_BEGIN\n"; "$TMUX_BIN" list-sessions -F "#{session_name}" 2>/dev/null | while IFS= read -r TMUX_S || [ -n "$TMUX_S" ]; do [ -n "$TMUX_S" ] || continue; TMUX_AW=$("$TMUX_BIN" list-windows -t "$TMUX_S" -F "#{window_index} #{window_active}" 2>/dev/null | while IFS= read -r TMUX_WL; do case "$TMUX_WL" in *\ 1) printf "%s" "${TMUX_WL%% *}"; break;; esac; done); [ -n "$TMUX_AW" ] || continue; TMUX_AP=$("$TMUX_BIN" list-panes -s -t "$TMUX_S" -F "#{window_index} #{pane_active} #{pane_id}" 2>/dev/null | while IFS=" " read -r TMUX_PW TMUX_PA TMUX_PID; do if [ "$TMUX_PA" = "1" ] && [ "$TMUX_PW" = "$TMUX_AW" ]; then printf "%s" "$TMUX_PID"; break; fi; done); [ -n "$TMUX_AP" ] || continue; printf "TMUX_PREVSESSION %s\n" "$TMUX_S"; "$TMUX_BIN" capture-pane -p -t "$TMUX_AP" -S -8 2>/dev/null | tail -8 | while IFS= read -r TMUX_L || [ -n "$TMUX_L" ]; do printf "TMUX_PREVIEW %s\n" "$TMUX_L"; done; done; printf "TMUX_PREVIEW_END\n"; '
     $humanList = '"$TMUX_BIN" ls 2>/dev/null; true'
 
-    return ($binLookup + $versionProbe + $machineList + $humanList)
+    return ($binLookup + $versionProbe + $machineList + $windowList + $previewList + $humanList)
 }
 
 function ConvertFrom-TmuxProbeOutput {
     <#
     .SYNOPSIS
-        把远程探测输出切分为 版本号 / 机器可读会话行 / tmux ls 行
+        把远程探测输出切分为 版本号 / HOME / 机器可读会话行 / 窗口拓扑行 / 预览行 / tmux ls 行
     .DESCRIPTION
-        以 TMUX_SESSIONS_BEGIN / TMUX_SESSIONS_END 标记行切段, 标记之前的行视为版本段,
-        标记之后的行视为 ls 段。切段对任何顺序/缺失都容错。
+        以 TMUX_SESSIONS_BEGIN / TMUX_SESSIONS_END / TMUX_WINDOWS_BEGIN / TMUX_WINDOWS_END /
+        TMUX_PREVIEW_BEGIN / TMUX_PREVIEW_END 标记行切段。**标记行优先于阶段**: 任何标记
+        出现都强制切换阶段, 因此老版本输出(只有 SESSIONS 段)与新版本输出都能正确切分,
+        任何顺序/缺失都容错。
+        TMUX_HOME 出现在版本段, 用于路径折叠("~"), 避免为此单独发一次 SSH。
     .PARAMETER Output
         远程探测命令的原始标准输出
     .OUTPUTS
-        PSCustomObject(.Version/.SessionLines/.LsLines)
+        PSCustomObject(.Version/.HomePath/.SessionLines/.WindowLines/.PreviewLines/.LsLines)
     .EXAMPLE
         ConvertFrom-TmuxProbeOutput -Output $raw
     #>
@@ -71,20 +116,42 @@ function ConvertFrom-TmuxProbeOutput {
 
     $lines = if ($Output) { $Output -split "`r?`n" } else { @() }
     $version = ''
+    $homePath = ''
     $sessionLines = [System.Collections.Generic.List[string]]::new()
+    $windowLines = [System.Collections.Generic.List[string]]::new()
+    $previewLines = [System.Collections.Generic.List[string]]::new()
     $lsLines = [System.Collections.Generic.List[string]]::new()
     $phase = 'version'
 
     foreach ($line in $lines) {
         $trimmed = $line.Trim()
         if (-not $trimmed) { continue }
+
+        # 预览段特殊处理: 内容行必须**原样**保留(前导缩进有意义), 且内容行本身
+        # 可能恰好长得像某个标记行 —— 因此预览段内只认 PREVIEW_END 作为结束标记,
+        # 其余一律当作内容, 绝不误切段。
+        if ($phase -eq 'preview') {
+            if ($trimmed -eq $script:TmuxPreviewEndMarker) { $phase = 'ls'; continue }
+            # 会话头优先: 'TMUX_PREVSESSION' 也以 'TMUX_PREVIEW' 开头, 顺序不能反
+            if ($trimmed.StartsWith('TMUX_PREVSESSION')) { $previewLines.Add($trimmed); continue }
+            if ($line.StartsWith('TMUX_PREVIEW')) { $previewLines.Add(($line -replace "`r$", '')) }
+            continue
+        }
+
+        # 标记行优先: 出现即切段(缺失标记的老输出按"默认落到 ls 段"容错)
         if ($trimmed -eq $script:TmuxSessionsBeginMarker) { $phase = 'sessions'; continue }
         if ($trimmed -eq $script:TmuxSessionsEndMarker) { $phase = 'ls'; continue }
+        if ($trimmed -eq $script:TmuxWindowsBeginMarker) { $phase = 'windows'; continue }
+        if ($trimmed -eq $script:TmuxWindowsEndMarker) { $phase = 'ls'; continue }
+        if ($trimmed -eq $script:TmuxPreviewBeginMarker) { $phase = 'preview'; continue }
+        if ($trimmed -eq $script:TmuxPreviewEndMarker) { $phase = 'ls'; continue }
         switch ($phase) {
             'version' {
                 if ($trimmed -match '^TMUX_VERSION=(.*)$') { $version = $matches[1].Trim() }
+                elseif ($trimmed -match '^TMUX_HOME=(.*)$') { $homePath = $matches[1].Trim() }
             }
             'sessions' { $sessionLines.Add($trimmed) }
+            'windows' { $windowLines.Add($trimmed) }
             'ls' { $lsLines.Add($trimmed) }
         }
     }
@@ -94,7 +161,10 @@ function ConvertFrom-TmuxProbeOutput {
 
     return [PSCustomObject]@{
         Version      = $version
+        HomePath     = $homePath
         SessionLines = $sessionLines.ToArray()
+        WindowLines  = $windowLines.ToArray()
+        PreviewLines = $previewLines.ToArray()
         LsLines      = $lsLines.ToArray()
     }
 }
@@ -104,12 +174,14 @@ function ConvertFrom-TmuxSessionFormat {
     .SYNOPSIS
         解析 tmux list-sessions -F 机器可读行
     .DESCRIPTION
-        行格式: TMUX_SESSION <attached客户端数> <窗口数> <会话名>
+        新格式行: TMUX_SESSION <attached客户端数> <窗口数> <创建时间戳> <活动时间戳> <会话名>
+        旧格式行: TMUX_SESSION <attached客户端数> <窗口数> <会话名>  (老 tmux / 降级兜底)
+        两种格式都要能解析: 创建/活动时间戳是**可选组**, 缺失时按"未知"(0)处理。
         会话名位于最后, 因此允许包含空格与冒号; 无法解析的行被忽略(不抛异常)。
     .PARAMETER Lines
         机器可读会话行数组
     .OUTPUTS
-        List[PSCustomObject](.Name/.Status/.Windows)
+        List[PSCustomObject](.Name/.Status/.Windows/.Created/.Activity)
     .EXAMPLE
         ConvertFrom-TmuxSessionFormat -Lines @('TMUX_SESSION 1 2 my session')
     #>
@@ -128,13 +200,189 @@ function ConvertFrom-TmuxSessionFormat {
     foreach ($line in $Lines) {
         $trimmed = $line.Trim()
         if (-not $trimmed.StartsWith("$prefix ")) { continue }
-        if ($trimmed -notmatch '^TMUX_SESSION\s+(?<attached>\d+)\s+(?<windows>\d+)\s+(?<name>.+)$') { continue }
+        # 可选组: 创建/活动时间戳(两位数字)存在时一并取出;
+        # 若"最后一段全是数字"导致组不匹配, 正则会回退到"名字吃掉剩余全部"的分支,
+        # 因此纯数字会话名(如 "2024")也不会被误当成时间戳。
+        if ($trimmed -notmatch '^TMUX_SESSION\s+(?<attached>\d+)\s+(?<windows>\d+)(?:\s+(?<created>\d+)\s+(?<activity>\d+))?\s+(?<name>.+)$') { continue }
         $attachedClients = [int]$matches['attached']
+        $created = 0
+        $activity = 0
+        if (-not [string]::IsNullOrEmpty($matches['created'])) { $created = [long]$matches['created'] }
+        if (-not [string]::IsNullOrEmpty($matches['activity'])) { $activity = [long]$matches['activity'] }
         $result.Add([PSCustomObject]@{
-                Name    = $matches['name'].Trim()
-                Status  = if ($attachedClients -gt 0) { 'attached' } else { 'detached' }
-                Windows = [int]$matches['windows']
+                Name     = $matches['name'].Trim()
+                Status   = if ($attachedClients -gt 0) { 'attached' } else { 'detached' }
+                Windows  = [int]$matches['windows']
+                Created  = $created
+                Activity = $activity
             })
+    }
+
+    return $result
+}
+
+function ConvertFrom-TmuxWindowFormat {
+    <#
+    .SYNOPSIS
+        解析窗口拓扑段(TMUX_WSESSION / TMUX_WINDOW / TMUX_PANE 行)
+    .DESCRIPTION
+        行格式:
+            TMUX_WSESSION <会话名>            (会话名自由文本, 吃掉整行剩余部分)
+            TMUX_WINDOW <窗口序号> <活动标记> <分屏数> <窗口名>   (窗口名吃掉剩余部分)
+            TMUX_PANE  <窗口序号> <分屏序号> <活动标记> <前台命令> <当前路径>
+        分屏信息按窗口序号归属; 窗口的 Command/Path 取该窗口**活动分屏**的值
+        (没有活动分屏时取第一个分屏)。任何畸形行都被跳过, 绝不抛异常。
+    .PARAMETER Lines
+        窗口拓扑段原始行数组
+    .OUTPUTS
+        List[PSCustomObject](.Session/.Index/.Name/.Active/.Panes/.Command/.Path)
+    .EXAMPLE
+        ConvertFrom-TmuxWindowFormat -Lines @('TMUX_WSESSION work', 'TMUX_WINDOW 0 1 2 bash')
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.Generic.List[PSCustomObject]])]
+    param(
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyCollection()]
+        [string[]]$Lines
+    )
+
+    $result = [System.Collections.Generic.List[PSCustomObject]]::new()
+    if (-not $Lines) { return $result }
+
+    $currentSession = ''
+    $windows = [System.Collections.Generic.List[PSCustomObject]]::new()
+    # 窗口序号 -> 该窗口的分屏列表(命令/路径)
+    $panesByWindow = @{}
+
+    foreach ($line in $Lines) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed) { continue }
+
+        if ($trimmed -match '^TMUX_WSESSION\s+(?<name>.+)$') {
+            $currentSession = $matches['name'].Trim()
+            continue
+        }
+
+        if ($trimmed -match '^TMUX_WINDOW\s+(?<index>\d+)\s+(?<active>\d+)\s+(?<panes>\d+)\s*(?<name>.*)$') {
+            $windows.Add([PSCustomObject]@{
+                    Session = $currentSession
+                    Index   = [int]$matches['index']
+                    Name    = $matches['name'].Trim()
+                    Active  = ([int]$matches['active'] -gt 0)
+                    Panes   = [int]$matches['panes']
+                    Command = ''
+                    Path    = ''
+                })
+            continue
+        }
+
+        if ($trimmed.StartsWith('TMUX_PANE ')) {
+            # 字段: <窗口序号> <分屏序号> <活动标记> <前台命令> <当前路径...>
+            # 路径可能含空格 -> 用 -split 的上限把"剩余全部"留给最后一个字段。
+            # 前台命令按"单个不含空白的词"处理(tmux 的 pane_current_command 实践如此);
+            # 万一它含空格, 退化结果是命令被截断 + 路径多出前缀, 不抛异常。
+            $parts = @($trimmed.Substring('TMUX_PANE '.Length).Trim() -split '\s+', 5)
+            if ($parts.Count -lt 4) { continue }
+            $windex = 0
+            $pindex = 0
+            $isActive = $false
+            if (-not [int]::TryParse($parts[0], [ref]$windex)) { continue }
+            if (-not [int]::TryParse($parts[1], [ref]$pindex)) { continue }
+            if ($parts[2] -eq '1') { $isActive = $true }
+            $command = $parts[3]
+            $path = ''
+            if ($parts.Count -ge 5) { $path = $parts[4].Trim() }
+            $paneInfo = [PSCustomObject]@{
+                Index   = $pindex
+                Active  = $isActive
+                Command = $command
+                Path    = $path
+            }
+            # 键必须带会话名: 不同会话的窗口序号会重复(都从 0 开始)
+            $paneKey = "$currentSession|$windex"
+            if (-not $panesByWindow.ContainsKey($paneKey)) {
+                $panesByWindow[$paneKey] = [System.Collections.Generic.List[PSCustomObject]]::new()
+            }
+            $panesByWindow[$paneKey].Add($paneInfo)
+            continue
+        }
+        # 其它行(垃圾/未来扩展)直接忽略
+    }
+
+    # 把分屏信息合并回窗口: 活动分屏优先, 否则取第一个
+    foreach ($window in $windows) {
+        $paneKey = "$($window.Session)|$($window.Index)"
+        if ($panesByWindow.ContainsKey($paneKey)) {
+            $panes = @($panesByWindow[$paneKey])
+            $chosen = @($panes | Where-Object { $_.Active })
+            if ($chosen.Count -eq 0) { $chosen = @($panes[0]) }
+            $window.Command = [string]$chosen[0].Command
+            $window.Path = [string]$chosen[0].Path
+        }
+        $result.Add($window)
+    }
+
+    return $result
+}
+
+function ConvertFrom-TmuxPreviewFormat {
+    <#
+    .SYNOPSIS
+        解析预览快照段(TMUX_PREVSESSION / TMUX_PREVIEW 行)
+    .DESCRIPTION
+        行格式:
+            TMUX_PREVSESSION <会话名>   (会话名吃掉整行剩余部分, 可含空格)
+            TMUX_PREVIEW <预览文本行>   (文本行吃掉整行剩余部分, 可为空)
+        没有会话头的预览行会被忽略; 文本原样返回(ANSI 转义在视图模型层剥离)。
+    .PARAMETER Lines
+        预览段原始行数组
+    .OUTPUTS
+        List[PSCustomObject](.Session/.Lines)
+    .EXAMPLE
+        ConvertFrom-TmuxPreviewFormat -Lines @('TMUX_PREVSESSION work', 'TMUX_PREVIEW $ ls')
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.Generic.List[PSCustomObject]])]
+    param(
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyCollection()]
+        [string[]]$Lines
+    )
+
+    $result = [System.Collections.Generic.List[PSCustomObject]]::new()
+    if (-not $Lines) { return $result }
+
+    $currentSession = ''
+    $buffer = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($line in $Lines) {
+        # 会话头: 名字吃掉整行剩余部分(可含空格)
+        $trimmed = $line.Trim()
+        if (-not $trimmed) { continue }
+
+        if ($trimmed -match '^TMUX_PREVSESSION\s+(?<name>.+)$') {
+            if ($currentSession) {
+                $result.Add([PSCustomObject]@{ Session = $currentSession; Lines = $buffer.ToArray() })
+            }
+            $currentSession = $matches['name'].Trim()
+            $buffer = [System.Collections.Generic.List[string]]::new()
+            continue
+        }
+
+        # 预览正文行: **保留前导缩进**(只去掉标记后的那一个分隔空格与尾部空白)
+        if ($line.StartsWith('TMUX_PREVIEW')) {
+            $text = $line.Substring('TMUX_PREVIEW'.Length)
+            # 只剥掉标记自带的那一个分隔空格; 其后的缩进是快照内容的一部分
+            if ($text.StartsWith(' ')) { $text = $text.Substring(1) }
+            $buffer.Add(($text -replace '\s+$', ''))
+            continue
+        }
+        # 其它行忽略
+    }
+
+    if ($currentSession) {
+        $result.Add([PSCustomObject]@{ Session = $currentSession; Lines = $buffer.ToArray() })
     }
 
     return $result
@@ -344,8 +592,11 @@ function Get-TmuxAvailability {
     $info = [PSCustomObject]@{
         Available    = if ($isNetworkError) { $false } else { -not [string]::IsNullOrEmpty($version) }
         Version      = $version
+        HomePath     = $parsed.HomePath
         RawLs        = ($parsed.LsLines -join "`n")
         RawSessions  = ($parsed.SessionLines -join "`n")
+        RawWindows   = ($parsed.WindowLines -join "`n")
+        RawPreview   = ($parsed.PreviewLines -join "`n")
         ExitCode     = $exitCode
         Error        = $errorOut
         NetworkError = $isNetworkError
@@ -397,6 +648,15 @@ function Get-TmuxSessions {
 
     $info = Get-TmuxAvailability -HostName $HostName -ConnectTimeout $ConnectTimeout -Force:$Force
 
+    # 窗口拓扑 / 预览快照: 与会话同一次 SSH 往返里取回, 这里只做纯解析
+    # 注意: 函数返回 List 会在管道里被展开成数组, 空集合则展开成 $null ——
+    # 因此统一用 @() 包一层, 保证下游永远是"数组(可能为空)"。
+    $windowLines = @($info.RawWindows -split "`r?`n" | Where-Object { $_ })
+    $allWindows = @(ConvertFrom-TmuxWindowFormat -Lines $windowLines)
+    $previewLines = @($info.RawPreview -split "`r?`n" | Where-Object { $_ })
+    $allPreviews = @(ConvertFrom-TmuxPreviewFormat -Lines $previewLines)
+    $homePath = [string]$info.HomePath
+
     # 用 List 承载会话, 保证空结果时 .Count 依然可靠(数组在空值时会被解包成 $null)
     $sessionList = [System.Collections.Generic.List[PSCustomObject]]::new()
     if ($info.Available) {
@@ -413,6 +673,26 @@ function Get-TmuxSessions {
         }
     }
 
+    # ---- 把窗口拓扑 / 预览快照挂到对应会话上(纯内存, 不再发 SSH) ----
+    # 为什么在这里挂而不是在视图模型里查: 视图模型只拿到状态对象,
+    # 没有窗口/预览数据源; 在数据层挂好, 上层就彻底不需要第二次网络访问。
+    foreach ($session in $sessionList) {
+        $sessionWindows = @($allWindows | Where-Object { $_.Session -eq $session.Name })
+        $sessionPreview = @($allPreviews | Where-Object { $_.Session -eq $session.Name })
+        $previewText = @()
+        if ($sessionPreview.Count -gt 0) { $previewText = @($sessionPreview[0].Lines) }
+        # 用 Add-Member 而不是重新构造对象: 保留解析器给出的字段形状(Name/Status/Windows/...)
+        $session | Add-Member -NotePropertyName 'WindowList' -NotePropertyValue $sessionWindows -Force
+        $session | Add-Member -NotePropertyName 'PreviewLines' -NotePropertyValue $previewText -Force
+        $session | Add-Member -NotePropertyName 'HomePath' -NotePropertyValue $homePath -Force
+        if (-not ($session.PSObject.Properties.Name -contains 'Created')) {
+            $session | Add-Member -NotePropertyName 'Created' -NotePropertyValue ([long]0) -Force
+        }
+        if (-not ($session.PSObject.Properties.Name -contains 'Activity')) {
+            $session | Add-Member -NotePropertyName 'Activity' -NotePropertyValue ([long]0) -Force
+        }
+    }
+
     return @{
         Sessions  = $sessionList
         RawOutput = $info.RawLs
@@ -425,5 +705,10 @@ function Get-TmuxSessions {
         ExitCode     = $info.ExitCode
         NetworkError = $info.NetworkError
         TimedOut     = $info.TimedOut
+        # 契约扩展(2026-11 TUI 数据层): 窗口拓扑 / 预览快照 / 远端 HOME
+        # —— 全部来自**同一次** SSH 往返, 视图层不再需要任何额外网络访问。
+        Windows      = $allWindows
+        Previews     = $allPreviews
+        HomePath     = $homePath
     }
 }

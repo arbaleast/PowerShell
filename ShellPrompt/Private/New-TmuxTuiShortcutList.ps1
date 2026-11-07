@@ -270,17 +270,27 @@ function New-TmuxTuiShortcutList {
             $actionDelegate = [System.Action]([scriptblock]::Create(''))
         }
         # $keyName 是**真实绑定键**(TG 的 Key 静态属性名);
-        # $DisplayKey 只是**展示用的键名文字**(可以是 'q/Esc' 这种合并写法)——
-        # TG 的 KeyView 直接渲染 Key 对象, 所以合并写法只能靠 Title 承载,
-        # 这里把 'q/Esc' 的前半段作为真实键(q), 并把完整写法写进 Title 前缀。
+        # $DisplayKey 只是**展示用的键名文字**(可以是 'q/Esc' 这种合并写法)。
+        #
+        # ★ #9b871512 修复"q q/Esc 退出"重复拼接:
+        #   TG 的 Shortcut 渲染序 = KeyView(键名) -> HelpView -> CommandView(Title)。
+        #   阶段一实现把 'q/Esc' 塞进了 **Title**, 于是屏幕上渲染成
+        #   "q" + "q/Esc 退出" = "q q/Esc 退出"(键名被写了两遍)。
+        #   正确做法: 键名那一格由 **KeyView.Text** 承载(它是可写的 View),
+        #   Title 只放动作标签 —— 于是渲染成 "q/Esc" + "退出"。
         $keyObj = $keyType.GetProperty($keyName).GetValue($null)
-        $finalTitle = $title
-        if ($null -ne $DisplayKey -and [string]$DisplayKey -cne [string]$keyName) {
-            $finalTitle = "$DisplayKey $title"
-        }
         $sc = [System.Activator]::CreateInstance(
             $shortcutType,
-            @($keyObj, $finalTitle, $actionDelegate, ''))
+            @($keyObj, $title, $actionDelegate, ''))
+        if ($null -ne $DisplayKey -and [string]$DisplayKey -cne [string]$keyName) {
+            try {
+                # KeyView 是 TG 的 View, Text 可写 —— 改它才能让键名格显示合并写法
+                $sc.KeyView.Text = [string]$DisplayKey
+            }
+            catch {
+                Write-Verbose "[New-TmuxTuiShortcutList] KeyView.Text 设置失败(退回普通键名): $($_.Exception.Message)"
+            }
+        }
         # Command 必须保持 NotBound: 与 Accept 同时出现会死循环崩进程(见文件头)
         $sc.Command = [Enum]::Parse($tg.Types.Command, 'NotBound')
         $sc.BindKeyToApplication = [bool]$BindApp

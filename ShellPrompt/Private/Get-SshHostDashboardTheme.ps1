@@ -212,6 +212,62 @@ function Get-SshHostDashboardTheme {
         SectionTitle        = New-Cn16Scheme -Foreground 'BrightCyan' -Background 'Black'
         AttachedText        = New-Cn16Scheme -Foreground 'BrightGreen' -Background 'Black'
         Subtle              = New-Cn16Scheme -Foreground 'Gray' -Background 'Black'
+
+        # ================================================================
+        # 2026-11-06 #9b871512 "Forest Matrix"(翡翠绿/竹青)主题新增角色
+        # ================================================================
+        # 背景: 阶段一的"选中行整行 Blue 铺底"在 Windows Terminal 上依然刺眼
+        #   (纯蓝 0,0,255 大面积铺满一行, 对比度过载); 右侧区块标题又全部同色,
+        #   没有层次。新主题的原则:
+        #     - **全局深色背景**: 列表行背景一律 Black, 不再用任何饱和底色;
+        #     - **翡翠绿(BrightGreen)做锚点**: 选中行序号徽标 ┃02┃、Attached 状态、
+        #       活动窗口的 * 标记、底栏按键名 —— 这几处是"当前/活动"的语义;
+        #     - **竹青(Cyan)做结构**: 品牌行与右侧区块小标题, 承担"分区"语义;
+        #     - **灰阶做正文**: 会话名/描述 Gray, 路径/次要 DarkGray。
+        #
+        # 16 色映射(ColorName16 实际枚举名 —— 没有 BrightWhite, 最亮白就是 White):
+        #   ForestAccent     Cyan        on Black —— 品牌行 / 区块小标题
+        #   ForestBrand      BrightCyan  on Black —— 品牌主标识 "ShellPrompt TMUX"
+        #   ForestHost       White       on Black —— 主机名
+        #   ForestFrame      DarkGray    on Black —— 框线 ─ │ ╭ ╮ ╰ ╯
+        #   ForestBadge      BrightGreen on Black —— 选中行 ┃02┃ 徽标
+        #   ForestBadgeOff   DarkGray    on Black —— 未选中行序号 01
+        #   ForestName       Gray        on Black —— 未选中行会话名
+        #   ForestNameOn     White       on Black —— 选中行会话名
+        #   ForestAttached   BrightGreen on Black —— ● Att / ● Attached
+        #   ForestDetached   DarkGray    on Black —— 未选中 ○ Det
+        #   ForestDetachedOn White       on Black —— 选中 ○ Det
+        #   ForestWinCount   DarkGray    on Black —— 未选中 3w
+        #   ForestWinCountOn White       on Black —— 选中 3w
+        #   ForestActive     BrightGreen on Black —— 活动窗口的 * 标记
+        #   ForestActiveName White       on Black —— 活动窗口名
+        #   ForestPaneName   Gray        on Black —— 非活动窗口名
+        #   ForestPath       DarkGray    on Black —— 窗口工作目录
+        #   ForestPreview    Gray        on Black —— 终端预览正文
+        #   ForestPreviewBox DarkGray    on Black —— 预览框线
+        #   ForestSummaryKey DarkGray    on Black —— SUMMARY 键名
+        #   ForestSummaryVal White       on Black —— SUMMARY 值
+        ForestAccent       = New-Cn16Scheme -Foreground 'Cyan' -Background 'Black'
+        ForestBrand        = New-Cn16Scheme -Foreground 'BrightCyan' -Background 'Black'
+        ForestHost         = New-Cn16Scheme -Foreground 'White' -Background 'Black'
+        ForestFrame        = New-Cn16Scheme -Foreground 'DarkGray' -Background 'Black'
+        ForestBadge        = New-Cn16Scheme -Foreground 'BrightGreen' -Background 'Black'
+        ForestBadgeOff     = New-Cn16Scheme -Foreground 'DarkGray' -Background 'Black'
+        ForestName         = New-Cn16Scheme -Foreground 'Gray' -Background 'Black'
+        ForestNameOn       = New-Cn16Scheme -Foreground 'White' -Background 'Black'
+        ForestAttached     = New-Cn16Scheme -Foreground 'BrightGreen' -Background 'Black'
+        ForestDetached     = New-Cn16Scheme -Foreground 'DarkGray' -Background 'Black'
+        ForestDetachedOn   = New-Cn16Scheme -Foreground 'White' -Background 'Black'
+        ForestWinCount     = New-Cn16Scheme -Foreground 'DarkGray' -Background 'Black'
+        ForestWinCountOn   = New-Cn16Scheme -Foreground 'White' -Background 'Black'
+        ForestActive       = New-Cn16Scheme -Foreground 'BrightGreen' -Background 'Black'
+        ForestActiveName   = New-Cn16Scheme -Foreground 'White' -Background 'Black'
+        ForestPaneName     = New-Cn16Scheme -Foreground 'Gray' -Background 'Black'
+        ForestPath         = New-Cn16Scheme -Foreground 'DarkGray' -Background 'Black'
+        ForestPreview      = New-Cn16Scheme -Foreground 'Gray' -Background 'Black'
+        ForestPreviewBox   = New-Cn16Scheme -Foreground 'DarkGray' -Background 'Black'
+        ForestSummaryKey   = New-Cn16Scheme -Foreground 'DarkGray' -Background 'Black'
+        ForestSummaryVal   = New-Cn16Scheme -Foreground 'White' -Background 'Black'
     }
 
     $script:SshHostDashboardThemeCache = $theme

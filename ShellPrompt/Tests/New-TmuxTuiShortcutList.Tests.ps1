@@ -51,17 +51,21 @@ Describe 'TGUI 快捷键列表 (New-TmuxTuiShortcutList)' {
         ($titles | Where-Object { $_ -eq '新建' }).Count | Should -Be 1
         # 阶段一: 退出只剩**一项**(q/Esc 合并), 不再是两个同名"退出"
         ($titles | Where-Object { $_ -match '退出' }).Count | Should -Be 1
-        ($titles | Where-Object { $_ -eq 'q/Esc 退出' }).Count | Should -Be 1
+        # #9b871512: 键名放在 KeyView.Text, Title 只放动作标签(否则渲染成 "q q/Esc 退出")
+        ($titles | Where-Object { $_ -eq '退出' }).Count | Should -Be 1
+        ($titles | Where-Object { $_ -eq 'q/Esc 退出' }).Count | Should -Be 0
     }
 
-    It '阶段一去重: 退出项合并为 "q/Esc 退出", 且列表里没有任何 .Key -eq Esc 的项' {
+    It '阶段一去重: 退出项只有一项, Title 是"退出", 键名由 KeyView.Text 承载 "q/Esc"' {
         $shortcuts = & $script:mod {
             New-TmuxTuiShortcutList -HasSessions $true -Dispatch { param($action) [void]$action }
         }
 
         $exitItems = @($shortcuts | Where-Object { [string]$_.Title -match '退出' })
         $exitItems | Should -HaveCount 1 -Because 'q 与 Esc 是同一个退出动作, 底栏只能展示一次'
-        $exitItems[0].Title | Should -BeExactly 'q/Esc 退出'
+        $exitItems[0].Title | Should -BeExactly '退出' -Because 'Title 只放动作标签(键名那一格由 KeyView 承载)'
+        # 键名那一格显示合并写法 "q/Esc"(否则屏幕上是 "q q/Esc 退出")
+        [string]$exitItems[0].KeyView.Text | Should -BeExactly 'q/Esc'
         # 真实绑定的键仍是 q(展示文字与绑定键分离)
         [string]$exitItems[0].Key | Should -BeExactly 'q'
         # 不再有独立的 Esc 展示项
@@ -76,13 +80,23 @@ Describe 'TGUI 快捷键列表 (New-TmuxTuiShortcutList)' {
             New-TmuxTuiShortcutList -HasSessions $true -Dispatch { param($action) (Get-Variable -Name 'dispatched' -Scope Global).Value.Add($action) }
         }
 
-        $q = $shortcuts | Where-Object { [string]$_.Title -eq 'q/Esc 退出' } | Select-Object -First 1
+        $q = $shortcuts | Where-Object { [string]$_.Title -eq '退出' } | Select-Object -First 1
         $q | Should -Not -BeNullOrEmpty
         $q.Action.Invoke()
 
         $log = (Get-Variable -Name 'dispatched' -Scope Global).Value
         $log | Should -HaveCount 1
         $log -contains 'Quit' | Should -BeTrue
+    }
+
+    It '其余项的键名格没有被污染(只有退出项用合并写法)' {
+        $shortcuts = & $script:mod {
+            New-TmuxTuiShortcutList -HasSessions $true -Dispatch { param($action) [void]$action }
+        }
+        foreach ($sc in $shortcuts) {
+            if ([string]$sc.Title -eq '退出') { continue }
+            [string]$sc.KeyView.Text | Should -BeExactly ([string]$sc.Key) -Because '只有退出项需要合并键名'
+        }
     }
 
     It '渲染契约(TG 2.4.10 实测): Title=纯标签, HelpText 全空 —— 键名+标签不得双渲染' {
@@ -167,6 +181,10 @@ Describe 'TGUI 快捷键列表 (New-TmuxTuiShortcutList)' {
             $exitCount | Should -Be 1 -Because "宽度 $w 下退出项不得重复展示"
             @($list | Where-Object { [string]$_.Key -eq 'Esc' }).Count | Should -Be 0 -Because "宽度 $w 下不得有独立的 Esc 项"
             @($list | Where-Object { [string]$_.Key -eq 'q' }).Count | Should -BeLessOrEqual 1
+            # 退出项的键名格恒为 "q/Esc"(合并展示), Title 恒为 "退出"
+            $exit = @($list | Where-Object { [string]$_.Title -match '退出' })[0]
+            [string]$exit.Title | Should -BeExactly '退出'
+            [string]$exit.KeyView.Text | Should -BeExactly 'q/Esc'
         }
     }
 

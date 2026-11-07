@@ -23,6 +23,7 @@
         'Add-SshHostActivity.ps1'
         'ConvertTo-SshArgumentLine.ps1'
         'ConvertTo-SshEscapedString.ps1'
+        'ConvertTo-TmuxRelativeTime.ps1'
         'ConvertTo-TmuxTuiViewModel.ps1'
         'Enter-TmuxAlternateScreen.ps1'
         'Get-ConsoleUiBackend.ps1'

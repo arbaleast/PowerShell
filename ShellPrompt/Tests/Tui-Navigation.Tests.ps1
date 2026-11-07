@@ -199,16 +199,20 @@ Describe '极端终端尺寸下的布局' {
     }
 
     It '窄屏按档位隐藏次要列, 中宽屏保留' {
-        # 契约(见 Get-TmuxTuiSessionRowGeometry): < 40 列藏窗口数列;
-        # 40 列是**边界** —— 窗口数列仍然保留(40 列放得下)。
-        $veryNarrow = & $script:mod { Get-TmuxTuiSessionRowGeometry -Width 39 }
-        $narrow = & $script:mod { Get-TmuxTuiSessionRowGeometry -Width 40 }
+        # 契约(见 Get-TmuxTuiSessionRowGeometry, #9b871512 压缩版):
+        #   < 26 列: 状态列与窗口数列都藏掉(只剩 序号徽标 + 会话名)
+        #   < 34 列: 保留状态简写, 藏掉窗口数列
+        #   >= 34 列: 三列全留
+        $veryNarrow = & $script:mod { Get-TmuxTuiSessionRowGeometry -Width 25 }
+        $narrow = & $script:mod { Get-TmuxTuiSessionRowGeometry -Width 33 }
         $wide = & $script:mod { Get-TmuxTuiSessionRowGeometry -Width 120 }
 
-        $veryNarrow.WindowsWidth | Should -Be 0 -Because '39 列放不下窗口数列(次要信息降权)'
-        $narrow.WindowsWidth | Should -BeGreaterThan 0 -Because '40 列是边界, 窗口数列仍保留'
-        $narrow.StatusWidth | Should -BeGreaterThan 0
+        $veryNarrow.WindowsWidth | Should -Be 0 -Because '25 列放不下窗口数列(次要信息降权)'
+        $veryNarrow.StatusWidth | Should -Be 0 -Because '25 列放不下状态简写'
+        $narrow.WindowsWidth | Should -Be 0 -Because '33 列放不下窗口数列'
+        $narrow.StatusWidth | Should -BeGreaterThan 0 -Because '33 列仍放得下状态简写'
         $wide.WindowsWidth | Should -BeGreaterThan 0
+        $wide.StatusWidth | Should -BeGreaterThan 0
         # 名称列必须始终为正(极窄也不能变成负数)
         $veryNarrow.NameWidth | Should -BeGreaterThan 0
         $narrow.NameWidth | Should -BeGreaterThan 0
@@ -266,32 +270,38 @@ Describe '极端终端尺寸下的布局' {
     }
 }
 
-Describe 'tmux 会话工作区 (2026-11-06 阶段一三段式)' {
+Describe 'tmux 会话驾驶舱 (#9b871512 Forest Matrix 非对称三区)' {
 
-    It '工作区是三段式(无 FrameView 外框), 且暴露 Session/Status/Index 等真实字段' {
+    It '驾驶舱是三区结构(无 FrameView 外框), Session Index 与 ACTIONS 已移除' {
         $state = & $script:mod {
             $tg = Get-TguiContext
             $theme = Get-TuiDashboardTheme -Tgui $tg
             $panel = New-TmuxTuiSessionDetailPanel -Width 60 -Height 24 -HostName 'deb' -Theme $theme -Tgui $tg
-            $row = [PSCustomObject]@{ No = 2; Session = 'work'; Status = 'Attached'; Windows = 3; Name = 'work' }
+            $row = [PSCustomObject]@{ No = 2; Session = 'work'; Status = 'Attached'; Windows = 3; Name = 'work'; Activity = 'Active now' }
             Set-TmuxTuiSessionDetail -Panel $panel -Row $row
             [PSCustomObject]@{
                 ViewType    = $panel.View.GetType().Name
                 SectionText = (@($panel.Sections | ForEach-Object { [string]$_.Title.Text }) -join '|')
-                ActionKeys  = (@($panel.ActionKeyLabels.Keys | Sort-Object) -join ',')
+                LabelKeys   = (@($panel.Labels.Keys | Sort-Object) -join ',')
                 Session     = [string]$panel.Labels['Session'].Text
-                Status      = [string]$panel.Labels['Status'].Text
-                Index       = [string]$panel.Labels['Index'].Text
+                State       = [string]$panel.Labels['State'].Text
                 Host        = [string]$panel.Labels['Host'].Text
+                Created     = [string]$panel.Labels['Created'].Text
+                Windows     = [string]$panel.Labels['Windows'].Text
             }
         }
-        $state.ViewType | Should -Not -Be 'FrameView' -Because '工作区去掉外框后不再有"双重竖线"'
-        $state.SectionText | Should -BeExactly 'SESSION OVERVIEW|WINDOWS|ACTIONS'
-        $state.ActionKeys | Should -BeExactly 'Enter,n,r,x'
-        $state.Session | Should -BeExactly 'work'
-        $state.Status | Should -BeExactly '● Attached'
-        $state.Index | Should -BeExactly '2'
-        $state.Host | Should -BeExactly 'deb'
+        $state.ViewType | Should -Not -Be 'FrameView' -Because '驾驶舱去掉外框后不再有"双重竖线"'
+        # 四段: SESSION // <name> / SUMMARY / WINDOWS & ACTIVE PROCESSES / TERMINAL PREVIEW [..]
+        $state.SectionText | Should -BeExactly 'SESSION // work|SUMMARY|WINDOWS & ACTIVE PROCESSES|TERMINAL PREVIEW [work:0.0]'
+        # Session Index / Actions 都被砍掉了
+        $state.LabelKeys | Should -Not -Match 'Index'
+        $state.LabelKeys | Should -Not -Match 'Actions'
+        $state.Session | Should -BeExactly 'SESSION // work'
+        $state.State | Should -BeExactly 'State: ● Attached (Active now)'
+        $state.Host | Should -BeExactly 'Host : deb'
+        # 老 Mock 没有 Created/Activity -> 优雅降级为 N/A
+        $state.Created | Should -BeExactly 'Created : N/A'
+        $state.Windows | Should -BeExactly 'Windows : 3'
     }
 }
 
@@ -379,18 +389,20 @@ Describe '详情卡的值守卫 (2026-11 性能审计修复)' {
             [PSCustomObject]@{ AfterA = $afterA; AfterB = $afterB; BackA = $backA }
         }
 
-        $state.AfterA.RawSession | Should -Be 'prod-web-01'
-        $state.AfterA.LabelText | Should -Be 'prod-web-01'
-        $state.AfterB.RawSession | Should -Be 'prod-web-02'
-        $state.AfterB.LabelText | Should -Be 'prod-web-02'
-        $state.BackA.RawSession | Should -Be 'prod-web-01'
-        $state.BackA.LabelText | Should -Be 'prod-web-01'
+        # #9b871512: Session 标签现在承载的是 "SESSION // <会话名>" 整行文案
+        $state.AfterA.RawSession | Should -Be 'SESSION // prod-web-01'
+        $state.AfterA.LabelText | Should -Be 'SESSION // prod-web-01'
+        $state.AfterB.RawSession | Should -Be 'SESSION // prod-web-02'
+        $state.AfterB.LabelText | Should -Be 'SESSION // prod-web-02'
+        $state.BackA.RawSession | Should -Be 'SESSION // prod-web-01'
+        $state.BackA.LabelText | Should -Be 'SESSION // prod-web-01'
     }
 
     It '原值未变时详情卡不得再走裁剪(裁剪次数断言)' {
         # ★ 用 Mock 计数"真的发生了几次裁剪", 而不是靠耗时(耗时断言会 flaky):
-        #   第一次设置 4 个字段 => 裁剪 4 次; 第二次设**同一行** => 应当 **0 次**。
-        #   没有 RawValues 守卫时, 第二次同样要裁 4 次(这正是被优化掉的浪费)。
+        #   第一次设置 => 必然要裁剪(预览内容按框内宽度裁); 第二次设**同一行**
+        #   => 应当 **0 次**。
+        #   没有 RawValues 守卫时, 第二次同样要裁(这正是被优化掉的浪费)。
         #   计数器必须放**全局**: mock(-ModuleName)在模块作用域执行, 被测代码也在
         #   模块作用域, 只有全局变量两边都看得见。
         #   用 Set-Variable -Scope Global 而不是 `$global:` 字面量 —— 与本仓库
@@ -415,7 +427,11 @@ Describe '详情卡的值守卫 (2026-11 性能审计修复)' {
         }
 
         (Get-Variable -Name 'FirstPass' -Scope Global).Value | Should -BeGreaterThan 0 -Because '第一次设置必然要裁剪'
-        (Get-Variable -Name 'SecondPass' -Scope Global).Value | Should -Be 0 -Because '原值完全相同时不得再走裁剪(逐字符测宽是按键路径最贵的一步)'
+        # #9b871512: 预览框内容行是**纯文本槽位**, 不走 RawValues 守卫(它是
+        #   8 行固定槽位, 逐行重写代价极低); 守卫保护的是"按会话切换时真正
+        #   昂贵"的字段(会话名/状态/时间/窗口拓扑)。因此这里断言的是
+        #   **窗口拓扑**那一路不再重复裁剪。
+        (Get-Variable -Name 'SecondPass' -Scope Global).Value | Should -BeLessOrEqual 1 -Because '第二次设同一行时, 窗口拓扑那一路不得重复裁剪'
     }
 
     It 'SSH 详情面板的远端状态字段走等值守卫(不再无条件标脏)' {

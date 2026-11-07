@@ -82,7 +82,7 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
             $plan.TableHeight | Should -BeGreaterOrEqual 1
         }
 
-        It '响应式分栏断点 (2026-11-06 阶段一): 72 列以下单栏 / 72-99 列表 42% / 100-139 列表 40% / 140 以上列表 50~54' {
+        It '响应式分栏断点 (#9b871512 Forest Matrix): 72 列以下单栏 / 72-99 列表 38% / 100-139 列表 34% / 140 以上列表 38~42' {
             $plans = & $script:mod {
                 foreach ($w in @(40, 60, 71, 72, 80, 99, 100, 120, 139, 140, 160, 200)) {
                     $plan = New-TmuxTuiLayoutPlan -Width $w -Height 35
@@ -111,21 +111,21 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
 
                 $p.SplitMode | Should -Be 'Dual' -Because "$($p.Width) 列必须双栏"
                 if ($p.Width -le 99) {
-                    $p.ListRatio | Should -Be 0.42 -Because "$($p.Width) 列属于 42% 档"
+                    $p.ListRatio | Should -Be 0.38 -Because "$($p.Width) 列属于 38% 档"
                 }
                 elseif ($p.Width -le 139) {
-                    $p.ListRatio | Should -Be 0.4 -Because "$($p.Width) 列属于 40% 档"
+                    $p.ListRatio | Should -Be 0.34 -Because "$($p.Width) 列属于 34% 档"
                 }
                 else {
-                    $p.ListWidth | Should -BeGreaterOrEqual 50 -Because "$($p.Width) 列的大屏档位列表不得窄于 50"
-                    $p.ListWidth | Should -BeLessOrEqual 54 -Because "$($p.Width) 列的大屏档位列表不得宽于 54"
+                    $p.ListWidth | Should -BeGreaterOrEqual 38 -Because "$($p.Width) 列的大屏档位列表不得窄于 38"
+                    $p.ListWidth | Should -BeLessOrEqual 42 -Because "$($p.Width) 列的大屏档位列表不得宽于 42"
                 }
 
                 # 双栏几何不变量: 列表 + 1(竖线) + 2(呼吸间距) + 工作区 == 屏宽
                 ($p.ListWidth + 3 + $p.DetailWidth) | Should -Be $p.Width
                 $p.DividerX | Should -Be $p.ListWidth
                 $p.DetailX | Should -Be ($p.ListWidth + 3)
-                $p.DetailWidth | Should -BeGreaterOrEqual 24
+                $p.DetailWidth | Should -BeGreaterOrEqual 30
             }
         }
     }
@@ -175,10 +175,11 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
             }
         }
 
-        It '窄列表隐藏次要列(列表宽 < 40 隐藏窗口数, < 30 再隐藏状态)' {
+        It '窄列表隐藏次要列(列表宽 < 34 隐藏窗口数, < 26 再隐藏状态)' {
             # 2026-10-31: 列计划从 TableView 的 4 列(No/SESSION/STATUS/WINDOWS)
-            # 换成自定义行列表的 4 段(状态点/会话名/状态/窗口数); 响应式取舍
+            # 换成自定义行列表的 4 段(序号徽标/会话名/状态简写/窗口数); 响应式取舍
             # 改成按**列表实际宽度**(不是终端宽度)决定保哪几段。
+            # #9b871512 压缩版阈值: < 26 藏状态+窗口数, < 34 藏窗口数。
             $geo = & $script:mod {
                 param($listWidth)
                 Get-TmuxTuiSessionRowGeometry -Width $listWidth
@@ -186,15 +187,15 @@ Describe 'TGUI 仪表盘 (Show-TmuxTuiDashboard 阶段 B)' {
             # 64 列: 三段全留
             $geo.StatusWidth | Should -BeGreaterThan 0
             $geo.WindowsWidth | Should -BeGreaterThan 0
-            # 36 列: 留状态, 舍窗口数
-            $geo36 = & $script:mod { param($w) Get-TmuxTuiSessionRowGeometry -Width $w } 36
-            $geo36.StatusWidth | Should -BeGreaterThan 0
-            $geo36.WindowsWidth | Should -Be 0
-            # 24 列: 只剩状态点 + 会话名
-            $geo24 = & $script:mod { param($w) Get-TmuxTuiSessionRowGeometry -Width $w } 24
-            $geo24.StatusWidth | Should -Be 0
-            $geo24.WindowsWidth | Should -Be 0
-            $geo24.NameWidth | Should -BeGreaterThan 0
+            # 33 列: 留状态简写, 舍窗口数
+            $geo33 = & $script:mod { param($w) Get-TmuxTuiSessionRowGeometry -Width $w } 33
+            $geo33.StatusWidth | Should -BeGreaterThan 0
+            $geo33.WindowsWidth | Should -Be 0
+            # 25 列: 只剩 序号徽标 + 会话名
+            $geo25 = & $script:mod { param($w) Get-TmuxTuiSessionRowGeometry -Width $w } 25
+            $geo25.StatusWidth | Should -Be 0
+            $geo25.WindowsWidth | Should -Be 0
+            $geo25.NameWidth | Should -BeGreaterThan 0
         }
     }
 

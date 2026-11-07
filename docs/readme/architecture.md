@@ -76,7 +76,7 @@ PowerShell/
         ├── Add-SshHostActivity.ps1            # [新] 记录一次 SSH 主机连接活动(本地 JSON, 原子写)
         ├── ConvertTo-SshArgumentLine.ps1      # SSH 命令行参数拼接
         ├── ConvertTo-SshEscapedString.ps1     # SSH 单引号转义
-        ├── ConvertTo-TmuxTuiViewModel.ps1     # 仪表盘视图模型(状态区 + 表格数据)
+        ├── ConvertTo-TmuxTuiViewModel.ps1     # 仪表盘视图模型(状态区 + 列表行/详情行两套平行数组)
         ├── Enter-TmuxAlternateScreen.ps1      # 进入备用屏(TGUI 持有终端时静音)
         ├── Get-ConsoleUiBackend.ps1           # Terminal.Gui v2 ALC 就绪检测(Backend 恒 'TerminalGui') + Assert-ConsoleUiReady
         ├── Get-HostSelectorRow.ps1            # 主机选择行构造(LastHost 置顶 + State 标注)
@@ -115,10 +115,10 @@ PowerShell/
         ├── New-SshHostDetailPanel.ps1         # [新] 右侧详情卡片(FrameView × 4) + 就地更新原语
         ├── New-TmuxSession.ps1                # 创建新 tmux 会话
         ├── New-TmuxTuiSessionRowList.ps1      # [新] tmux 会话自定义行列表(每行 5 Label) + 局部刷新原语
-        ├── New-TmuxTuiSessionDetailPanel.ps1   # [新] tmux 会话详情卡(FrameView) + 就地更新原语
+        ├── New-TmuxTuiSessionDetailPanel.ps1   # [新] tmux 会话驾驶舱(非对称三区, 无 FrameView) + 就地更新原语
         ├── New-TmuxTuiSessionTable.ps1        # [旧轨, 保留] tmux 会话 TableView 构造(非默认路径)
         ├── New-TmuxTuiColumnPlan.ps1          # [旧轨, 保留] 会话表列裁剪计划
-        ├── New-TmuxTuiDashboardWindow.ps1     # 仪表盘窗口(表格 + 快捷键栏)构造
+        ├── New-TmuxTuiDashboardWindow.ps1     # 仪表盘窗口(标题带 + 统计行 + 列表 + 驾驶舱 + 快捷键栏)构造
         ├── New-TmuxTuiLayoutPlan.ps1          # 仪表盘布局计划(零重叠零空档)
         ├── New-TmuxTuiShortcutList.ps1        # 仪表盘快捷键栏 (Shortcut) 构造
         ├── New-WelcomeBanner.ps1              # [P2] 欢迎 Banner 纯函数(主机名 + 随机语录)
