@@ -125,6 +125,7 @@ CI 强制以下四条不变量，任何一条不满足都会让 CI 变红：
   该入口默认在出现 Fail 时以**非零退出码**结束(CI 依赖它); 在交互会话里用 `&` 调用时加 `-NoExit`,
   否则 `exit` 会把当前会话一起结束。
   本地想复现 CI 的规模门禁, 可以显式带上 `-MinPassed` / `-MinTestFiles`（取 CI workflow 里同一组数值）。
+  三道门禁的完整命令行与使用说明见 [`docs/readme/development.md`](../readme/development.md)。
 - **静态分析**: `pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Lint.ps1`
   （收紧基线时加 `-UpdateBaseline`）。
 - **Profile 冒烟**: `pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-ProfileSmoke.ps1`

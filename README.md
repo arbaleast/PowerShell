@@ -44,7 +44,7 @@ Enter 连接 │ / 搜索 │ Tab 切换区域 │ ↑↓ 选择主机 │ ←�
 顶部分类来自 ssh config 里**真实**的 `# @provider` 元数据（没写就归到 `Other`）；
 左侧列表显示状态点 / 主机名 / 分组 / 标签 / 最后活跃；右侧详情分
 Connection / Activity / Tags / Infrastructure 四张卡片，远端状态**异步**加载、
-加载中与失败都有明确提示。输入 `/` 实时过滤主机；上次使用的主机会置顶并在标题带右侧显示。
+加载中与失败都有明确提示。输入 `/` 实时过滤主机；上次使用的主机会置顶并在标题带右侧显示。键位契约与响应式规则见 [TUI 仪表盘](docs/readme/tui-dashboard.md) §2.13.1。
 
 **tmux 会话仪表盘**：
 
@@ -61,19 +61,7 @@ ShellPrompt TMUX   Host: debian   Sessions: 3 (1 Attached)        ● 已连接
  Enter 附着 │ n 新建 │ r 刷新 │ s SSH │ x 删除 │ q/Esc 退出
 ```
 
-选中行以亮绿序号徽标标记（不铺底色），右侧驾驶舱只显示真实字段；无会话与连接失败是两种明确区分的状态，不会用空表格冒充。
-
-| 按键 | 操作 |
-|------|------|
-| `↑` / `↓` | 选择会话 |
-| `Enter` | 附着 / 恢复选中会话 |
-| `n` | 新建 tmux 会话 |
-| `r` | 刷新会话列表（连接失败时重试） |
-| `s` | 直接 SSH 登录（失败时直连排查） |
-| `x` | 删除选中会话（需要二次确认，默认 `n`） |
-| `q` / `Esc` | 退出管理器（底栏显示为一项 `q/Esc 退出`，两个键都生效） |
-
-终端较窄时次要列与底栏按钮会按宽度自动取舍（会话名与序号徽标始终保留）。界面结构、键位与响应式规则的完整契约见 [TUI 仪表盘](docs/readme/tui-dashboard.md)，面向使用者的操作说明见 [功能特点](docs/readme/features.md)。
+选中行以亮绿序号徽标标记（不铺底色），右侧驾驶舱只显示真实字段；无会话与连接失败是两种明确区分的状态，不会用空表格冒充。常用按键与操作说明见 [功能特点](docs/readme/features.md)，键位与响应式规则的完整契约（主表）见 [TUI 仪表盘](docs/readme/tui-dashboard.md)。
 
 ## 核心功能
 
@@ -201,7 +189,7 @@ sss deb
 # 3. 把本机默认公钥推送到远程主机
 ssh-copy-id user@example.com
 
-# 4. 手动刷新一次天气（绕过 10 分钟缓存）
+# 4. 手动刷新一次天气（绕过缓存）
 Update-Weather
 
 # 5. 修改模块源码或 ~/.ShellPrompt/config.ps1 后重载配置
@@ -222,19 +210,7 @@ Invoke-Reload
 $HOME/.ShellPrompt/config.ps1
 ```
 
-文件默认不存在，需要时自行创建。用户配置覆盖模块内置默认值（**用户配置 → 默认配置**），完整配置项与示例见 [配置说明](docs/readme/configuration.md)。
-
-```powershell
-# ~/.ShellPrompt/config.ps1
-# 注意：PowerShell 双引号字符串不解析 \e，用反引号转义 `e
-$Config.Colors.FreshGreen = "`e[38;2;0;255;0m"   # 覆盖主色调
-$Config.Weather.Enabled   = $false                # 关闭 SSH 主机仪表盘标题带天气
-$Config.SSH.LastHost      = 'my-server'           # 预置置顶主机
-```
-
-修改后运行 `Invoke-Reload` 生效。
-
-> 配置文件会被启动流程和模块各加载一次，因此只应做 `$Config.*` 赋值，不要在文件里调用模块内部函数或设置别名。
+文件默认不存在，需要时自行创建。用户配置覆盖模块内置默认值（**用户配置 → 默认配置**）；配置示例、配置文件加载次数与「只做 `$Config.*` 赋值」等注意事项见 [配置说明](docs/readme/configuration.md)。修改后运行 `Invoke-Reload` 生效。
 
 ## 文档导航
 
@@ -257,7 +233,7 @@ $Config.SSH.LastHost      = 'my-server'           # 预置置顶主机
 | `sss` 提示 "当前不是交互式终端" | 在管道、重定向或 CI 中调用了交互式命令 | 在真实终端中运行 |
 | `无法执行 ssh: ...` | 未安装 OpenSSH 客户端，或 `ssh.exe` 不在 PATH | 安装 Windows 的 OpenSSH 客户端，或把 `ssh.exe` 加入 PATH |
 | 远端主机提示没有 tmux | 远端未安装 tmux | 在远端安装 tmux，或用 `s` 直连 SSH 后手动处理 |
-| 主机名包含非法字符 | 输入含空格、斜杠等特殊字符 | 主机名仅允许字母、数字、`.`、`-`、`_` |
+| 主机名包含非法字符 | 输入含空格、斜杠等特殊字符 | 主机名须通过白名单校验，规则见 [SSH 与 tmux 领域规约](docs/agents/domain-ssh-tmux.md) |
 | `Copy-SshPublicKey` 提示找不到默认公钥 | 本机未生成 SSH 密钥对 | 执行 `ssh-keygen -t ed25519` 生成密钥 |
 | `Update-Weather` / `Invoke-Reload` 提示不是命令 | ShellPrompt 模块尚未加载 | 先运行一次 `sss`，或手动 `Import-Module` |
 | 天气一直不显示 | 网络不可达、wttr.in 限流，或 `Weather.Enabled = $false` | 检查网络与配置；可用 `Update-Weather` 手动测试 |
@@ -269,15 +245,8 @@ $Config.SSH.LastHost      = 'my-server'           # 预置置顶主机
 
 - 架构与加载流程：[架构说明](docs/readme/architecture.md)
 - 命名、作用域、错误处理、测试与提交规范：[开发者指南](docs/readme/development.md)（权威版本在 [`docs/agents/`](docs/agents/)）
-- 测试与静态分析统一入口：
-
-  ```powershell
-  pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Tests.ps1
-  pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-Lint.ps1
-  pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-ProfileSmoke.ps1
-  ```
-
-CI（`.github/workflows/test.yml`）在 `windows-latest` 上运行上述三道门禁。
+- 测试与静态分析统一入口（三道门禁命令与参数说明）见 [开发者指南](docs/readme/development.md) 与 [`docs/agents/testing.md`](docs/agents/testing.md)。
+- CI（`.github/workflows/test.yml`）在 `windows-latest` 上运行这三道门禁。
 
 ## License
 

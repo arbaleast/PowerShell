@@ -166,4 +166,27 @@
 
 ---
 
+## G · 执行记录（2026-11-07 落地）
+
+本次落地按 F 节六阶段计划的**前四阶段**执行，阶段 5（测试夹具抽取）与【暂缓】四项（B3-6 / B3-9 / B1-4 / B4-7）未做。
+
+| 提交 | 类型 | 内容 |
+|---|---|---|
+| `8c90a9f` | `docs(readme)` | 本审计报告入库 |
+| `2b61c14` | `refactor(tui)` | 阶段 2+3：删旧主机选择器轨 4 文件 + 孤岛 `Clear-TmuxScreen` / `Set-SshHostListRowFocus` + 配置键 `Colors.DarkGray`；测试同步（698 → 680 It） |
+| `55a84e3` | `refactor(tui)` | 阶段 4：删旧 TableView 会话表轨 2 文件 + `New-TmuxTuiLayoutPlan` 的 `.Columns` 死分支；测试同步（680 → 668 It，测试文件 44 → 43） |
+| `d8a3682` | `docs` | 阶段 1：文档 SSOT 第一波（架构真源同步 + 用户面文档改写，-297 行） |
+| 末次提交 | `docs` | 阶段 5 文档 SSOT 第二波（键位表 / 示意图 / 配置示例 / 门禁命令 / 运行环境 / Colors 与 Theme 表 / 导航表去重，§2.15 与 §2.16 上移修正章节编号矛盾） |
+
+**结果核对**
+
+- 公开导出 5 个零变更（`Show-UserScoopLogo` / `Start-TmuxSession` / `Copy-SshPublicKey` / `Invoke-Reload` / `Update-Weather`）。
+- `CoreScripts.psd1` 与磁盘一致：Private 62 条 + Public 5 条（`ModuleLoad.Tests.ps1` 一致性断言兜底）。
+- 旧轨死名在 `README.md` / `AGENTS.md` / `docs/**` 中 0 命中（本文件保留历史叙述）。
+- 本机无 Pester / PSSA / 外网环境，验证以 AST 全量解析 + 清单-磁盘一致性 + `Import-Module` 冒烟 + 死链 grep 为准；Pester / PSSA 门禁由 CI（windows-latest `Invoke-Tests`）兜底。
+
+**未执行项（保留）**：阶段 5 测试夹具抽取需先有 PSSA 可用环境；B3-6 重复断言收敛、B3-9 PSSA 规则 pin、B1-4 `Invoke-DeferredInit` 注释、B4-7 档案型文档按【暂缓】处理，留待独立 issue 跟踪。
+
+---
+
 * 审计方法与原始数据（可再跑）：`.agent_cache/audit-tui/ast-callgraph.ps1`（AST 调用图生成器，全仓函数定义/调用点/调用操作符/动态调用/字符串引用 5 类取证）、`.agent_cache/audit2/DOC-SSOT-FINDINGS.md`（F1-F51 文档 SSOT）、`.agent_cache/audit-tests/test-suite-audit.md`（测试套件与门禁耦合）。红线条目与「删除联动四件套」如本文件 E 节；不改变 B/C/D 三表任意处置标签。

@@ -552,19 +552,12 @@ Terminal.Gui 2.4.10 未暴露 `FakeDriver`，但**渲染结果先落在 `driver.
 > 本节保留作历史对照。
 
 ```text
-ShellPrompt TMUX Manager · 主机 debian                        已连接   ← 行 0 标题带
-会话: 4 · Attached: 2 · Detached: 2                                      ← 行 1 统计行
-                                                                       ← 行 2 状态标题行
- ●  hermes                        Attached     1  │ ╭┤ Session ───────╮   ← 行 3..H-2
- ●  tmux-438369                   Detached     1  │ │ Session hermes   │      主体区
- ●  副业-android构建              Detached     6  │ │ Status  Attached │      列表 + 分隔线
- ●  a-very-long-session-name…     Attached    12  │ │ Windows 1        │      + 详情卡
-                                    │ │ Status   Detached│
-                                    │ │ Windows  1         │
-                                    │ │ No       1         │
-                                    │ ╰─────────────────────╯
-                                                                       ← 行 H-1 快捷键栏
+行 0 标题带 · 行 1 统计行 · 行 2 状态标题行
+行 3..H-2 主体区 = 左侧会话列表 │ 右侧「┌─ Session ─┐」详情卡（旧形态）
+行 H-1 快捷键栏
 ```
+
+> 旧形态的完整画面（详情卡内容、选中态底色）已随 §2.15 压缩移除，需要时查 git 历史；现行布局契约见 **§2.2**，现行三区驾驶舱见 **§2.16.2**。
 
 - **分栏**：终端 `>= 72` 列时右侧出详情卡，列表占 55%（`>= 100` 列固定 64 列），
   详情卡贴右边缘；`< 72` 列收起详情卡、列表吃满整宽。
@@ -580,16 +573,7 @@ ShellPrompt TMUX Manager · 主机 debian                        已连接   ←
 > #9b871512 改成了**序号徽标(6) | 会话名(吃满) | 状态简写(6) | 窗口数(4)**，
 > 现行几何与取舍见 **§2.16.2**。本节保留作历史对照。
 
-行内四段：**状态点(2) | 会话名(吃满) | 状态(9, 右对齐) | 窗口数(6, 右对齐)**。
-会话名优先（占满剩余宽度），次要信息固定宽度右对齐。
-
-取舍按**列表实际宽度**（不是终端宽度）决定：
-
-| 列表宽 | 状态点 | 会话名 | 状态 | 窗口数 |
-|---|---|---|---|---|
-| `>= 40` | ✓ | ✓ | ✓ | ✓ |
-| `30–39` | ✓ | ✓ | ✓ | ✗ |
-| `< 30` | ✓ | ✓ | ✗ | ✗ |
+行内四段：**状态点(2) | 会话名(吃满) | 状态(9, 右对齐) | 窗口数(6, 右对齐)**；会话名优先（占满剩余宽度），次要信息固定宽度右对齐。取舍按**列表实际宽度**（不是终端宽度）决定，阈值表已随本节压缩移除，现行列几何与取舍见 **§2.16.2**。
 
 #### 2.14.3 性能根因与前后对比
 
@@ -651,62 +635,6 @@ tmux 侧与主机侧**共用** TG 主循环的帧率上限（默认 25 fps ⇒ 4
 
 取证产物在 `.agent_cache/uir/`（gitignored）：`o-*.raw` = 原始转义流，
 `o-*.raw.scr` = 还原后的逐格文本。
-
----
-
-
-
-## 三、vendored 依赖归属
-
-Terminal.Gui 采用**独立版本目录 + 单一副本**：`Modules/Terminal.Gui/<ver>/`。演进过程与备选方案见 git 历史，此处只记录现行结论与维护方式。
-
-### 3.1 现状（事实）
-
-| 事实 | 值 |
-|------|---|
-| Terminal.Gui 版本 | **2.4.10.0**（`AssemblyVersion` = `AssemblyFileVersion`），目标框架 `.NETCoreApp,v10.0` |
-| vendored 位置 | `Modules/Terminal.Gui/2.4.10/` —— **单一副本**，独立版本目录入版本库 |
-| 同目录托管依赖 | `ColorHelper` / `JetBrains.Annotations` / `Markdig` / `Microsoft.Extensions.DependencyInjection.Abstractions` / `Microsoft.Extensions.Logging.Abstractions` / `Onigwrap` / `System.IO.Abstractions` 系列 / `Testably.Abstractions.FileSystem.Interface` / `TextMateSharp(.Grammars)` / `Wcwidth`（共 13 个依赖 DLL，与 TG 同目录） |
-| 消费方 | `sss` 仪表盘与 SSH 主机选择器 —— **独立不可回收 ALC**（`ShellPrompt-Tgui`），依赖按“同目录同名文件”回载 |
-| 同进程内的 TG 类型身份 | **一套**（`ShellPrompt-Tgui` ALC） |
-
-### 3.2 结论与理由
-
-1. **TG 是全仓唯一的交互式 UI 依赖**，独立版本目录 + 独立 ALC 的组合满足“单副本、版本钉死、类型身份一致”。
-2. ALC 从独立目录按同目录规则解析依赖；“主机选择器能否弹出”由 [`Get-ConsoleUiBackend`](../../ShellPrompt/Private/Get-ConsoleUiBackend.ps1) 的 vendored 目录探测显式兜底。
-3. 版本耦合的风险由**显式失败**兜住：加载器对核心类型面逐项探针，vendored 版本一变就抛 `TGUI 载入失败: Terminal.Gui 中缺少核心类型 …`，并指回 [`Get-TguiContext.ps1`](../../ShellPrompt/Private/Get-TguiContext.ps1) 头部的 API 面记录（§2.1）——不是静默半屏。
-
-> 因此**不做回迁**：不改 vendored 目录结构，也不改程序集加载方式。
-
-### 3.3 升级 Terminal.Gui 的固定动作
-
-1. 替换 `Modules/Terminal.Gui/<ver>/` 下的 TG 与同目录依赖；
-2. 重跑反射探针，逐条核对 `Get-TguiContext.ps1` 头部的 API 面记录；
-3. 同步本文件 §2.1 / §3.1 的版本与依赖清单；
-4. 跑三道门禁（Pester / PSScriptAnalyzer / Profile 冒烟）。
-
-> 护栏：`ShellPrompt/Tests/Get-TguiContext.Tests.ps1` 断言 TG 就在 `Modules/Terminal.Gui/<ver>/` **独立目录单副本**（有人引入第二份 `Terminal.Gui.dll`、或把 TG 迁回任何其他目录时该断言失败，强制走一次显式决策）。
-
-## 四、错误码表
-
-| 错误码 | 含义 | 判定依据 | 用户指引 |
-|--------|------|----------|----------|
-| `E_SSH_TIMEOUT` | SSH 等待超时（作业被 Kill），与"远端命令失败"是两回事 | 探测结果标记超时 | 按 `r` 重试 · 按 `s` 直连 SSH |
-| `E_SSH_UNREACHABLE` | 网络不可达 / 端口被拒绝 / DNS 失败 | 探测结果标记网络错误 | 按 `r` 重试 · 按 `s` 直连 SSH |
-| `E_SSH_AUTH` | SSH 认证或主机密钥校验失败 | 错误文本命中认证关键字（如 `Permission denied` / `Host key verification failed`） | 按 `r` 重试 · 按 `s` 直连 SSH |
-| `E_SSH_FAILED` | SSH 进程或远端命令失败（退出码非 0） | 退出码非 0 | 按 `r` 重试 · 按 `s` 直连 SSH |
-| `E_NO_TMUX` | 命令跑通了但拿不到 tmux 版本（远端未安装 tmux / tmux server 未运行） | 退出码 0 且无版本信息 | 按 `r` 重试 · 按 `s` 直连 SSH |
-| `E_UNKNOWN` | 没有任何探测信息（兜底，理论不可达） | 探测结果为空 | 按 `r` 重试 · 按 `s` 直连 SSH |
-
-错误码只出现在**顶部辅助行**（与错误原因、可执行提示同行）；会话表行内**永不出现**错误码或长错误文本（见 §2.3 硬约束 1）。
-
----
-
-## 五、已知限制与验证状态
-
-### 维护记录
-
-历史缺陷的修复过程与根因取证不在此逐条记录（需要时查 git 历史）。现行必须遵守的规则已写在契约小节中：快捷键渲染序见 §2.4，尺寸来源与缩放见 §2.6，配色与 16 色量化见 §2.9，非泛型 `Run` 见 §2.10，Init 周期与事件订阅见 §2.11。
 
 ### 2.15 tmux 会话仪表盘的视觉层级重构（2026-11-06，阶段一；已被取代）
 
@@ -992,6 +920,63 @@ Enter 附着 │ n 新建 │ r 刷新 │ s SSH │ x 删除 │ q/Esc 退出
 - **首次拉起的一次性延迟**：首次进入 `sss` 时 Terminal.Gui 静态初始化 + JIT 约 **0.84 s**（之后稳态 30–45 ms）；模块导入阶段**不**加载 Terminal.Gui（惰性），因此不影响 Shell 启动耗时。详见 §2.12。
 - **绘制级断言无法无头执行**：Terminal.Gui 2.4.10 未暴露 `FakeDriver` / 公开的 `View.Render`，无头证据止于方案配色值、布局几何、IL 反汇编与子视图/`IsRunning` 行为探针；"内容确实可见"由真机清单第 0 项确认（已通过）。
 
+
+---
+
+
+
+## 三、vendored 依赖归属
+
+Terminal.Gui 采用**独立版本目录 + 单一副本**：`Modules/Terminal.Gui/<ver>/`。演进过程与备选方案见 git 历史，此处只记录现行结论与维护方式。
+
+### 3.1 现状（事实）
+
+| 事实 | 值 |
+|------|---|
+| Terminal.Gui 版本 | **2.4.10.0**（`AssemblyVersion` = `AssemblyFileVersion`），目标框架 `.NETCoreApp,v10.0` |
+| vendored 位置 | `Modules/Terminal.Gui/2.4.10/` —— **单一副本**，独立版本目录入版本库 |
+| 同目录托管依赖 | `ColorHelper` / `JetBrains.Annotations` / `Markdig` / `Microsoft.Extensions.DependencyInjection.Abstractions` / `Microsoft.Extensions.Logging.Abstractions` / `Onigwrap` / `System.IO.Abstractions` 系列 / `Testably.Abstractions.FileSystem.Interface` / `TextMateSharp(.Grammars)` / `Wcwidth`（共 13 个依赖 DLL，与 TG 同目录） |
+| 消费方 | `sss` 仪表盘与 SSH 主机选择器 —— **独立不可回收 ALC**（`ShellPrompt-Tgui`），依赖按“同目录同名文件”回载 |
+| 同进程内的 TG 类型身份 | **一套**（`ShellPrompt-Tgui` ALC） |
+
+### 3.2 结论与理由
+
+1. **TG 是全仓唯一的交互式 UI 依赖**，独立版本目录 + 独立 ALC 的组合满足“单副本、版本钉死、类型身份一致”。
+2. ALC 从独立目录按同目录规则解析依赖；“主机选择器能否弹出”由 [`Get-ConsoleUiBackend`](../../ShellPrompt/Private/Get-ConsoleUiBackend.ps1) 的 vendored 目录探测显式兜底。
+3. 版本耦合的风险由**显式失败**兜住：加载器对核心类型面逐项探针，vendored 版本一变就抛 `TGUI 载入失败: Terminal.Gui 中缺少核心类型 …`，并指回 [`Get-TguiContext.ps1`](../../ShellPrompt/Private/Get-TguiContext.ps1) 头部的 API 面记录（§2.1）——不是静默半屏。
+
+> 因此**不做回迁**：不改 vendored 目录结构，也不改程序集加载方式。
+
+### 3.3 升级 Terminal.Gui 的固定动作
+
+1. 替换 `Modules/Terminal.Gui/<ver>/` 下的 TG 与同目录依赖；
+2. 重跑反射探针，逐条核对 `Get-TguiContext.ps1` 头部的 API 面记录；
+3. 同步本文件 §2.1 / §3.1 的版本与依赖清单；
+4. 跑三道门禁（Pester / PSScriptAnalyzer / Profile 冒烟）。
+
+> 护栏：`ShellPrompt/Tests/Get-TguiContext.Tests.ps1` 断言 TG 就在 `Modules/Terminal.Gui/<ver>/` **独立目录单副本**（有人引入第二份 `Terminal.Gui.dll`、或把 TG 迁回任何其他目录时该断言失败，强制走一次显式决策）。
+
+## 四、错误码表
+
+| 错误码 | 含义 | 判定依据 | 用户指引 |
+|--------|------|----------|----------|
+| `E_SSH_TIMEOUT` | SSH 等待超时（作业被 Kill），与"远端命令失败"是两回事 | 探测结果标记超时 | 按 `r` 重试 · 按 `s` 直连 SSH |
+| `E_SSH_UNREACHABLE` | 网络不可达 / 端口被拒绝 / DNS 失败 | 探测结果标记网络错误 | 按 `r` 重试 · 按 `s` 直连 SSH |
+| `E_SSH_AUTH` | SSH 认证或主机密钥校验失败 | 错误文本命中认证关键字（如 `Permission denied` / `Host key verification failed`） | 按 `r` 重试 · 按 `s` 直连 SSH |
+| `E_SSH_FAILED` | SSH 进程或远端命令失败（退出码非 0） | 退出码非 0 | 按 `r` 重试 · 按 `s` 直连 SSH |
+| `E_NO_TMUX` | 命令跑通了但拿不到 tmux 版本（远端未安装 tmux / tmux server 未运行） | 退出码 0 且无版本信息 | 按 `r` 重试 · 按 `s` 直连 SSH |
+| `E_UNKNOWN` | 没有任何探测信息（兜底，理论不可达） | 探测结果为空 | 按 `r` 重试 · 按 `s` 直连 SSH |
+
+错误码只出现在**顶部辅助行**（与错误原因、可执行提示同行）；会话表行内**永不出现**错误码或长错误文本（见 §2.3 硬约束 1）。
+
+---
+
+## 五、已知限制与验证状态
+
+### 维护记录
+
+历史缺陷的修复过程与根因取证不在此逐条记录（需要时查 git 历史）。现行必须遵守的规则已写在契约小节中：快捷键渲染序见 §2.4，尺寸来源与缩放见 §2.6，配色与 16 色量化见 §2.9，非泛型 `Run` 见 §2.10，Init 周期与事件订阅见 §2.11。
+
 ### 真机验收清单（Windows Terminal + pwsh 7.6+，逐项打勾）
 
 准备：对一台真实 tmux 主机运行 `sss`（无渲染开关，仪表盘只有一条轨）。
@@ -1054,7 +1039,4 @@ Enter 附着 │ n 新建 │ r 刷新 │ s SSH │ x 删除 │ q/Esc 退出
 
 ## 相关文档
 
-- [架构](architecture.md) —— 模块目录树与加载流程
-- [命令一览](commands.md) —— 公开命令与交互流程
-- [配置](configuration.md) —— 配置域与优先级
-- [`docs/agents/architecture.md`](../agents/architecture.md) —— 架构不变量与 tmux 管理器交互契约
+文档导航见 [`AGENTS.md`](../../AGENTS.md)（代理入口）与 [`README.md`](../../README.md)（用户入口）；架构不变量见 [`docs/agents/architecture.md`](../agents/architecture.md)。

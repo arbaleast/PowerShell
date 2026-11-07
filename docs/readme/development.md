@@ -4,18 +4,7 @@
 
 ## 环境准备
 
-| 组件 | 要求 |
-|------|------|
-| PowerShell | **7.6+**（模块清单强制；`Tests/Invoke-Tests.ps1` 也会做版本守卫） |
-| Pester | **5+**（测试使用 v5/v6 语法） |
-| PSScriptAnalyzer | 任意较新版本 |
-
-```powershell
-Install-Module Pester -MinimumVersion 5.0 -Scope CurrentUser -Force -AllowClobber
-Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -AllowClobber
-```
-
-更完整的本机环境说明见 [`docs/agents/environment.md`](../agents/environment.md)。CI 只跑在 `windows-latest`：模块与测试按 Windows 编写（`ssh.exe` / `LOCALAPPDATA` / `TEMP` / `USERPROFILE`），在 Linux 上跑套件时个别 Windows 专属用例失败属于预期。
+需要 PowerShell **7.6+**、Pester **5+** 与较新版本的 PSScriptAnalyzer；完整版本要求、安装命令与本机环境说明见 [`docs/agents/environment.md`](../agents/environment.md)（权威），CI 只跑在 `windows-latest`（Windows 专属依赖见该文件）。
 
 ## 提交前门禁
 
@@ -48,7 +37,7 @@ pwsh -NoProfile -File ./ShellPrompt/Tests/Invoke-ProfileSmoke.ps1
 
 领域细节见 [`docs/agents/development.md`](../agents/development.md)、[`docs/agents/domain-ssh-tmux.md`](../agents/domain-ssh-tmux.md) 与 [`docs/agents/architecture.md`](../agents/architecture.md)。
 
-> **PSSA 已知约束**：[`Settings.ScriptAnalyzer.psd1`](../../ShellPrompt/Settings.ScriptAnalyzer.psd1) 中 `PSUseCorrectCasing` 的 `CheckCommands` 被关闭。原因是该规则读取参数元数据时会实例化 PwshSpectreConsole 的动态 `ValidateSet` 生成器，而 PSSA 调用时没有 Runspace，会导致整个文件的扫描结果作废。关键字 / 操作符 / 别名的大小写检查仍然生效。
+> **PSSA 已知约束**：[`Settings.ScriptAnalyzer.psd1`](../../ShellPrompt/Settings.ScriptAnalyzer.psd1) 中 `PSUseCorrectCasing` 的 `CheckCommands` 被关闭（原因见该配置文件内的注释）；关键字 / 操作符 / 别名的大小写检查仍然生效。
 
 ## 人工测试
 

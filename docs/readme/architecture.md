@@ -17,16 +17,9 @@ PowerShell/
 │   └── quotes.txt                     # 随机语录数据
 ├── docs/                              # 文档目录
 │   ├── agents/                        # AGENTS.md 路由的细分子规约
-│   │   ├── architecture.md            # 目录职责、兼容性与降级
-│   │   ├── development.md             # 命名、函数拆分、错误处理、配置
-│   │   ├── domain-ssh-tmux.md         # SSH / tmux 领域红线
-│   │   ├── testing.md                 # 测试与文档义务
-│   │   ├── commit-convention.md       # 提交信息规范
-│   │   ├── environment.md             # 本机 pwsh 安装位置与兜底查询
-│   │   └── wttr.md                    # 菜单标题区天气约束
-│   ├── readme/                        # 用户手册（按主题拆分）
-│   │   ├── architecture.md / commands.md / configuration.md
-│   │   ├── features.md / tui-dashboard.md / development.md
+│   │   └── (架构 / 开发 / 领域 / 测试 / 提交 / 环境 / 天气 —— 见 AGENTS.md 导航表)
+│   ├── readme/                        # 用户手册(按主题拆分: architecture / commands / configuration / features / tui-dashboard / development)
+│   └── (完整文档清单见 AGENTS.md 与 README.md 的导航表)
 └── ShellPrompt/                       # 模块根目录
     ├── ShellPrompt.psd1               # 模块清单 (ModuleVersion 2.0.0)
     ├── ShellPrompt.psm1               # 模块入口脚本
@@ -89,6 +82,8 @@ PowerShell 启动
 │     ⑤ Show-UserScoopLogo.ps1                │
 │       (依赖 Get-CachedConfig /               │
 │        Get-RandomQuote / New-WelcomeBanner)  │
+│     (五文件清单的强制不变量与依赖理由见       │
+│      docs/agents/architecture.md)            │
 │   · 加载 ~/.ShellPrompt/config.ps1 用户配置  │
 │     (在 Initialize-Config.ps1 内,先于预热缓存)│
 │   · 自检: 用 AST 取这 5 个文件里真实调用的   │
@@ -149,7 +144,7 @@ spinner 与 ScriptBlock 进度动画在 v2.0 起改为 **单轨 Spectre.Console 
 
 **Spectre markup 转义**：现存的 Spectre 输出都不含裸 `[`，或在调用侧自行转义（见 `Invoke-TmuxSessionDeletion.ps1` 的 `$sessionName.Replace('[', '[[')`）。
 
-**风格映射表** (调用方 `-Style` → Spectre.Spinner.Known)：
+**风格映射表** (调用方 `-Style` → Spectre.Spinner.Known) —— 派生自 [`Private/Get-SpinnerStyleMapping.ps1`](../../ShellPrompt/Private/Get-SpinnerStyleMapping.ps1), 回归测试已逐项断言:
 
 | ShellPrompt 样式 | Spectre 内置 | 说明 |
 |------------------|--------------|------|

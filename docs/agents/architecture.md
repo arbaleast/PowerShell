@@ -143,18 +143,18 @@ ShellPrompt.psd1 (RootModule)
 
 ### Colors 域（`$config.Colors.*`, 8 键）
 
-全部定义见 [`Private/Initialize-Config.ps1`](../../ShellPrompt/Private/Initialize-Config.ps1) `Colors = [ordered]@{...}`, 值为带 ESC 的 ANSI 转义串, 渲染时由 `Get-CachedConfig -Section Colors -Key <键>` 命中 `$script:ColorCache` 快路径。
+全部定义见 [`Private/Initialize-Config.ps1`](../../ShellPrompt/Private/Initialize-Config.ps1) `Colors = [ordered]@{...}`, 值为带 ESC 的 ANSI 转义串, 渲染时由 `Get-CachedConfig -Section Colors -Key <键>` 命中 `$script:ColorCache` 快路径。**键名与 RGB 默认值的 SSOT 是 [`docs/readme/configuration.md`](../readme/configuration.md) 的 Colors 表**; 本表只维护"谁消费哪个键"的消费关系。
 
-| 类别 | 键名 | RGB 默认 | 消费方 | 备注 |
-|---|---|---|---|---|
-| 主绿色系 | `FreshGreen` | 137,209,133 | Tables / 状态行（Spectre/ANSI 渲染） | 旧表格正文主色；2026-10-30 起 TG Scheme 槽位改用 Mocha 暗色分层 RGB 字面量, 不再引用本键 |
-| 主绿色系 | `SageGreen` | 159,177,159 | 弱化绿语义 `Accent` | 旧 TG Scheme `HotNormal/ReadOnly` 取色来源; 2026-10-30 起槽位改用字面量, 键保留供 Spectre 输出 |
-| 灰阶层 | `MidGray` | 100,100,100 | 禁用态语义 `Muted` | 旧 TG Scheme `Disabled` 取色来源; 2026-10-30 起槽位改用 Overlay0 字面量 |
-| 标题色 | `Cyan` | 112,199,209 | 语义 `Cyan`（当前无调用方请求） | Title 区配色已由 TG Scheme 接管 |
-| 状态色 | `Danger` | 220,90,90 | State 列 `⚠ 危险` 语义标记 | TG TableView 无行级染色轻量入口, 语义落在 State 文本 |
-| 状态色 | `Warning` | 220,180,80 | State 列 `⚠ 备选` 文字染色 (同上) | 同上 |
-| 选中底 | `SelectedBg` | 112,199,209 底 + 近黑字 | 语义 `SelectedBg`（当前无调用方请求） | TG Scheme `Focus` 已接管高亮 |
-| 复位 | `Rst` | (重置 ESC `\e[0m`) | 全部 Spectre / ANSI 输出末尾 | 必需, 漏写颜色泄漏 |
+| 键名 | 消费方 | 备注 |
+|---|---|---|
+| `FreshGreen` | Tables / 状态行（Spectre/ANSI 渲染） | 旧表格正文主色；2026-10-30 起 TG Scheme 槽位改用 Mocha 暗色分层 RGB 字面量, 不再引用本键 |
+| `SageGreen` | 弱化绿语义 `Accent` | 旧 TG Scheme `HotNormal/ReadOnly` 取色来源; 2026-10-30 起槽位改用字面量, 键保留供 Spectre 输出 |
+| `MidGray` | 禁用态语义 `Muted` | 旧 TG Scheme `Disabled` 取色来源; 2026-10-30 起槽位改用 Overlay0 字面量 |
+| `Cyan` | 语义 `Cyan`（当前无调用方请求） | Title 区配色已由 TG Scheme 接管 |
+| `Danger` | State 列 `⚠ 危险` 语义标记 | TG TableView 无行级染色轻量入口, 语义落在 State 文本 |
+| `Warning` | State 列 `⚠ 备选` 文字染色 (同上) | 同上 |
+| `SelectedBg` | 语义 `SelectedBg`（当前无调用方请求） | TG Scheme `Focus` 已接管高亮 |
+| `Rst` | 全部 Spectre / ANSI 输出末尾 | 必需, 漏写颜色泄漏 |
 
 总计（2026-11-07 核对）：**8 键**。直接消费 **6 键**（`FreshGreen` / `SageGreen` / `MidGray` / `Danger` / `Warning` / `Rst`）/ 经 `$script:ColorSemanticMap` 保留语义但当前无调用方 **2 键**（`Cyan` / `SelectedBg`）。主绿色系的 RGB 值同时是 `UI.Theme.Slots` 的默认色来源，但 Scheme 槽位落地为 RGB 字面量，不经由 `Colors.*` 键读取。
 
@@ -163,20 +163,9 @@ ShellPrompt.psd1 (RootModule)
 
 ### UI 域 / `Theme.Slots`（10 槽位）
 
-定义见同上 `Initialize-Config.ps1` `UI.Theme.Slots`, 键 = TG `Terminal.Gui.Drawing.Scheme` 的**反射实测可写**的属性名 (TG 2.4.10.0), 值 = `@{ Fg = 'R,G,B'; Bg = 'R,G,B' }`。
+定义见 [`Private/Initialize-Config.ps1`](../../ShellPrompt/Private/Initialize-Config.ps1) `UI.Theme.Slots`, 键 = TG `Terminal.Gui.Drawing.Scheme` 的**反射实测可写**的属性名 (TG 2.4.10.0), 值 = `@{ Fg = 'R,G,B'; Bg = 'R,G,B' }`。**键表 SSOT 见 [`docs/readme/configuration.md`](../readme/configuration.md) 的 UI 域, 槽位用途与渲染契约见 [`docs/readme/tui-dashboard.md`](../readme/tui-dashboard.md) §2.9**; 本节只保留强制不变量。
 
-| Scheme 槽位 | 用途 | 引用 Colors 键 |
-|---|---|---|
-| `Normal` | 正文单元格 / 无焦点列头 / 列间竖线 | Mocha Text `205,214,244` + Base 暗底(24,24,37) |
-| `HotNormal` | 标题/表头强调 | Sky 冰青 `137,220,235` + 暗底 |
-| `Focus` | 聚焦列头 / 有焦点时选中行 | 亮白 `255,255,255` + Surface1(69,71,90) |
-| `HotFocus` | 其他 View 的聚焦热区 (TableView 不读取) | — |
-| `Active` | 无焦点时选中行 | 亮白 `255,255,255` + Surface1(69,71,90) |
-| `HotActive` | 激活项热区 (TableView 不读取) | — |
-| `Highlight` | 高亮标记 | 亮白 `255,255,255` + Surface1(69,71,90) |
-| `Editable` | 过滤框输入区 | 正文字 `205,214,244` + Surface0 底 |
-| `ReadOnly` | 只读行 | Overlay1 `127,132,156` |
-| `Disabled` | 禁用行 | Overlay0 `108,112,134` |
+槽位一览（`Normal` 正文 / `HotNormal` 表头 / `Focus`·`Active`·`Highlight` 选中态 / `HotFocus`·`HotActive` 热区 / `Editable` 过滤框 / `ReadOnly` 只读 / `Disabled` 禁用）：
 
 > **不变量 (2026-10-18 建立, 2026-10-30 换色后仍适用)**: `Focus` / `Active` / `Highlight` 三个槽位**必须取同一颜色** (现为 `255,255,255` + `69,71,90`), 否则"焦点在表格"与"焦点在过滤框"两种状态下选中行高亮不一致, 且 IL 级实测确认 Focus 被聚焦列头和"有焦点时选中行"**共用**。Scheme 槽位颜色以 RGB 字面量直接配置在 `Initialize-Config.ps1`, 不经 `Colors.*` 键; 后两键 (`Danger`/`Warning`) 仍用于 State 列文本染色(渲染前剥离)。
 
@@ -210,7 +199,7 @@ ShellPrompt.psd1 (RootModule)
 
 SSH 主机仪表盘的**标题带左半**（整窗行 0，2026-10-31 重构后为标题带而非单行标题）自动追加一行 wttr 天气短串 (如 ` - Shanghai: 🌫 +18°C`). 拼装入口在 [`Private/Show-HostSelector.ps1`](../../ShellPrompt/Private/Show-HostSelector.ps1) 分发器：`Get-WttrTitleSuffix` 算出后缀后作为 `-TitleSuffix` 传给 `Show-SshHostDashboard` → `Invoke-SshHostDashboard`，由编排层拼进标题文本:
 
-- 在拼装标题之前, 由 [`Private/Get-WttrTitleSuffix.ps1`](../../ShellPrompt/Private/Get-WttrTitleSuffix.ps1) 判定 `$script:Config.Weather.Enabled` 并调用 `Get-WttrWeather -Format CustomUrl -Url 'https://wttr.in/?format=j1&lang=zh' -CacheMinutes 10 -ErrorAction SilentlyContinue`, 自解析 j1 JSON 拼出 ` - <City>: <中文描述> <Temp>°C` 片段;
+- 在拼装标题之前, 由 [`Private/Get-WttrTitleSuffix.ps1`](../../ShellPrompt/Private/Get-WttrTitleSuffix.ps1) 判定 `$script:Config.Weather.Enabled` 并调用 `Get-WttrWeather -Format CustomUrl -Url 'https://wttr.in/?format=j1&lang=zh' -ErrorAction SilentlyContinue`（缓存时长与超时值见 [`docs/agents/wttr.md`](wttr.md)）, 自解析 j1 JSON 拼出 ` - <City>: <中文描述> <Temp>°C` 片段;
 - 启用且 wttr 非空时, 把 ` - <wttr>` 拼到标题文本末尾; 否则 `$wttrSuffix` 留空, 标题原样渲染; 窄终端下标题带会被按显示宽度裁剪(右侧"上次: &lt;host&gt;"优先保留);
 - `Get-WttrWeather` 自带超时/失败兜底(返回 `''`), 此处再加 `IsNullOrWhiteSpace` 兜底, 永不抛异常, 永不破坏标题行;
 - 数据源: [`Private/Get-WttrWeather.ps1`](../../ShellPrompt/Private/Get-WttrWeather.ps1) (`$script:_WttrCache` 缓存键 = `"Format|Url"`);
