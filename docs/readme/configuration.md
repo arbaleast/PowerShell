@@ -43,7 +43,6 @@ $HOME/.ShellPrompt/config.ps1
 |----|--------|------|
 | `FreshGreen` | `\e[38;2;137;209;133m` | 主色调（亮绿） |
 | `SageGreen` | `\e[38;2;159;177;159m` | 辅助绿（弱化强调） |
-| `DarkGray` | `\e[38;2;50;50;50m` | 深灰 |
 | `MidGray` | `\e[38;2;100;100;100m` | 中灰（弱化文字） |
 | `Cyan` | `\e[38;2;112;199;209m` | 青色（标题类） |
 | `Danger` | `\e[38;2;220;90;90m` | 危险色（删除等不可逆操作） |
@@ -115,6 +114,6 @@ $Config.UI.Theme.Enabled = $false
 
 ## 注意事项
 
-- 旧版本中已移除、当前无消费方的键（如 `Paths.LogPath`、`SSH.ConnectTimeout`、`SSH.ForceTTy`、`Keys` 域，以及部分 `Colors.*` 键）在配置文件中继续书写会被**静默忽略**，不会报错。
+- 旧版本中已移除、当前无消费方的键（如 `Paths.LogPath`、`SSH.ConnectTimeout`、`SSH.ForceTTy`、`Keys` 域、`Colors.DarkGray`，以及部分 `Colors.*` 键）在配置文件中继续书写会被**静默忽略**，不会报错。
 - 修改配置后优先执行一次 `Invoke-Reload` 并观察输出，确认没有被静默忽略或回退到默认值。
 - 用户配置不会写入仓库文件，`git pull` 不会覆盖 `$HOME/.ShellPrompt/config.ps1`。

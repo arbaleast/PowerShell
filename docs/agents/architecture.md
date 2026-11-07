@@ -28,9 +28,9 @@
 
 ### sss 仪表盘单轨与终端所有权 (2026-10-30 TGUI 迁移)
 
-- `sss` (`Start-TmuxSession`) 的仪表盘**唯一渲染轨**是 Terminal.Gui v2 应用 `Private/Show-TmuxTuiDashboard.ps1`, 布局/表格/键盘/缩放/备用屏全部由 TG 自管; 结构与键位契约见 [`docs/readme/tui-dashboard.md`](../readme/tui-dashboard.md)。SSH 主机选择同走 Terminal.Gui v2, 且 2026-10-31 起改为**多区域主机仪表盘**: `Show-HostSelector` → `Show-SshHostDashboard` → `Invoke-SshHostDashboard` (分类导航 / 主机列表 / 详情卡片 / 快捷键栏, 见 tui-dashboard.md §2.13); 旧单表格轨 (`Show-HostSelector` → `Invoke-TguiHostSelector`) **保留可用但不是默认路径**。删除流程走仪表盘当前选中行, 二次确认在业务层。
+- `sss` (`Start-TmuxSession`) 的仪表盘**唯一渲染轨**是 Terminal.Gui v2 应用 `Private/Show-TmuxTuiDashboard.ps1`, 布局/表格/键盘/缩放/备用屏全部由 TG 自管; 结构与键位契约见 [`docs/readme/tui-dashboard.md`](../readme/tui-dashboard.md)。SSH 主机选择同走 Terminal.Gui v2, 且 2026-10-31 起改为**多区域主机仪表盘**: `Show-HostSelector` → `Show-SshHostDashboard` → `Invoke-SshHostDashboard` (分类导航 / 主机列表 / 详情卡片 / 快捷键栏, 见 tui-dashboard.md §2.13)。删除流程走仪表盘当前选中行, 二次确认在业务层。
 - **终端所有权不变量**: `$script:TmuxTerminalOwner` 标记当前谁在管终端 ('Legacy' 默认 / 'Tgui' = TG 独占)。
-  - 'Tgui' 下 `Enter-TmuxAlternateScreen` / `Exit-TmuxAlternateScreen` / `Clear-TmuxScreen` **整体静音** —— 不发 `\e[?1049h/l`、不做 `[Console]::Clear`、不改 `$script:TmuxAltScreenActive`, 备用屏生命周期由 TG 的 `Init/Run/Shutdown` 独占 (禁止双层嵌套, 契约测试在 `Enter-TmuxAlternateScreen.Tests.ps1` / `Show-TmuxTuiDashboard.Tests.ps1`)。
+  - 'Tgui' 下 `Enter-TmuxAlternateScreen` / `Exit-TmuxAlternateScreen` **整体静音** —— 不发 `\e[?1049h/l`、不做 `[Console]::Clear`、不改 `$script:TmuxAltScreenActive`, 备用屏生命周期由 TG 的 `Init/Run/Shutdown` 独占 (禁止双层嵌套, 契约测试在 `Enter-TmuxAlternateScreen.Tests.ps1` / `Show-TmuxTuiDashboard.Tests.ps1`)。
   - 业务动作 (附着/新建/SSH/删除) 只在 `Run` 已返回 + `Shutdown` 已交还终端之后, 于主屏幕执行。
 - 主机选择 (`Show-HostSelector` → `Show-SshHostDashboard`) **先于**渲染分支: 无 `-HostName` 时先选主机, 取消选择不进任何仪表盘 (`Start-TmuxSession.TuiDispatch.Tests.ps1`).
 
@@ -77,7 +77,7 @@
 - `UI.Theme.Slots.Editable` 为 **正文字 (`205,214,244`) + Surface0 深一档底 (`49,50,68`)** —— 过滤框输入文字始终清晰可读。
 - 不变量**保留**: `Focus` / `Active` / `Highlight` 三槽位**完全同色** (见下方"新契约"), 否则两种焦点状态下选中行高亮不一致。
 - `HotFocus` / `HotActive` (其他 View 的聚焦热区, TableView 不读取) 与高亮条取同色 `69,71,90` 底, 保持视觉一致。
-- State 列文本由 [`Get-HostSelectorStateText.ps1`](../../ShellPrompt/Private/Get-HostSelectorStateText.ps1) 直接生成**纯字符串**（该函数输出即渲染终值, 不混入 SGR）——TG TableView 不解析单元格内联 ANSI, 且混入的转义字节会干扰 Wcwidth 宽字符列宽计算导致 `'⚠ 危险'` 吞空格; 仅在渲染边界保持净化的约束不变。
+- State 列文本一律生成**纯字符串**（渲染终值不混入 SGR）——TG 不解析单元格内联 ANSI, 且混入的转义字节会干扰 Wcwidth 宽字符列宽计算导致 `'⚠ 危险'` 吞空格; 仅在渲染边界保持净化的约束不变。
 - 配色装配详见 [`docs/readme/tui-dashboard.md`](../readme/tui-dashboard.md) §2.9「配色契约」与槽位定义源码
   [`ShellPrompt/Private/Initialize-Config.ps1`](../../ShellPrompt/Private/Initialize-Config.ps1)
   （CHANGELOG 已收拢为存根, 历史条目不作现行设计依据）。
@@ -90,7 +90,7 @@ profile 加载分为 3 个阶段, 各阶段目标与耗时归因:
 |---|---|---|---|
 | 阶段 1 (欢迎语) | dot-source 5 个启动期文件 + AST 自检 | ~50ms (估) | 2026-10-29 去掉启动图缓存, 改为显式有序清单 |
 | 阶段 2 (延迟初始化同步路径) | Invoke-DeferredInit: fnm (走缓存) + starship (同步 init, `-join "``n"` 后 iex) + PSReadLine import + set options | ~520ms + ~365~453ms (starship init 子进程) | starship init 是 profile 期最大单一开销 (回退到 P3 优化前的同步路径; PS 7.6+ 下 `&` 捕获的多行输出必须先 join 成单字符串再 `Invoke-Expression`, 否则参数绑定器拒收, 详见 profile 阶段 2 代码内注释) |
-| 阶段 3 (首次调用 `sss` / `ssh-copy-id` 触发**懒加载** `Import-Module ShellPrompt`) | dot-source 全部 Private (2026-10-29 核对共 42 个 .ps1; `Initialize-Config` 由 psm1 先单独加载并守卫) + 加载 PwshSpectreConsole (+ 用户配置, 由 `Private/Initialize-Config.ps1` 加载) | ~960ms (估) | **架构级不变量, 改动前先在本文件核实设计**。注意: profile 启动期**不会**导入模块, 模块加载只发生在首次调用公开命令时 |
+| 阶段 3 (首次调用 `sss` / `ssh-copy-id` 触发**懒加载** `Import-Module ShellPrompt`) | dot-source 全部 Private (文件集合以 [`ShellPrompt/CoreScripts.psd1`](../../ShellPrompt/CoreScripts.psd1) 为准; `Initialize-Config` 由 psm1 先单独加载并守卫) + 加载 PwshSpectreConsole (+ 用户配置, 由 `Private/Initialize-Config.ps1` 加载) | ~960ms (估) | **架构级不变量, 改动前先在本文件核实设计**。注意: profile 启动期**不会**导入模块, 模块加载只发生在首次调用公开命令时 |
 
 **Starship 同步 init**: 阶段 2 `Invoke-DeferredInit` 同步执行 `starship init powershell --print-full-init` (约 365~453ms 子进程), 由 starship 自身替换 `Function:prompt` 完成接管. 历史 P3 优化方案 (由 `Register-WttrPromptWrapper` wrapper 惰性触发 `Initialize-StarshipLazy`) 已随方案 B 部分回退一并移除 (该撤销未记入 CHANGELOG, 以源码与本文件为准).
 
@@ -141,7 +141,7 @@ ShellPrompt.psd1 (RootModule)
 
 本节是所有配色键 / Scheme 槽位 / 渲染层取色关系的速查表, 交互式 UI 单轨 Terminal.Gui v2 时代 (2026-10-30 起) 的唯一权威描述。任何颜色改动先查这里再动手。
 
-### Colors 域（`$config.Colors.*`, 9 键）
+### Colors 域（`$config.Colors.*`, 8 键）
 
 全部定义见 [`Private/Initialize-Config.ps1`](../../ShellPrompt/Private/Initialize-Config.ps1) `Colors = [ordered]@{...}`, 值为带 ESC 的 ANSI 转义串, 渲染时由 `Get-CachedConfig -Section Colors -Key <键>` 命中 `$script:ColorCache` 快路径。
 
@@ -149,7 +149,6 @@ ShellPrompt.psd1 (RootModule)
 |---|---|---|---|---|
 | 主绿色系 | `FreshGreen` | 137,209,133 | Tables / 状态行（Spectre/ANSI 渲染） | 旧表格正文主色；2026-10-30 起 TG Scheme 槽位改用 Mocha 暗色分层 RGB 字面量, 不再引用本键 |
 | 主绿色系 | `SageGreen` | 159,177,159 | 弱化绿语义 `Accent` | 旧 TG Scheme `HotNormal/ReadOnly` 取色来源; 2026-10-30 起槽位改用字面量, 键保留供 Spectre 输出 |
-| 灰阶层 | `DarkGray` | 50,50,50 | 语义 `Dark`（当前无调用方请求） | 语义位保留, 未预热 |
 | 灰阶层 | `MidGray` | 100,100,100 | 禁用态语义 `Muted` | 旧 TG Scheme `Disabled` 取色来源; 2026-10-30 起槽位改用 Overlay0 字面量 |
 | 标题色 | `Cyan` | 112,199,209 | 语义 `Cyan`（当前无调用方请求） | Title 区配色已由 TG Scheme 接管 |
 | 状态色 | `Danger` | 220,90,90 | State 列 `⚠ 危险` 语义标记 | TG TableView 无行级染色轻量入口, 语义落在 State 文本 |
@@ -157,9 +156,10 @@ ShellPrompt.psd1 (RootModule)
 | 选中底 | `SelectedBg` | 112,199,209 底 + 近黑字 | 语义 `SelectedBg`（当前无调用方请求） | TG Scheme `Focus` 已接管高亮 |
 | 复位 | `Rst` | (重置 ESC `\e[0m`) | 全部 Spectre / ANSI 输出末尾 | 必需, 漏写颜色泄漏 |
 
-总计（2026-10-29 核对）：**9 键**。直接消费 **6 键**（`FreshGreen` / `SageGreen` / `MidGray` / `Danger` / `Warning` / `Rst`）/ 经 `$script:ColorSemanticMap` 保留语义但当前无调用方 **3 键**（`DarkGray` / `Cyan` / `SelectedBg`）。主绿色系的 RGB 值同时是 `UI.Theme.Slots` 的默认色来源，但 Scheme 槽位落地为 RGB 字面量，不经由 `Colors.*` 键读取。
+总计（2026-11-07 核对）：**8 键**。直接消费 **6 键**（`FreshGreen` / `SageGreen` / `MidGray` / `Danger` / `Warning` / `Rst`）/ 经 `$script:ColorSemanticMap` 保留语义但当前无调用方 **2 键**（`Cyan` / `SelectedBg`）。主绿色系的 RGB 值同时是 `UI.Theme.Slots` 的默认色来源，但 Scheme 槽位落地为 RGB 字面量，不经由 `Colors.*` 键读取。
 
 > **2026-10-29 清理**：因长期无消费方已删除 5 键 —— `LightGray` / `White` / `BgDarker` / `Bold` / `Dim`。它们既不在 `$script:ColorSemanticMap` 里, 也没有任何直接读取点; 在 `config.ps1` 里继续配置会被静默忽略。
+> **2026-11-07 清理**：`Colors.DarkGray` 已删除（对应语义位 `Dark` 仍留在 `Resolve-ColorTable.ps1` 的 `$script:ColorSemanticMap` 里, 但无调用方请求）; 在 `config.ps1` 里继续配置同样被静默忽略。
 
 ### UI 域 / `Theme.Slots`（10 槽位）
 

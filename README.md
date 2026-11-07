@@ -49,18 +49,19 @@ Connection / Activity / Tags / Infrastructure 四张卡片，远端状态**异�
 **tmux 会话仪表盘**：
 
 ```text
-ShellPrompt TMUX Manager · 主机 deb                        已连接
+ShellPrompt TMUX   Host: debian   Sessions: 3 (1 Attached)        ● 已连接
 会话: 3 · Attached: 1 · Detached: 2
- ●  work-main                       Attached      4  │ ╭┤ Session ───────╮
- ●  feature-api                     Detached      6  │ │ Session work-main│
- ●  scratch                         Detached      1  │ │ Status  Attached │
-                                    │ │ Windows  4       │
-                                    │ │ No       1       │
-                                    │ ╰──────────────────╯
-Enter  附着 │ n  新建 │ r  刷新 │ s  SSH │ x  删除 │ q  退出 │ Esc  退出
+ ┃02┃  work-main                ● Att   4w  │ SESSION // work-main
+   01   副业-android构建         ○ Det   6w  │ State: ○ Detached (Active 5m ago)
+   02   scratch                  ○ Det   1w  │ Host : debian
+                                  │ WINDOWS & ACTIVE PROCESSES
+                                  │ * 0:main (nvim)
+                                  │   └─ ~/work/src
+                                  │ TERMINAL PREVIEW [work-main:0.0]
+ Enter 附着 │ n 新建 │ r 刷新 │ s SSH │ x 删除 │ q/Esc 退出
 ```
 
-选中行整行紫底；右侧会话详情卡只显示真实字段（会话名 / 状态 / 窗口数 / 行号）。
+选中行以亮绿序号徽标标记（不铺底色），右侧驾驶舱只显示真实字段；无会话与连接失败是两种明确区分的状态，不会用空表格冒充。
 
 | 按键 | 操作 |
 |------|------|
@@ -70,9 +71,9 @@ Enter  附着 │ n  新建 │ r  刷新 │ s  SSH │ x  删除 │ q  退出
 | `r` | 刷新会话列表（连接失败时重试） |
 | `s` | 直接 SSH 登录（失败时直连排查） |
 | `x` | 删除选中会话（需要二次确认，默认 `n`） |
-| `q` / `Esc` | 退出管理器 |
+| `q` / `Esc` | 退出管理器（底栏显示为一项 `q/Esc 退出`，两个键都生效） |
 
-终端较窄时，`STATUS` / `WINDOWS` 列和底栏按钮会自动取舍；无会话和连接失败是两种明确区分的状态，不会用空表格冒充。
+终端较窄时次要列与底栏按钮会按宽度自动取舍（会话名与序号徽标始终保留）。界面结构、键位与响应式规则的完整契约见 [TUI 仪表盘](docs/readme/tui-dashboard.md)，面向使用者的操作说明见 [功能特点](docs/readme/features.md)。
 
 ## 核心功能
 

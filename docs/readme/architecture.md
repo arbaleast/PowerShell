@@ -30,116 +30,37 @@ PowerShell/
 └── ShellPrompt/                       # 模块根目录
     ├── ShellPrompt.psd1               # 模块清单 (ModuleVersion 2.0.0)
     ├── ShellPrompt.psm1               # 模块入口脚本
+    ├── CoreScripts.psd1               # 核心脚本清单(Private 与 Public 全量; 新增/删除/重命名 .ps1 必须同步, ModuleLoad.Tests.ps1 断言一致性)
     ├── Settings.ScriptAnalyzer.psd1   # PSScriptAnalyzer 规则配置
     ├── CHANGELOG.md
     ├── LICENSE                        # MIT 协议
-    ├── Tests/                         # Pester 测试套件 (38 个条目: 31 个 *.Tests.ps1 + 3 个诊断脚本 + 3 个门禁入口 + 1 个基线, 2026-10-31 核对)
-    │   ├── ConvertTo-TmuxTuiViewModel.Tests.ps1
-    │   ├── Diag-TguiKeys.ps1                       # 诊断脚本: 键盘事件测量
-    │   ├── Diag-TguiRender.ps1                     # 诊断脚本: 真机渲染测量
-    │   ├── Diag-TguiResize.ps1                     # 诊断脚本: 真机缩放测量
-    │   ├── Enter-TmuxAlternateScreen.Tests.ps1
-    │   ├── Get-ConsoleUiBackend.Tests.ps1
-    │   ├── Get-SpinnerStyleMapping.Tests.ps1
-    │   ├── Get-TguiContext.Tests.ps1
-    │   ├── Get-TguiTextWidth.Tests.ps1
-    │   ├── Get-TmuxActionDefinition.Tests.ps1
-    │   ├── Get-TmuxSessionState.Tests.ps1
-    │   ├── Get-TmuxSessions.Tests.ps1
-    │   ├── Get-WttrTitleSuffix.Tests.ps1
-    │   ├── Get-WttrWeather.Tests.ps1
-    │   ├── Get-WttrWeatherDescMap.Tests.ps1
-    │   ├── Initialize-Config.Tests.ps1
-    │   ├── Invoke-Lint.ps1                         # 门禁入口: PSScriptAnalyzer
-    │   ├── Invoke-ProfileSmoke.ps1                 # 门禁入口: profile 冒烟
-    │   ├── Invoke-SshCaptureOutput.Tests.ps1
-    │   ├── Invoke-Tests.ps1                        # 门禁入口: 跑 Pester 套件
-    │   ├── Invoke-TmuxAttach.Tests.ps1
-    │   ├── Invoke-TmuxSessionDeletion.Tests.ps1
-    │   ├── Invoke-WithProgress.Tests.ps1
-    │   ├── New-TguiHostSelectorWindow.Tests.ps1
-    │   ├── New-TmuxTuiDashboardWindow.Tests.ps1
-    │   ├── New-TmuxTuiSessionTable.Tests.ps1
-    │   ├── New-TmuxTuiShortcutList.Tests.ps1
-    │   ├── Read-TmuxConsoleLine.Tests.ps1
-    │   ├── Set-TguiTheme.Tests.ps1
-    │   ├── ShellPrompt.Tests.ps1
-    │   ├── Show-TmuxTuiDashboard.Tests.ps1
-    │   ├── Ssh-HostName-Validation.Tests.ps1
-    │   ├── Start-TmuxSession.TuiDispatch.Tests.ps1
-    │   ├── Test-TguiQuitKey.Tests.ps1
-    │   ├── Tmux-SessionState.Tests.ps1
-    │   ├── Tmux-SshFailure.Tests.ps1
-    │   ├── Update-Weather.Tests.ps1
-    │   └── pssa-warning-baseline.txt               # PSSA Warning 指纹基线
-    └── Private/                       # 内部辅助函数(不暴露给用户, 共 67 个 .ps1, 2026-10-31 核对)
-        ├── Add-SshHostActivity.ps1            # [新] 记录一次 SSH 主机连接活动(本地 JSON, 原子写)
-        ├── ConvertTo-SshArgumentLine.ps1      # SSH 命令行参数拼接
-        ├── ConvertTo-SshEscapedString.ps1     # SSH 单引号转义
-        ├── ConvertTo-TmuxTuiViewModel.ps1     # 仪表盘视图模型(状态区 + 列表行/详情行两套平行数组)
-        ├── Enter-TmuxAlternateScreen.ps1      # 进入备用屏(TGUI 持有终端时静音)
-        ├── Get-ConsoleUiBackend.ps1           # Terminal.Gui v2 ALC 就绪检测(Backend 恒 'TerminalGui') + Assert-ConsoleUiReady
-        ├── Get-HostSelectorRow.ps1            # 主机选择行构造(LastHost 置顶 + State 标注)
-        ├── Get-HostSelectorStateText.ps1      # 主机选择行状态文案(如 ★ 最近)
-        ├── Get-SpinnerStyleMapping.ps1        # ShellPrompt 样式名 → Spectre.Spinner.Known 成员名
-        ├── Get-SshArgs.ps1                    # SSH 参数生成器
-        ├── Get-SshConfigHosts.ps1             # SSH config 主机解析
-        ├── Get-SshHostActivity.ps1            # [新] 主机本地连接活动读数(最后活跃/最近/按天直方图)
-        ├── Get-SshHostDashboardRow.ps1        # [新] 仪表盘行视图模型(过滤/排序/相对时间, 纯函数)
-        ├── Get-SshHostDashboardTheme.ps1      # [新] 仪表盘语义 Scheme 集合(ColorName16, 绕过 16 色量化)
-        ├── Get-SshHostDetail.ps1              # [新] 远端详情探测(一次 SSH 往返拿 hostname/uptime/load/tmux)
-        ├── Get-SshHostProfile.ps1             # [新] ~/.ssh/config 结构化档案 + 分类推导(含 Include)
-        ├── Get-TguiContext.ps1                # Terminal.Gui v2 独立 ALC 加载器(vendored DLL)
-        ├── Get-TguiTerminalSize.ps1           # 仪表盘布局用的终端尺寸解析(事件报数 > 终端自身 > TG Screen > 缺省)
-        ├── Get-TguiTextWidth.ps1              # 终端显示宽度测量(全角计 2, 零宽计 0; 底栏宽度预算用)
-        ├── Get-TmuxActionDefinition.ps1       # 仪表盘动作定义(键位/文案/动作值唯一事实源)
-        ├── Get-TmuxSessionState.ps1           # 会话可用性与状态判定(Available/Error/ExitCode)
-        ├── Get-TmuxSessions.ps1               # 远程 tmux 探测与列表
-        ├── Get-WttrTitleSuffix.ps1            # TGUI 标题行 wttr 后缀拼装 (j1 端点 + 中文映射)
-        ├── Get-WttrWeather.ps1                # wttr.in 天气查询 (纯函数, 10 分钟缓存)
-        ├── Get-WttrWeatherDescMap.ps1         # wttr 天气描述 → 中文内置字典 (42 条)
-        ├── Initialize-Config.ps1              # 配置初始化与缓存
-        ├── Initialize-FnmEnvironment.ps1      # fnm 环境缓存初始化 (fnm-env.json)
-        ├── Invoke-SshCaptureOutput.ps1        # SSH 异步输出捕获
-        ├── Invoke-SshCommand.ps1              # SSH 命令调度(主线逻辑)
-        ├── Invoke-TguiHostSelector.ps1        # [旧轨, 保留] 单表格主机选择器 TGUI 编排(非默认路径)
-        ├── Invoke-SshHostDashboard.ps1        # [新] SSH 主机仪表盘编排(键盘/异步详情/缩放/请求标识)
-        ├── Invoke-TmuxAttach.ps1              # tmux 会话附着/恢复执行
-        ├── Invoke-TmuxSessionDeletion.ps1     # 删除 tmux 会话的唯一屏障(二次确认 + kill-session)
-        ├── Invoke-TmuxSessionFetch.ps1        # 后台取数(远程 tmux 探测与会话列表)
-        ├── Invoke-TmuxTuiAction.ps1           # 仪表盘业务动作分发
-        ├── Invoke-WithProgress.ps1            # 进度封装 (Spectre 单轨)
-        ├── New-TguiHostSelectorWindow.ps1     # [旧轨, 保留] 单表格主机选择器整窗组装(无头可测)
-        ├── New-SshHostDashboardWindow.ps1     # [新] SSH 主机仪表盘整窗组装(标题带/分类栏/列表/详情/底栏)
-        ├── New-SshHostListView.ps1            # [新] 主机列表自定义行(每行 6 Label) + 局部刷新原语
-        ├── New-SshHostDetailPanel.ps1         # [新] 右侧详情卡片(FrameView × 4) + 就地更新原语
-        ├── New-TmuxSession.ps1                # 创建新 tmux 会话
-        ├── New-TmuxTuiSessionRowList.ps1      # [新] tmux 会话自定义行列表(每行 5 Label) + 局部刷新原语
-        ├── New-TmuxTuiSessionDetailPanel.ps1   # [新] tmux 会话驾驶舱(非对称三区, 无 FrameView) + 就地更新原语
-        ├── New-TmuxTuiSessionTable.ps1        # [旧轨, 保留] tmux 会话 TableView 构造(非默认路径)
-        ├── New-TmuxTuiColumnPlan.ps1          # [旧轨, 保留] 会话表列裁剪计划
-        ├── New-TmuxTuiDashboardWindow.ps1     # 仪表盘窗口(标题带 + 统计行 + 列表 + 驾驶舱 + 快捷键栏)构造
-        ├── New-TmuxTuiLayoutPlan.ps1          # 仪表盘布局计划(零重叠零空档)
-        ├── New-TmuxTuiShortcutList.ps1        # 仪表盘快捷键栏 (Shortcut) 构造
-        ├── New-WelcomeBanner.ps1              # [P2] 欢迎 Banner 纯函数(主机名 + 随机语录)
-        ├── Read-TmuxConsoleLine.ps1           # 控制台单行读取(带超时)
-        ├── Receive-TmuxBackgroundTask.ps1     # 后台取数任务结果回收
-        ├── Reset-TerminalMode.ps1             # 终端编码/TERM 恢复
-        ├── Resolve-ColorTable.ps1             # 统一颜色表解析(调用方覆盖 → 缓存 → 配置层默认值)
-        ├── Resolve-TguiThemeName.ps1          # UI.Theme 名称规范化(未知名回退默认)
-        ├── Save-OriginalTerminalState.ps1     # 终端状态保存
-        ├── Set-TguiFrameRate.ps1              # TG 主循环帧率上限(默认 25fps => 40ms 帧周期地板; 抬到 100fps)
-        ├── Set-TguiTheme.ps1                  # Terminal.Gui 主题设置 (ALC 原生, 唯一配色路径)
-        ├── Show-HostSelector.ps1              # 主机选择菜单(分发器: 断言 + 天气后缀 + 归一返回值)
-        ├── Show-SshHostDashboard.ps1          # [新] SSH 主机仪表盘分发器(档案 + 活动历史 → 编排层)
-        ├── Show-TmuxTuiDashboard.ps1          # TGUI 仪表盘编排(sss 唯一渲染轨)
-        ├── Start-SshHostDetailTask.ps1        # [新] 远端详情后台任务(提交 + 非阻塞收割, 绝不 Wait)
-        ├── Submit-TmuxBackgroundTask.ps1      # 后台取数任务提交
-        ├── Submit-WttrPrefetch.ps1            # 天气预取任务提交
-        ├── Test-SshHostName.ps1               # 主机名校验
-        ├── Test-TguiQuitKey.ps1               # 退出键判定(KeyCode 修饰后缀归一)
-        ├── Test-TmuxTuiInteractive.ps1        # 交互式终端判定
-        └── Write-TmuxWelcomeBanner.ps1        # tmux 会话管理器欢迎 banner
+    ├── Public/                        # 公开命令定义(导出面以 ShellPrompt.psd1 的 FunctionsToExport 为准)
+    ├── Tests/                         # Pester 测试套件: 43 个 *.Tests.ps1 + 3 个诊断脚本 + 3 个门禁入口(Invoke-Tests / Invoke-Lint / Invoke-ProfileSmoke) + 1 个 PSSA 基线; 随开发增删, 以目录为准
+    │   └── 门禁入口、Warning 基线与测试/文档义务见 docs/agents/testing.md(文件以 ShellPrompt/Tests/ 目录为准)
+    └── Private/                       # 内部辅助函数(不暴露给用户); 全量文件以 CoreScripts.psd1 为准, 此处只列主要文件
+        ├── Initialize-Config.ps1      # 配置初始化与缓存(默认配置唯一事实源)
+        ├── Resolve-ColorTable.ps1     # 统一颜色表解析(调用方覆盖 → 缓存 → 配置层默认值)
+        ├── Show-HostSelector.ps1      # 主机选择菜单(分发器: 断言 + 天气后缀 + 归一返回值)
+        ├── Show-SshHostDashboard.ps1  # SSH 主机仪表盘分发器(档案 + 活动历史 → 编排层)
+        ├── Invoke-SshHostDashboard.ps1 # SSH 主机仪表盘编排(键盘/异步详情/缩放/请求标识)
+        ├── New-SshHostDashboardWindow.ps1 # SSH 主机仪表盘整窗组装(标题带/分类栏/列表/详情/底栏)
+        ├── New-SshHostListView.ps1    # 主机列表自定义行(每行 6 Label) + 局部刷新原语
+        ├── Get-SshHostProfile.ps1     # ~/.ssh/config 结构化档案 + 分类推导(含 Include)
+        ├── Get-SshConfigHosts.ps1     # SSH config 主机解析
+        ├── Show-TmuxTuiDashboard.ps1  # TGUI 仪表盘编排(sss 唯一渲染轨)
+        ├── New-TmuxTuiDashboardWindow.ps1 # 仪表盘窗口(标题带 + 统计行 + 列表 + 驾驶舱 + 快捷键栏)构造
+        ├── New-TmuxTuiSessionRowList.ps1 # tmux 会话自定义行列表(每行 5 Label) + 局部刷新原语
+        ├── New-TmuxTuiLayoutPlan.ps1  # 仪表盘布局计划(零重叠零空档)
+        ├── New-TmuxTuiShortcutList.ps1 # 仪表盘快捷键栏 (Shortcut) 构造
+        ├── Get-TmuxActionDefinition.ps1 # 仪表盘动作定义(键位/文案/动作值唯一事实源)
+        ├── Get-TmuxSessions.ps1       # 远程 tmux 探测与列表
+        ├── Invoke-TmuxAttach.ps1      # tmux 会话附着/恢复执行
+        ├── Invoke-TmuxSessionDeletion.ps1 # 删除 tmux 会话的唯一屏障(二次确认 + kill-session)
+        ├── Get-TguiContext.ps1        # Terminal.Gui v2 独立 ALC 加载器(vendored DLL)
+        ├── Get-TguiTextWidth.ps1      # 终端显示宽度测量(全角计 2, 零宽计 0; 底栏宽度预算用)
+        ├── Set-TguiTheme.ps1          # Terminal.Gui 主题设置 (ALC 原生, 唯一配色路径)
+        ├── Set-TguiFrameRate.ps1      # TG 主循环帧率上限(默认 25fps => 40ms 帧周期地板; 抬到 100fps)
+        └── New-WelcomeBanner.ps1      # 欢迎 Banner 纯函数(主机名 + 随机语录)
 ```
 
 ## 加载流程

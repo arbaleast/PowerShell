@@ -22,8 +22,8 @@ CI 强制以下四条不变量，任何一条不满足都会让 CI 变红：
 - **测试分类**:
   - **单元测试**: `Get-*` / `Set-*` / `Test-*` / `Format-*` / `Connect-*` 等纯函数或近纯函数,
     每个被测函数至少 3-5 条用例(命中、未命中、错误兜底)。
-  - **集成测试**: `Invoke-TguiHostSelector` / `Show-*` 分发器 (`Show-HostSelector` / `Show-TmuxTuiDashboard`) / `Start-TmuxSession`,
-    覆盖多函数协作(整窗组装 + 配色方案 + 键位分发等)。
+  - **集成测试**: `Show-*` 分发器 (`Show-HostSelector` / `Show-SshHostDashboard` / `Show-TmuxTuiDashboard`) / `Start-TmuxSession`,
+    覆盖多函数协作(整窗组装 + 配色方案 + 键位分发等)。被测函数名单以 `ShellPrompt/Tests/` 目录内实际文件为准, 本文件不写死名单。
     归属护栏用例: `Get-TguiContext.Tests.ps1` 断言 vendored Terminal.Gui 只在 `Modules/Terminal.Gui/<ver>/` **单副本**;
     `Get-ConsoleUiBackend.Tests.ps1` 断言 `Backend` 恒为 `'TerminalGui'`(AnsiFallback / PSTui GridView 轨均已移除)。
   - **行为测试**: `Update-Weather` / `Copy-SshPublicKey` / `Invoke-TmuxSessionDeletion` 等含 I/O 副作用的函数,
@@ -59,8 +59,8 @@ CI 强制以下四条不变量，任何一条不满足都会让 CI 变红：
 ## 持续集成（CI）
 
 - **配置文件**: [`.github/workflows/test.yml`](../../.github/workflows/test.yml)（全仓唯一的 workflow）。
-- **触发条件**: `push` / `pull_request` 且改动命中 `ShellPrompt/**`、`Microsoft.PowerShell_profile.ps1` 或该 workflow 本身;
-  文档改动不触发。另有 `workflow_dispatch` 供手动触发。
+- **触发条件**: `push` / `pull_request` 且改动命中 `ShellPrompt/**`、`Modules/**`、`Microsoft.PowerShell_profile.ps1` 或该 workflow 本身;
+  文档改动不触发。另有 `workflow_dispatch` 供手动触发。(完整 `paths` 清单以上述 workflow 文件为准。)
 - **三个 job**（互不依赖、可并行；任一失败都应立即可见）:
   - `test`: 装 PowerShell 7.6+ → 装 Pester 5+ → 跑 `ShellPrompt/Tests/Invoke-Tests.ps1`（含数量门禁参数）。
     退出码：0 = 全通过，1 = 存在 Fail，2 = 数量门槛未达标；非 0 一律让 job 失败。
