@@ -569,4 +569,21 @@ Describe 'tmux 会话解析与刷新契约' {
         }
     }
 
+    Context '探测命令远端 shell 兼容性 (Get-TmuxProbeCommand)' {
+
+        It '远端命令不含"反斜杠转义空白"(zsh case 模式 parse error 回归钉死)' {
+            # 2026-11-07 真机: 远端登录 shell 为 zsh 时, case 模式里的 `*\ 1)`
+            # 令 zsh 直接报 parse error, "获取远程 tmux 会话"反复失败, 仪表盘拿不到会话。
+            # 修复: 活动窗口匹配改用带引号变量 `*"$TMUX_SP"1)`(字面空格, bash/zsh 一致)。
+            # 本用例钉死不变量: 整条探测命令不得再出现 反斜杠+空白 序列。
+            $cmd = & $script:mod { Get-TmuxProbeCommand }
+            $cmd | Should -Not -Match '\\\s'
+        }
+
+        It '活动窗口匹配以带引号变量把空格引入模式(bash/zsh 语义一致)' {
+            $cmd = & $script:mod { Get-TmuxProbeCommand }
+            $cmd.Contains('*"$TMUX_SP"1') | Should -BeTrue
+        }
+    }
+
 }

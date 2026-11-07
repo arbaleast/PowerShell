@@ -83,7 +83,13 @@ function Get-TmuxProbeCommand {
     # 定位方式: 先取活动窗口序号, 再在所有分屏里挑 (窗口序号匹配 且 pane_active=1) 的
     # pane_id, 最后用 %N 定位 capture-pane —— 全程不依赖会话名, 名字含冒号也安全。
     # tail -8 保证负载有界(不加 -S 时 capture-pane 只给可见区, -S -8 会带上历史)。
-    $previewList = 'printf "TMUX_PREVIEW_BEGIN\n"; "$TMUX_BIN" list-sessions -F "#{session_name}" 2>/dev/null | while IFS= read -r TMUX_S || [ -n "$TMUX_S" ]; do [ -n "$TMUX_S" ] || continue; TMUX_AW=$("$TMUX_BIN" list-windows -t "$TMUX_S" -F "#{window_index} #{window_active}" 2>/dev/null | while IFS= read -r TMUX_WL; do case "$TMUX_WL" in *\ 1) printf "%s" "${TMUX_WL%% *}"; break;; esac; done); [ -n "$TMUX_AW" ] || continue; TMUX_AP=$("$TMUX_BIN" list-panes -s -t "$TMUX_S" -F "#{window_index} #{pane_active} #{pane_id}" 2>/dev/null | while IFS=" " read -r TMUX_PW TMUX_PA TMUX_PID; do if [ "$TMUX_PA" = "1" ] && [ "$TMUX_PW" = "$TMUX_AW" ]; then printf "%s" "$TMUX_PID"; break; fi; done); [ -n "$TMUX_AP" ] || continue; printf "TMUX_PREVSESSION %s\n" "$TMUX_S"; "$TMUX_BIN" capture-pane -p -t "$TMUX_AP" -S -8 2>/dev/null | tail -8 | while IFS= read -r TMUX_L || [ -n "$TMUX_L" ]; do printf "TMUX_PREVIEW %s\n" "$TMUX_L"; done; done; printf "TMUX_PREVIEW_END\n"; '
+    # ★ 2026-11-07 真机修复(zsh parse error near `1'):
+    #   活动窗口的匹配模式**不能**写成 `*\ 1)` —— 那是"反斜杠转义空格"的写法,
+    #   bash 接受, 但 **zsh 直接报 parse error**(zsh 的 case 模式是 glob,
+    #   不认这个转义), 整条远端命令挂掉 => 仪表盘永远拿不到会话。
+    #   改用**带引号的变量**参与模式匹配: 变量展开后是字面空格, bash/zsh 行为一致。
+    #   TMUX_SP 由远端脚本自己定义, 不依赖任何外部环境。
+    $previewList = 'printf "TMUX_PREVIEW_BEGIN\n"; TMUX_SP=" "; "$TMUX_BIN" list-sessions -F "#{session_name}" 2>/dev/null | while IFS= read -r TMUX_S || [ -n "$TMUX_S" ]; do [ -n "$TMUX_S" ] || continue; TMUX_AW=$("$TMUX_BIN" list-windows -t "$TMUX_S" -F "#{window_index} #{window_active}" 2>/dev/null | while IFS= read -r TMUX_WL; do case "$TMUX_WL" in *"$TMUX_SP"1) printf "%s" "${TMUX_WL%% *}"; break;; esac; done); [ -n "$TMUX_AW" ] || continue; TMUX_AP=$("$TMUX_BIN" list-panes -s -t "$TMUX_S" -F "#{window_index} #{pane_active} #{pane_id}" 2>/dev/null | while IFS=" " read -r TMUX_PW TMUX_PA TMUX_PID; do if [ "$TMUX_PA" = "1" ] && [ "$TMUX_PW" = "$TMUX_AW" ]; then printf "%s" "$TMUX_PID"; break; fi; done); [ -n "$TMUX_AP" ] || continue; printf "TMUX_PREVSESSION %s\n" "$TMUX_S"; "$TMUX_BIN" capture-pane -p -t "$TMUX_AP" -S -8 2>/dev/null | tail -8 | while IFS= read -r TMUX_L || [ -n "$TMUX_L" ]; do printf "TMUX_PREVIEW %s\n" "$TMUX_L"; done; done; printf "TMUX_PREVIEW_END\n"; '
     $humanList = '"$TMUX_BIN" ls 2>/dev/null; true'
 
     return ($binLookup + $versionProbe + $machineList + $windowList + $previewList + $humanList)
